@@ -1472,16 +1472,14 @@ app.post('/api/reset-password', async (req, res) => {
         res.status(500).json({ message: 'Internal server error while resetting password.' });
     }
 });
-initializeTables().then(() => {
-    app.listen(port, () => {
-        console.log(`Lolly's Collection server running at http://localhost:${port}`);
-        console.log(`Authentication Page: http://localhost:${port}/auth`);
-        console.log(`API for Autofill: http://localhost:${port}/api/user/profile`);
-        console.log(`API for Customers (Admin): http://localhost:${port}/api/customers`);
-        // Added logs for new admin APIs
-        console.log(`API for Dashboard Stats (Admin): http://localhost:${port}/api/dashboard/stats`);
-        console.log(`API for Monthly Sales (Admin): http://localhost:${port}/api/sales/monthly`);
-    });
-}).catch(err => {
-    console.error('FATAL: Could not start server due to DB initialization error.', err);
+app.listen(port, async () => {
+    console.log(`Server running on port ${port}`);
+
+    try {
+        // Try simple DB connection instead of initializing tables
+        const [rows] = await pool.query('SELECT 1');
+        console.log("Database connected successfully.");
+    } catch (error) {
+        console.error("Warning: Database connection failed:", error);
+    }
 });
