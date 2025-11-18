@@ -9,7 +9,13 @@ const pool = mysql.createPool({
     database: process.env.DB_DATABASE, // 🚨 Updated
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+
+    ssl: {
+        // Load the CA certificate file you saved
+        ca: fs.readFileSync(path.join(__dirname, 'ca.pem')) 
+        
+    }
 });
 
 async function initializeTables() {
