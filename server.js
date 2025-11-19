@@ -43,9 +43,13 @@ const loginAttempts = {};
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 hour
 const app = express();
+app.set('trust proxy', 1);
 const port = process.env.PORT || 3000; 
 const saltRounds = 10; 
-app.use(cors()); // Enable CORS for all origins
+app.use(cors({
+    origin: true, // Allow the origin requesting
+    credentials: true // Allow cookies to be sent
+})); // Enable CORS for all origins
 // --- ADMIN & AUTH CONFIGURATION (from .env) ---
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_FULL_NAME = process.env.ADMIN_FULL_NAME;
