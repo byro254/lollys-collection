@@ -11,6 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const nodemailer = require('nodemailer');
 const bcrypt = require('bcrypt'); 
 const session = require('express-session'); 
+const MySQLStore = require('express-mysql-session')(session);
 const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
@@ -18,7 +19,16 @@ const cors = require('cors');
 // 🚨 UPDATE: Import findAllUsers for the new customer listing endpoint
 const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages,updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus} = require('./db'); 
 const passwordResetCache = {}; 
-
+const sessionStoreOptions = {
+     host: process.env.DB_HOST, // 🚨 Updated
+    user: process.env.DB_USER, // 🚨 Updated
+    password: process.env.DB_PASSWORD, // 🚨 Updated
+    // 🚨 Updated
+    port: process.env.DB_PORT,
+   database: process.env.DB_NAME,
+    // Additional options can be added here
+};
+const sessionStore = new MySQLStore(sessionStoreOptions);
 /**
  * Helper function to generate secure, temporary tokens (vtoken).
  * @param {number} length - The length of the token in bytes.
@@ -89,15 +99,16 @@ app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles'
 app.use('/images/products', express.static(UPLOAD_DIR));
 // Configure session middleware
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'a_secure_emergency_fallback_secret', 
-    resave: false,
-    saveUninitialized: false,
-    cookie: { 
-        maxAge: 1000 * 60 * 60 * 24, 
-        secure: process.env.NODE_ENV === 'production' 
-    }
+    secret: process.env.SESSION_SECRET , 
+    resave: false,
+    saveUninitialized: false, 
+    // ⬇️ CRITICAL CHANGE: Use the external store
+    store: sessionStore, 
+    cookie: { 
+        maxAge: 1000 * 60 * 60 * 24, 
+        secure: process.env.NODE_ENV === 'production' 
+    }
 }));
-
 // Authentication Middleware
 function isAuthenticated(req, res, next) {
     if (req.session.isAuthenticated) {
