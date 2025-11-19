@@ -1069,8 +1069,8 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         `;
 
         await Promise.all([
-            transporter.sendMail({ from: ADMIN_EMAIL, to: email, subject: `Order #${orderId} Received`, html: userConfirmationBody }),
-            transporter.sendMail({ from: ADMIN_EMAIL, to: ADMIN_EMAIL, subject: `NEW ORDER ALERT: #${orderId}`, html: adminEmailBody })
+            transporter.sendMail({ from: EMAIL_USER, to: email, subject: `Order #${orderId} Received`, html: userConfirmationBody }),
+            transporter.sendMail({ from: EMAIL_USER, to: ADMIN_EMAIL, subject: `NEW ORDER ALERT: #${orderId}`, html: adminEmailBody })
         ]);
 
         console.log(`Order #${orderId} processed, cart cleared, stock updated.`);
