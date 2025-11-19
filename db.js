@@ -8,13 +8,11 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD, // 🚨 Updated
     database: process.env.DB_DATABASE, // 🚨 Updated
     port: process.env.DB_PORT,
-<<<<<<< HEAD
-=======
    database: process.env.DB_NAME,
->>>>>>> d10fbb98d5afb3e2cb3dc88adce7cbb083d10be7
-    waitForConnections: true,
+   waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+
     ssl: {
         // 🚨 CRITICAL: Set to true to bypass validation
         rejectUnauthorized: false 
