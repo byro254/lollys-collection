@@ -16,7 +16,7 @@ const crypto = require('crypto');
 const cors = require('cors');
 
 // 🚨 UPDATE: Import findAllUsers for the new customer listing endpoint
-const { pool, initializeTables, findUserById, findAllUsers, saveContactMessage, getAllContactMessages,updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus} = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages,updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus} = require('./db'); 
 const passwordResetCache = {}; 
 
 /**
