@@ -826,7 +826,7 @@ app.post('/api/products', isAdmin, upload.single('productImage'), async (req, re
 
     } catch (error) {
         console.error('API Error uploading product:', error);
-        res.status(500).json({ message: 'Failed to upload product due to server error.' });
+        res.status(500).json({ message: 'Failed to upload product, please try again later.' });
     }
 });
 
@@ -882,7 +882,7 @@ app.put('/api/orders/:orderId', isAdmin, async (req, res) => {
 
     } catch (error) {
         console.error(`API Error updating order ID ${orderId}:`, error);
-        res.status(500).json({ message: 'Failed to update order status due to a server error.' });
+        res.status(500).json({ message: 'Failed to update order status, please try again later.' });
     }
 });
 
@@ -1084,7 +1084,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         console.error('Order processing failed:', error);
         // Important: Use the specific error message from the database if available, 
         // otherwise default to a generic message.
-        const errorMessage = error.sqlMessage || 'Order failed to process due to a server or database error.';
+        const errorMessage = error.sqlMessage || 'Order failed to process , please try again later.';
         res.status(500).json({ 
             message: errorMessage
         });
@@ -1182,7 +1182,7 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
         res.status(200).json(orders);
     } catch (error) {
         console.error('Error fetching user orders:', error);
-        res.status(500).json({ message: 'Internal server error while retrieving orders.' });
+        res.status(500).json({ message: 'Failed to retrieve user orders, please try again later.' });
     }
 });
 
@@ -1217,7 +1217,7 @@ app.post('/api/admin/messages/reply', isAdmin, async (req, res) => {
         console.error('Nodemailer Error:', error.message);
         // Respond with a 500 status on failure
         res.status(500).json({ 
-            message: 'Failed to send reply email due to server configuration or Nodemailer error.', 
+            message: 'Failed to send reply email , please try again later.', 
             error: error.message 
         });
     }
@@ -1269,7 +1269,7 @@ app.put('/api/products/:id', isAdmin, upload.single('productImage'), async (req,
         // Handle any database or server-side execution errors
         console.error("Product Update Error:", error);
         res.status(500).json({ 
-            message: 'Internal server error during product update.',
+            message: 'Failed to update product, please try again later.',
             details: error.message
         });
     }
@@ -1303,7 +1303,7 @@ app.delete('/api/products/:id', isAdmin, async (req, res) => {
         if (error.code === 'ER_ROW_IS_REFERENCED_2') {
              return res.status(409).json({ message: 'Cannot delete product: It is currently part of an order or shopping cart.' });
         }
-        res.status(500).json({ message: 'Failed to delete product due to server error.' });
+        res.status(500).json({ message: 'Failed to delete product, please try again later.' });
     }
 });
 // sending contact messages to admin dashboard
@@ -1347,7 +1347,7 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
         console.error('Error in GET /api/admin/messages:', error);
         // Server Error: Returns a proper JSON error response
         return res.status(500).json({ 
-            message: 'Failed to retrieve messages from the database due to a server error.' 
+            message: 'Failed to retrieve messages from the database, please try again later.' 
         });
     }
 });
@@ -1484,7 +1484,7 @@ app.post('/api/reset-password', async (req, res) => {
         console.error('Password Reset Error:', error);
         // Clear the token even on hash/DB update failure for security
         delete verificationCache[verificationToken]; 
-        res.status(500).json({ message: 'Internal server error while resetting password.' });
+        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
     }
 });
 app.listen(port, async () => {
