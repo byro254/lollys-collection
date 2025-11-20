@@ -1,4 +1,4 @@
-// server.js (Final Production Build with Resend Integration)
+// server.js (Final Production Build with Resend & Upload Fixes)
 
 // 1. Load environment variables first
 require('dotenv').config(); 
@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
-// 🚨 REPLACED: Nodemailer removed, Resend added
+// 🚨 RESEND INTEGRATION
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
 const session = require('express-session'); 
@@ -34,13 +34,7 @@ const sessionStoreOptions = {
 const sessionStore = new MySQLStore(sessionStoreOptions);
 
 // 🚨 INITIALIZE RESEND
-// Ensure RESEND_API_KEY is in your .env file
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-// Helper function to generate secure tokens
-function generateToken(length = 32) {
-    return crypto.randomBytes(length).toString('hex');
-}
 
 const verificationCache = {};
 const otpCache = {};
@@ -58,14 +52,20 @@ app.use(cors({
     credentials: true 
 }));
 
-// --- ADMIN & AUTH CONFIGURATION (from .env) ---
+// --- ADMIN & AUTH CONFIGURATION ---
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_FULL_NAME = process.env.ADMIN_FULL_NAME;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 
-// --- Multer setup ---
+// --- Multer setup (FILE UPLOAD FIX) ---
 const UPLOAD_DIR = path.join(__dirname, 'public/images/products');
 const PROFILE_UPLOAD_DIR = path.join(__dirname, 'public/images/profiles');
+
+// 🚨 FIX: Create 'products' directory if it doesn't exist
+if (!fs.existsSync(UPLOAD_DIR)) {
+    console.log("Creating missing directory: public/images/products");
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
 
 if (!fs.existsSync(PROFILE_UPLOAD_DIR)) {
     fs.mkdirSync(PROFILE_UPLOAD_DIR, { recursive: true });
@@ -471,13 +471,16 @@ app.post('/api/products', isAdmin, upload.single('productImage'), async (req, re
         const { name, price, category, description, stock } = req.body;
         const imageFile = req.file;
         
+        // Enhanced Validation & Logging
         if (!name || !price || !category || !stock || !imageFile) {
+            console.error("Product Upload Failed: Missing fields", req.body);
             return res.status(400).json({ 
                 message: 'Missing one or more required fields: name, price, category, stock, or image file.' 
             });
         }
         
         if (isNaN(parseFloat(price)) || isNaN(parseInt(stock))) {
+            console.error("Product Upload Failed: Invalid number format", { price, stock });
             return res.status(400).json({ message: 'Price and Stock must be valid numbers.' });
         }
         
@@ -489,14 +492,16 @@ app.post('/api/products', isAdmin, upload.single('productImage'), async (req, re
             [name, parseFloat(price), category, description, imagePath, parseInt(stock)]
         );
 
+        console.log("Product uploaded successfully, ID:", result.insertId);
+
         res.status(201).json({ 
             message: 'Product uploaded successfully!', 
             productId: result.insertId 
         });
 
     } catch (error) {
-        console.error('API Error uploading product:', error);
-        res.status(500).json({ message: 'Failed to upload product, please try again later.' });
+        console.error('API Error uploading product:', error); // This will show DB errors
+        res.status(500).json({ message: 'Failed to upload product. Check server console for details.' });
     }
 });
 
@@ -889,13 +894,13 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
-// Route to handle password reset request (Step 1: Send OTP via Resend)
+// 🚨 REQUEST OTP - Normalized Email
 app.post('/api/request-otp', async (req, res) => {
     const { email } = req.body;
-
-    // 1. Normalize email immediately to match the verification logic
-    const normalizedEmail = email.toLowerCase().trim();
     
+    // Normalize
+    const normalizedEmail = email.toLowerCase().trim();
+
     const user = await db.findUserByEmail(email); 
     if (!user) {
         return res.status(200).json({ message: 'If the account exists, an OTP has been sent to your email.' });
@@ -905,7 +910,7 @@ app.post('/api/request-otp', async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
         const expiry = Date.now() + 5 * 60 * 1000; 
 
-        // 2. Store using the NORMALIZED email key
+        // Store with normalized key
         otpCache[normalizedEmail] = { otp, expiry };
         
         // 🚨 RESEND INTEGRATION FOR OTP
@@ -920,7 +925,6 @@ app.post('/api/request-otp', async (req, res) => {
 
         if (error) {
             console.error('Resend OTP Error:', error);
-            // Log error but still return success to user for security/UX
         }
 
         res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
@@ -931,6 +935,7 @@ app.post('/api/request-otp', async (req, res) => {
     }
 });
 
+// 🚨 VERIFY OTP - Debugging & Normalization
 app.post('/api/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
 
@@ -939,28 +944,27 @@ app.post('/api/verify-otp', async (req, res) => {
         return res.status(400).json({ message: 'Email and OTP are required.' });
     }
 
-    // 2. Normalize Inputs (Fixes Case Sensitivity & Type Mismatch)
+    // 2. Normalize Inputs
     const normalizedEmail = email.toLowerCase().trim();
-    const inputOtp = String(otp).trim(); // Ensure OTP is compared as a string
+    const inputOtp = String(otp).trim(); 
 
     // 3. Retrieve from Cache
     const cacheEntry = otpCache[normalizedEmail];
     
-    // --- DEBUGGING LOGS (Check terminal if 400 occurs) ---
+    // --- DEBUGGING LOGS ---
     console.log(`DEBUG VERIFY: Checking email: [${normalizedEmail}]`);
     console.log(`DEBUG VERIFY: Input OTP: [${inputOtp}]`);
     console.log(`DEBUG VERIFY: Stored Cache:`, cacheEntry);
-    // -----------------------------------------------------
-
+    
     // 4. Check Logic
     if (!cacheEntry) {
-        console.log('DEBUG FAIL: No cache entry found (Server might have restarted).');
+        console.log('DEBUG FAIL: No cache entry found.');
         return res.status(400).json({ message: 'Invalid or expired OTP (Session not found).' });
     }
 
     if (cacheEntry.otp !== inputOtp) {
-        console.log(`DEBUG FAIL: OTP Mismatch. Server: ${cacheEntry.otp} vs User: ${inputOtp}`);
-        delete otpCache[normalizedEmail]; // Clear on failure for security
+        console.log(`DEBUG FAIL: OTP Mismatch.`);
+        delete otpCache[normalizedEmail]; 
         return res.status(400).json({ message: 'Invalid OTP provided.' });
     }
 
@@ -970,13 +974,11 @@ app.post('/api/verify-otp', async (req, res) => {
         return res.status(400).json({ message: 'OTP has expired.' });
     }
     
-    // 5. Success - Generate Verification Token
+    // 5. Success
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes for step 2
+    const expiry = Date.now() + 10 * 60 * 1000; 
 
     verificationCache[verificationToken] = { email: normalizedEmail, expiry };
-    
-    // Clear used OTP
     delete otpCache[normalizedEmail];
 
     res.status(200).json({ 
@@ -984,6 +986,7 @@ app.post('/api/verify-otp', async (req, res) => {
         verificationToken: verificationToken
     });
 });
+
 app.post('/api/reset-password', async (req, res) => {
     const { verificationToken, email, newPassword } = req.body; 
 
