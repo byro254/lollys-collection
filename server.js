@@ -892,6 +892,9 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
 // Route to handle password reset request (Step 1: Send OTP via Resend)
 app.post('/api/request-otp', async (req, res) => {
     const { email } = req.body;
+
+    // 1. Normalize email immediately to match the verification logic
+    const normalizedEmail = email.toLowerCase().trim();
     
     const user = await db.findUserByEmail(email); 
     if (!user) {
@@ -902,7 +905,8 @@ app.post('/api/request-otp', async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
         const expiry = Date.now() + 5 * 60 * 1000; 
 
-        otpCache[email] = { otp, expiry };
+        // 2. Store using the NORMALIZED email key
+        otpCache[normalizedEmail] = { otp, expiry };
         
         // 🚨 RESEND INTEGRATION FOR OTP
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
@@ -929,25 +933,57 @@ app.post('/api/request-otp', async (req, res) => {
 
 app.post('/api/verify-otp', async (req, res) => {
     const { email, otp } = req.body;
-    const cacheEntry = otpCache[email];
+
+    // 1. Basic Validation
+    if (!email || !otp) {
+        return res.status(400).json({ message: 'Email and OTP are required.' });
+    }
+
+    // 2. Normalize Inputs (Fixes Case Sensitivity & Type Mismatch)
+    const normalizedEmail = email.toLowerCase().trim();
+    const inputOtp = String(otp).trim(); // Ensure OTP is compared as a string
+
+    // 3. Retrieve from Cache
+    const cacheEntry = otpCache[normalizedEmail];
     
-    if (!cacheEntry || cacheEntry.otp !== otp || Date.now() > cacheEntry.expiry) {
-        delete otpCache[email];
-        return res.status(400).json({ message: 'Invalid or expired OTP.' });
+    // --- DEBUGGING LOGS (Check terminal if 400 occurs) ---
+    console.log(`DEBUG VERIFY: Checking email: [${normalizedEmail}]`);
+    console.log(`DEBUG VERIFY: Input OTP: [${inputOtp}]`);
+    console.log(`DEBUG VERIFY: Stored Cache:`, cacheEntry);
+    // -----------------------------------------------------
+
+    // 4. Check Logic
+    if (!cacheEntry) {
+        console.log('DEBUG FAIL: No cache entry found (Server might have restarted).');
+        return res.status(400).json({ message: 'Invalid or expired OTP (Session not found).' });
+    }
+
+    if (cacheEntry.otp !== inputOtp) {
+        console.log(`DEBUG FAIL: OTP Mismatch. Server: ${cacheEntry.otp} vs User: ${inputOtp}`);
+        delete otpCache[normalizedEmail]; // Clear on failure for security
+        return res.status(400).json({ message: 'Invalid OTP provided.' });
+    }
+
+    if (Date.now() > cacheEntry.expiry) {
+        console.log('DEBUG FAIL: OTP Expired.');
+        delete otpCache[normalizedEmail];
+        return res.status(400).json({ message: 'OTP has expired.' });
     }
     
+    // 5. Success - Generate Verification Token
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 10 * 60 * 1000; 
+    const expiry = Date.now() + 10 * 60 * 1000; // 10 minutes for step 2
 
-    verificationCache[verificationToken] = { email, expiry };
-    delete otpCache[email];
+    verificationCache[verificationToken] = { email: normalizedEmail, expiry };
+    
+    // Clear used OTP
+    delete otpCache[normalizedEmail];
 
     res.status(200).json({ 
-        message: 'OTP verified successfully. Proceed to password reset.',
+        message: 'OTP verified successfully.',
         verificationToken: verificationToken
     });
 });
-
 app.post('/api/reset-password', async (req, res) => {
     const { verificationToken, email, newPassword } = req.body; 
 
