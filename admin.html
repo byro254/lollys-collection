@@ -2234,6 +2234,7 @@ function connectWebSocket(customerId) {
  * Fetches and renders the chat history.
  * @param {number} customerId - The ID of the customer.
  */
+
 async function loadChatHistory(customerId) {
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Loading history...</p>`;
@@ -2250,8 +2251,8 @@ async function loadChatHistory(customerId) {
             chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Start the conversation!</p>`;
         } else {
             history.forEach(msg => {
-                // The DB stores 'admin' or 'customer' as the sender role
-                const senderRole = msg.sender_role.toLowerCase(); 
+                // FIX APPLIED HERE: Check for msg.sender_role presence
+                const senderRole = (msg.sender_role || 'system').toLowerCase(); // Default to 'system' if undefined/null
                 appendMessage(senderRole, msg.message_content);
             });
         }
@@ -2262,30 +2263,6 @@ async function loadChatHistory(customerId) {
         console.error('Error loading chat history:', error);
         chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-danger);">❌ Failed to load history.</p>`;
     }
-}
-
-/**
- * Appends a message to the chat window and scrolls to the bottom.
- * @param {string} sender - The sender role ('admin' or 'customer').
- * @param {string} messageText - The content of the message.
- */
-function appendMessage(sender, messageText) {
-    const chatMessages = document.getElementById('chat-messages');
-    
-    // Ensure the initial loading message is cleared if it's the first message
-    if (chatMessages.querySelector('p')) {
-        chatMessages.innerHTML = '';
-    }
-    
-    const msgEl = document.createElement('div');
-    // Assign class based on sender for styling
-    msgEl.className = `chat-message ${sender.toLowerCase()}`;
-    msgEl.textContent = messageText;
-    
-    chatMessages.appendChild(msgEl);
-    
-    // Scroll to the bottom of the chat window
-    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 /**
