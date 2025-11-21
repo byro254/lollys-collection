@@ -474,55 +474,53 @@ function showToast(message, type = 'info', duration = 4000) {
             }
         });
         
-        // 4. OTP PASSWORD RESET LOGIC (EXISTING)
-        
-        let resetEmail = '';
+// 4. OTP PASSWORD RESET LOGIC (EXISTING)
 
-        document.getElementById('request-otp-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const email = document.getElementById('forgot-email-input').value;
-            resetEmail = email;
-            showToast('Sending OTP...', 'info');
+let resetEmail = '';
 
-            try {
-                const response = await fetch('/api/request-otp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone })
+document.getElementById('request-otp-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const phone = document.getElementById('forgot-phone-input').value;
 
-                });
+    showToast('Sending OTP...', 'info');
 
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showToast(result.message, 'success'); 
-                    
-                    document.getElementById('forgot-step-1').style.display = 'none';
-                    document.getElementById('forgot-step-2').style.display = 'block';
-                    document.getElementById('otp-email-display').textContent = email;
-                    
-                } else {
-                     showToast(`❌ Error: ${result.message || 'Failed to send OTP.'}`, 'error');
-                }
-            } catch (error) {
-                showToast('❌ Network error.', 'error');
-            }
+    try {
+        const response = await fetch('/api/request-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone })
         });
+
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast(result.message, 'success'); 
+            
+            document.getElementById('forgot-step-1').style.display = 'none';
+            document.getElementById('forgot-step-2').style.display = 'block';
+            document.getElementById('otp-email-display').textContent = phone;
+            
+        } else {
+             showToast(`❌ Error: ${result.message || 'Failed to send OTP.'}`, 'error');
+        }
+    } catch (error) {
+        showToast('❌ Network error.', 'error');
+    }
+});
 
         document.getElementById('verify-otp-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const otp = document.getElementById('otp-input').value;
-            const email = resetEmail;
+           const otp = document.getElementById('otp-input').value;
+const phone = document.getElementById('forgot-phone-input').value;
 
-            showToast('Verifying OTP...', 'info');
+showToast('Verifying OTP...', 'info');
 
-            try {
-                const response = await fetch('/api/verify-otp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ phone, otp })
-
-                });
+try {
+    const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp })
+    });
 
                 const result = await response.json();
                 
