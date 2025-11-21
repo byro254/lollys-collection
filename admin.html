@@ -558,6 +558,15 @@
             border: 1px solid var(--color-border-medium);
             border-bottom-left-radius: 4px;
         }
+        .chat-message.system { /* New style for system messages */
+            align-self: center;
+            background-color: #f0f0f0;
+            color: var(--color-text-subtle);
+            font-size: 0.8rem;
+            padding: 5px 10px;
+            border-radius: 4px;
+            text-align: center;
+        }
         #chat-input-form {
             display: flex;
             gap: 10px;
@@ -2092,96 +2101,69 @@ async function sendReply(e) {
 }
 
 // -----------------------------------------------------
-// NEW REAL-TIME CHAT LOGIC
+// NEW REAL-TIME CHAT LOGIC (Rearranged to fix ReferenceError)
 // -----------------------------------------------------
 
 /**
- * Fetches all registered users (customers) and renders them as clickable chat sessions.
+ * Appends a message to the chat window and scrolls to the bottom.
+ * @param {string} sender - The sender role ('admin', 'customer', or 'system').
+ * @param {string} messageText - The content of the message.
  */
-async function fetchAndRenderChatUsers() {
-    const list = document.getElementById('chat-sessions-list');
-    const loading = document.getElementById('chat-loading');
-    list.innerHTML = '';
-    loading.style.display = 'block';
+function appendMessage(sender, messageText) {
+    const chatMessages = document.getElementById('chat-messages');
     
+    // Ensure the initial loading message is cleared if it's the first message
+    if (chatMessages.querySelector('p')) {
+        chatMessages.innerHTML = '';
+    }
+    
+    const msgEl = document.createElement('div');
+    // Assign class based on sender for styling
+    msgEl.className = `chat-message ${sender.toLowerCase()}`;
+    msgEl.textContent = messageText;
+    
+    chatMessages.appendChild(msgEl);
+    
+    // Scroll to the bottom of the chat window
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+
+/**
+ * Fetches and renders the chat history.
+ * @param {number} customerId - The ID of the customer.
+ */
+async function loadChatHistory(customerId) {
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Loading history...</p>`;
+
     try {
-        // Fetch all users (customers) from the /api/customers endpoint
-        const response = await fetch(`${API_BASE_URL}/customers`);
-        const users = await response.json();
-
+        // API Endpoint from server.js: /api/admin/chat/history/:customerId
+        const response = await fetch(`${API_BASE_URL}/admin/chat/history/${customerId}`);
+        
         if (!response.ok) {
-            throw new Error(users.message || 'Failed to fetch user list for chat.');
+            throw new Error('Failed to fetch chat history.');
         }
 
-        loading.style.display = 'none';
-
-        if (users.length === 0) {
-            list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No registered users found.</li>';
-            return;
+        const history = await response.json();
+        
+        chatMessages.innerHTML = '';
+        if (history.length === 0) {
+            chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Start the conversation!</p>`;
+        } else {
+            history.forEach(msg => {
+                // FIX APPLIED HERE: Added default value for sender_role to prevent TypeError
+                const senderRole = (msg.sender_role || 'system').toLowerCase(); 
+                appendMessage(senderRole, msg.message_content);
+            });
         }
-
-        users.filter(u => !u.is_admin).forEach(user => {
-            const listItem = document.createElement('li');
-            listItem.className = 'chat-session-item';
-            listItem.dataset.customerId = user.id;
-            // NOTE: Last message simulation or actual last message API would be better here
-            listItem.innerHTML = `
-                <div>
-                    <strong>${user.full_name}</strong>
-                    <p style="margin: 0; font-size: 0.8rem;">ID: ${user.id} | ${user.email}</p>
-                </div>
-                <span><i class="fas fa-arrow-right"></i> Chat</span>
-            `;
-            listItem.onclick = () => openChatModal(user.id, user.full_name);
-            list.appendChild(listItem);
-        });
+        // Scroll to bottom after loading history
+        chatMessages.scrollTop = chatMessages.scrollHeight;
 
     } catch (error) {
-        console.error('Error fetching chat users:', error);
-        loading.textContent = '❌ Failed to load chat users. Check API.';
-        loading.style.color = 'var(--color-danger)';
+        console.error('Error loading chat history:', error);
+        chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-danger);">❌ Failed to load history. ${error.message}</p>`;
     }
-}
-
-/**
- * Opens the chat modal, connects the WebSocket, and loads history.
- * @param {number} customerId - The ID of the customer to chat with.
- * @param {string} customerName - The name of the customer.
- */
-async function openChatModal(customerId, customerName) {
-    if (!(await checkAdminAuthentication())) return; 
-    
-    // 1. Close any existing connection
-    if (webSocket) {
-        webSocket.close();
-        webSocket = null;
-    }
-    
-    // 2. Set current chat context
-    currentChatCustomerId = customerId;
-    document.getElementById('chat-customer-name').textContent = customerName;
-    document.getElementById('chat-messages').innerHTML = '';
-    
-    // 3. Load chat history
-    await loadChatHistory(customerId);
-
-    // 4. Connect WebSocket
-    connectWebSocket(customerId);
-    
-    // 5. Show modal
-    document.getElementById('chat-modal').style.display = 'flex';
-}
-
-/**
- * Closes the chat modal and disconnects the WebSocket.
- */
-function closeChatModal() {
-    document.getElementById('chat-modal').style.display = 'none';
-    if (webSocket) {
-        webSocket.close();
-        webSocket = null;
-    }
-    currentChatCustomerId = null;
 }
 
 /**
@@ -2230,38 +2212,93 @@ function connectWebSocket(customerId) {
     };
 }
 
+
 /**
- * Fetches and renders the chat history.
- * @param {number} customerId - The ID of the customer.
+ * Opens the chat modal, connects the WebSocket, and loads history.
+ * @param {number} customerId - The ID of the customer to chat with.
+ * @param {string} customerName - The name of the customer.
  */
+async function openChatModal(customerId, customerName) {
+    if (!(await checkAdminAuthentication())) return; 
+    
+    // 1. Close any existing connection
+    if (webSocket) {
+        webSocket.close();
+        webSocket = null;
+    }
+    
+    // 2. Set current chat context
+    currentChatCustomerId = customerId;
+    document.getElementById('chat-customer-name').textContent = customerName;
+    document.getElementById('chat-messages').innerHTML = '';
+    
+    // 3. Load chat history (uses appendMessage, which is now defined above)
+    await loadChatHistory(customerId);
 
-async function loadChatHistory(customerId) {
-    const chatMessages = document.getElementById('chat-messages');
-    chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Loading history...</p>`;
+    // 4. Connect WebSocket
+    connectWebSocket(customerId);
+    
+    // 5. Show modal
+    document.getElementById('chat-modal').style.display = 'flex';
+}
 
+/**
+ * Closes the chat modal and disconnects the WebSocket.
+ */
+function closeChatModal() {
+    document.getElementById('chat-modal').style.display = 'none';
+    if (webSocket) {
+        webSocket.close();
+        webSocket = null;
+    }
+    currentChatCustomerId = null;
+}
+
+/**
+ * Fetches all registered users (customers) and renders them as clickable chat sessions.
+ */
+async function fetchAndRenderChatUsers() {
+    const list = document.getElementById('chat-sessions-list');
+    const loading = document.getElementById('chat-loading');
+    list.innerHTML = '';
+    loading.style.display = 'block';
+    
     try {
-        // API Endpoint from server.js: /api/admin/chat/history/:customerId
-        const response = await fetch(`${API_BASE_URL}/admin/chat/history/${customerId}`);
-        const history = await response.json();
+        // Fetch all users (customers) from the /api/customers endpoint
+        const response = await fetch(`${API_BASE_URL}/customers`);
+        const users = await response.json();
 
-        if (!response.ok) throw new Error(history.message || 'Failed to fetch chat history.');
-
-        chatMessages.innerHTML = '';
-        if (history.length === 0) {
-            chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Start the conversation!</p>`;
-        } else {
-            history.forEach(msg => {
-                // FIX APPLIED HERE: Check for msg.sender_role presence
-                const senderRole = (msg.sender_role || 'system').toLowerCase(); // Default to 'system' if undefined/null
-                appendMessage(senderRole, msg.message_content);
-            });
+        if (!response.ok) {
+            throw new Error(users.message || 'Failed to fetch user list for chat.');
         }
-        // Scroll to bottom after loading history
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        loading.style.display = 'none';
+
+        if (users.length === 0) {
+            list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No registered users found.</li>';
+            return;
+        }
+
+        users.filter(u => !u.is_admin).forEach(user => {
+            const listItem = document.createElement('li');
+            listItem.className = 'chat-session-item';
+            listItem.dataset.customerId = user.id;
+            // NOTE: Last message simulation or actual last message API would be better here
+            listItem.innerHTML = `
+                <div>
+                    <strong>${user.full_name}</strong>
+                    <p style="margin: 0; font-size: 0.8rem;">ID: ${user.id} | ${user.email}</p>
+                </div>
+                <span><i class="fas fa-arrow-right"></i> Chat</span>
+            `;
+            listItem.onclick = () => openChatModal(user.id, user.full_name);
+            list.appendChild(listItem);
+        });
 
     } catch (error) {
-        console.error('Error loading chat history:', error);
-        chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-danger);">❌ Failed to load history.</p>`;
+        console.error('Error fetching chat users:', error);
+        loading.textContent = '❌ Failed to load chat users. Check API.';
+        loading.style.color = 'var(--color-danger)';
     }
 }
 
