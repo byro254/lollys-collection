@@ -980,7 +980,7 @@
             </form>
         </div>
     </div>
-    <script>
+   <script>
        // Ensure this URL matches your backend API
 const API_BASE_URL = '/api'; 
 
@@ -1593,8 +1593,6 @@ window.viewOrderDetails = async function(orderId, event) {
 
         itemContainer.innerHTML = '';
         items.forEach(item => {
-            const li = document.createElement('li');
-            const itemTotal = (parseFloat(item.unit_price) * parseInt(item.quantity)).toFixed(2);
             li.innerHTML = `
                 <span>${item.product_name}</span>
                 <span>${item.quantity} x $${parseFloat(item.unit_price).toFixed(2)} = <strong>$${itemTotal}</strong></span>
@@ -1631,9 +1629,10 @@ window.onclick = function(event) {
 
 // Function to Handle Form Submission (Update)
 async function handleProductUpdate(e) {
+    e.preventDefault(); // CRITICAL FIX: Prevent default browser submission
+    
     // Check auth status before running
     if (!(await checkAdminAuthentication())) return; 
-    e.preventDefault();
     
     const form = e.target;
     const formData = new FormData(form); 
@@ -1672,9 +1671,10 @@ async function handleProductUpdate(e) {
 
 // Product Upload Function
 async function handleProductUpload(e) {
+    e.preventDefault(); // CRITICAL FIX: Prevent default browser submission
+    
     // Check auth status before running
     if (!(await checkAdminAuthentication())) return; 
-    e.preventDefault();
     
     const form = e.target;
     const uploadBtn = document.getElementById('upload-btn');
