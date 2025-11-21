@@ -258,7 +258,7 @@
             <h2 id="forgot-title">Forgot Password?</h2>
             
             <div id="forgot-step-1">
-                <p>Enter your email to receive a One-Time Password (OTP).</p>
+                <p>Enter your **phone number** to receive a One-Time Password (OTP).</p>
                 <form id="request-otp-form"> <input type="tel" id="forgot-phone-input" placeholder="Phone Number (e.g. +2547xxxxxxx)" required>
 
                     <button type="submit">Send OTP</button>
@@ -266,7 +266,7 @@
             </div>
             
             <div id="forgot-step-2" style="display: none;">
-                <p>A 6-digit OTP has been sent to <span id="otp-email-display" style="font-weight: bold;"></span>. Enter it below (expires in 5 minutes).</p>
+                <p>A 6-digit OTP has been sent to **<span id="otp-phone-display" style="font-weight: bold;"></span>**. Enter it below (expires in 5 minutes).</p>
                 <form id="verify-otp-form">
                     <input type="text" id="otp-input" placeholder="6-digit OTP" required maxlength="6" pattern="[0-9]{6}">
                     <button type="submit">Verify OTP</button>
@@ -330,6 +330,11 @@
                 document.getElementById('forgot-step-1').style.display = 'block';
                 document.getElementById('forgot-step-2').style.display = 'none';
                 document.getElementById('request-otp-form').reset();
+                // Rename display span for phone number clarity (UI change)
+                const otpDisplay = document.getElementById('otp-email-display');
+                if (otpDisplay) {
+                    otpDisplay.id = 'otp-phone-display'; 
+                }
             }
         }
 
@@ -474,13 +479,15 @@ function showToast(message, type = 'info', duration = 4000) {
             }
         });
         
-// 4. OTP PASSWORD RESET LOGIC (EXISTING)
+// 4. OTP PASSWORD RESET LOGIC (MODIFIED TO USE PHONE NUMBER)
 
-let resetEmail = '';
+// let resetEmail = ''; // No longer strictly needed
+let resetPhone = '';
 
 document.getElementById('request-otp-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const phone = document.getElementById('forgot-phone-input').value;
+    resetPhone = phone; // Store phone globally for the verify step
 
     showToast('Sending OTP...', 'info');
 
@@ -498,7 +505,7 @@ document.getElementById('request-otp-form').addEventListener('submit', async fun
             
             document.getElementById('forgot-step-1').style.display = 'none';
             document.getElementById('forgot-step-2').style.display = 'block';
-            document.getElementById('otp-email-display').textContent = phone;
+            document.getElementById('otp-phone-display').textContent = phone;
             
         } else {
              showToast(`❌ Error: ${result.message || 'Failed to send OTP.'}`, 'error');
@@ -511,16 +518,16 @@ document.getElementById('request-otp-form').addEventListener('submit', async fun
         document.getElementById('verify-otp-form').addEventListener('submit', async function(e) {
             e.preventDefault();
            const otp = document.getElementById('otp-input').value;
-const phone = document.getElementById('forgot-phone-input').value;
+           const phone = resetPhone; // Retrieve phone number from global variable
 
-showToast('Verifying OTP...', 'info');
+            showToast('Verifying OTP...', 'info');
 
-try {
-    const response = await fetch('/api/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp })
-    });
+            try {
+                const response = await fetch('/api/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, otp }) // Send phone instead of email
+                });
 
                 const result = await response.json();
                 
@@ -528,7 +535,10 @@ try {
                     showToast('✅ OTP verified! Redirecting to password reset...', 'success'); 
                     
                     const verificationToken = result.verificationToken;
-                    const redirectUrl = `/reset-password.html?vtoken=${verificationToken}&email=${encodeURIComponent(email)}`;
+                    const resetKey = result.resetKey; // This will be the phone number from server
+
+                    // The redirect must now pass the phone number as the resetKey
+                    const redirectUrl = `/reset-password.html?vtoken=${verificationToken}&resetkey=${encodeURIComponent(resetKey)}`;
                     
                     setTimeout(() => window.location.href = redirectUrl, 1500);
 

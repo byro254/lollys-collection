@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // NOTE: saveChatMessage signature must now match the updated function in db.js
-const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -1089,126 +1089,153 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
 
 
 app.post("/api/request-otp", async (req, res) => {
-    const { phone } = req.body;
-
+    const { phone } = req.body; // Primary lookup field
+    
     if (!phone) {
-        return res.status(400).json({ message: "Phone number is required." });
+        return res.status(400).json({ message: 'Phone number is required to send OTP.' });
     }
-
-    // Generate OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = Date.now() + 5 * 60 * 1000;
-
-    // Save OTP
-    otpCache[phone] = { otp, expiry };
+    
+    // 1. Find user by phone number (<<< FIX APPLIED HERE)
+    const user = await db.findUserByPhone(phone); 
+    
+    if (!user) {
+        // Do not leak user existence
+        return res.status(200).json({ message: 'If the account exists, an OTP has been sent.' });
+    }
+    
+    // 2. Determine the cache key (the phone number)
+    const normalizedKey = phone.toLowerCase().trim();
 
     try {
-        await sms.send({
-            to: phone,
-            message: `Your Lolly's Collection OTP is ${otp}. It expires in 5 minutes.`
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 5 * 60 * 1000;
+
+        // 3. Save OTP in memory using the global otpCache
+        // Store userId and email for the final reset step lookup, keyed by phone number
+        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
+
+        // 4. Send Email (Proxy for SMS)
+        
+        // 🚨 RESEND INTEGRATION FOR OTP
+        const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+
+        // ⬇️ TEMPORARY: Send the OTP to the Admin's verified email for testing, 
+        // regardless of the user's email, due to Resend restrictions.
+        const testingRecipient = 'oyoookoth42@gmail.com'; 
+        // ------------------------------------------------------------------
+
+        const { error } = await resend.emails.send({
+            from: `Lolly's Security <${senderEmail}>`,
+            to: testingRecipient, // Sends to admin email for testing confirmation
+            subject: 'Lollys Collection Password Reset OTP',
+            text: `Your One-Time Password (OTP) for password reset is: ${otp} (User: ${user.email}). It expires in 5 minutes.`
         });
 
-        return res.json({ message: "OTP sent via SMS!" });
-    } catch (error) {
-        console.error("SMS Error:", error);
-        return res.status(500).json({ message: "Failed to send OTP via SMS." });
-    }
+        if (error) {
+            console.error('Resend OTP Error:', error);
+        }
+
+        res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
+    } catch (error) {
+        console.error('OTP Request Error:', error);
+        res.status(500).json({ message: 'Error processing OTP request.' });
+    }
 });
 
 
 // 🚨 VERIFY OTP - Debugging & Normalization
 app.post("/api/verify-otp", (req, res) => {
-    const { phone, otp } = req.body;
-
+    const { phone, otp } = req.body; // Uses phone for lookup
+    
     if (!phone || !otp) {
-        return res.status(400).json({ message: "Phone number and OTP are required." });
+        return res.status(400).json({ message: 'Phone and OTP are required.' });
+    }
+    
+    // Keying by phone number
+    const verificationKey = phone.toLowerCase().trim();
+
+    const entry = otpCache[verificationKey]; 
+    
+    if (!entry) return res.status(400).json({ message: "No OTP found or session expired." });
+
+    if (Date.now() > entry.expiry) {
+        delete otpCache[verificationKey];
+        return res.status(400).json({ message: "OTP expired." });
     }
 
-    const entry = otpCache[phone];
-
-    if (!entry) {
-        return res.status(400).json({ message: "No OTP found for this number." });
+    if (String(entry.otp) !== String(otp)) {
+        return res.status(400).json({ message: "Invalid OTP." });
     }
+    
+    // 4. Success: Generate verification token for the next step (password reset)
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const expiry = Date.now() + 10 * 60 * 1000; 
 
-    if (Date.now() > entry.expiry) {
-        delete otpCache[phone];
-        return res.status(400).json({ message: "OTP expired." });
-    }
+    // Store user ID, email, and phone (as resetKey) in the verification cache
+    verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
+    delete otpCache[verificationKey];
 
-    if (entry.otp !== otp) {
-        return res.status(400).json({ message: "Invalid OTP." });
-    }
-
-    // OTP OK — delete it now
-    delete otpCache[phone];
-
-    return res.json({ message: "OTP verified successfully!", verified: true });
+    res.json({ 
+        message: "OTP verified!", 
+        verified: true, 
+        verificationToken: verificationToken,
+        resetKey: verificationKey // Send the phone number back to the client
+    });
 });
 
 // Route to handle password reset submission (Step 2: Update Password)
 app.post('/api/reset-password', async (req, res) => {
-    // 1. Accept the verification token (vtoken), email, and new password
-    const { verificationToken, email, newPassword } = req.body; 
-
-    // 2. Validate input and password strength
-    if (!verificationToken || !email || !newPassword) {
-        return res.status(400).json({ message: 'Missing required reset information.' });
-    }
+    // Client must send verificationToken, resetKey (now phone number), and newPassword
+    const { verificationToken, resetKey, newPassword } = req.body; 
     
-    if (newPassword.length < 8) {
-        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
-    }
+    // 2. Validate input and password strength
+    if (!verificationToken || !resetKey || !newPassword) {
+        return res.status(400).json({ message: 'Missing required reset information (token, key, or password).' });
+    }
+    
+    if (newPassword.length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+    }
 
-    // 3. Check the verification cache for the token and validate its integrity
-    const verificationEntry = verificationCache[verificationToken];
+    // 3. Check the verification cache for the token
+    const verificationEntry = verificationCache[verificationToken];
 
-    if (!verificationEntry) {
-        // Token doesn't exist (never issued, already used, or expired)
-        return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
-    }
+    if (!verificationEntry) {
+        return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
+    }
+    
+    // 4. Validate Token Expiration and Reset Key Match
+    if (Date.now() > verificationEntry.expiry || verificationEntry.resetKey !== resetKey) {
+        delete verificationCache[verificationToken];
+        return res.status(400).json({ message: 'Password reset session has expired or the key provided does not match.' });
+    }
 
-    // Validate Token Expiration and Email Match
-    if (Date.now() > verificationEntry.expiry || verificationEntry.email !== email) {
-        // Clear the invalid or expired entry
-        delete verificationCache[verificationToken];
-        return res.status(400).json({ message: 'Password reset session has expired or is invalid. Please request a new OTP.' });
-    }
+    try {
+        // Use the userId saved during the OTP request step
+        const userIdToUpdate = verificationEntry.userId;
+        
+        // 5. Hash the new password securely
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        
+        // 6. Update password using the stored user ID
+        const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
 
-    try {
-        // 4. Find the user by email (ensures account still exists)
-        const user = await db.findUserByEmail(email);
+        // 7. CRUCIAL: Clear the verification token immediately after successful use
+        delete verificationCache[verificationToken]; 
 
-        if (!user) {
-            // Account may have been deleted between OTP verification and reset.
-            // Clear the token and notify the user.
-            delete verificationCache[verificationToken]; 
-            return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
-        }
-        
-        // 5. Hash the new password securely
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-        
-        // 6. Update password in the database
-        const updated = await db.updatePassword(user.id, hashedPassword);
-
-        // 7. CRUCIAL: Clear the verification token immediately after successful use
-        delete verificationCache[verificationToken]; 
-
-        if (updated) {
-            // 8. Send success response
-            res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
-        } else {
-            throw new Error("Database update failed (0 rows affected).");
-        }
-    } catch (error) {
-        console.error('Password Reset Error:', error);
-        // Clear the token even on hash/DB update failure for security
-        delete verificationCache[verificationToken]; 
-        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
-    }
+        if (updated) {
+            res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
+        } else {
+            throw new Error("Database update failed (0 rows affected).");
+        }
+    } catch (error) {
+        console.error('Password Reset Error:', error);
+        // Clear the token even on hash/DB update failure for security
+        delete verificationCache[verificationToken]; 
+        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
+    }
 });
-
 // =========================================================
 //                   REAL-TIME CHAT SETUP
 // =========================================================

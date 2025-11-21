@@ -205,6 +205,25 @@ async function findUserOrders(userId) {
 
     return ordersWithItems;
 }
+/**
+ * Retrieves a user object by their phone number.
+ * This is crucial for OTP-based password reset lookup.
+ * @param {string} phone - The phone number of the user.
+ * @returns {Promise<object | null>} - User object including id, full_name, email, password_hash, is_admin, and is_active, or null.
+ */
+async function findUserByPhone(phone) {
+    try {
+        const [rows] = await pool.execute(
+            'SELECT id, full_name, email, password_hash, is_admin, is_active FROM users WHERE phone_number = ?',
+            [phone]
+        );
+        
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('Database error fetching user by phone:', error);
+        throw error;
+    }
+}
 // ---------------------------------------------------------------- //
 // REMOVED OBSOLETE FUNCTIONS: savePasswordResetToken, findUserByResetToken
 // ---------------------------------------------------------------- //
@@ -348,4 +367,6 @@ module.exports = {
     // 🚨 NEW CHAT FUNCTIONS (Signature changed for saveChatMessage)
     saveChatMessage, 
     getChatHistory,
-};
+
+    findUserByPhone, // New function to find user by phone for OTP reset
+    };
