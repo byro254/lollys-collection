@@ -447,8 +447,8 @@
                 if (response.ok) {
                     const user = await response.json();
                     
-                    if (user.name) {
-                        nameInput.value = user.name;
+                    if (user.full_name) {
+                        nameInput.value = user.full_name;
                         nameInput.readOnly = true;
                     }
                     if (user.email) {
@@ -458,7 +458,8 @@
                     
                     // If user is logged in, use their DB ID for chat
                     if (user.id) {
-                        customerId = user.id;
+                        // Ensure customerId is a string if the DB ID is numeric
+                        customerId = String(user.id);
                         localStorage.setItem('chat_customer_id', customerId);
                     }
                 }
@@ -537,6 +538,7 @@
         
         async function fetchChatHistory() {
             try {
+                // Ensure customerId is a string for the URL
                 const response = await fetch(`/api/chat/history/${customerId}`);
                 if (!response.ok) throw new Error('Failed to load history.');
 
@@ -549,12 +551,14 @@
                 }
                 
                 history.forEach(msg => {
-                    const senderClass = (msg.sender === 'customer') ? 'user' : 'admin';
+                    // The DB stores 'admin' or 'customer' as the sender role
+                    const senderClass = (msg.sender_role.toLowerCase() === 'customer') ? 'user' : 'admin';
                     appendMessage(msg.message_content, senderClass);
                 });
             } catch (error) {
                 console.error('Error loading chat history:', error);
-                appendMessage('Error loading previous messages.', 'admin');
+                // If history load fails, just show the connection message
+                appendMessage("Connected. Unable to load previous messages.", 'admin');
             }
         }
 
@@ -566,6 +570,7 @@
             // Determine protocol: wss:// for HTTPS, ws:// for HTTP
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsHost = window.location.host;
+            // Endpoint matches server.js: /ws/chat/:customerId
             const chatUrl = `${wsProtocol}//${wsHost}/ws/chat/${customerId}`;
             
             chatSocket = new WebSocket(chatUrl);
@@ -573,10 +578,10 @@
             // 1. Connection Open
             chatSocket.onopen = () => {
                 chatBody.innerHTML = ''; // Clear 'connecting' message
-                appendMessage('Connected to live support. Waiting for agent...', 'admin');
                 chatInput.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
-                fetchChatHistory(); // Load history after connection
+                // Load history immediately after connection is successful
+                fetchChatHistory(); 
             };
 
             // 2. Message Received
@@ -593,7 +598,7 @@
 
             // 3. Connection Closed
             chatSocket.onclose = () => {
-                appendMessage('Connection lost. Please try reloading the page.', 'admin');
+                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'admin');
                 chatInput.disabled = true;
                 document.getElementById('chat-send-btn').disabled = true;
             };
@@ -610,7 +615,10 @@
         chatIcon.addEventListener('click', () => {
             chatOverlay.style.display = 'block';
             
+            // Start connection if it's closed or null
             if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
+                // Display connecting message immediately
+                chatBody.innerHTML = `<div class="message admin">Connecting to live support...</div>`;
                 connectChatSocket();
             } else if (chatSocket.readyState === WebSocket.OPEN) {
                 // Already open, ensure inputs are enabled and scroll to bottom
@@ -639,13 +647,13 @@
             if (messageText && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 
                 const payload = JSON.stringify({
-                    sender: 'customer', 
+                    // Server determines the sender, but client sends a structured message
                     message: messageText
                 });
                 
                 chatSocket.send(payload); // Send message via WebSocket
                 
-                // Display message locally immediately
+                // Display message locally immediately, using 'user' class
                 appendMessage(messageText, 'user'); 
 
                 chatInput.value = ''; // Clear input field
