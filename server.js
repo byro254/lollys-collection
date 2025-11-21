@@ -1438,20 +1438,33 @@ app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
  * GET /api/chat/history/:customerId
  * Retrieves chat history for the customer client (requires authentication check).
  */
-app.get('/api/chat/history/:customerId', isAuthenticated, async (req, res) => {
+app.get('/api/chat/history/:customerId', async (req, res) => {
     const customerId = req.params.customerId;
-    // Security check: Customer can only retrieve their own history
-    if (String(req.session.userId) !== customerId) {
+    const sessionUserId = String(req.session.userId); 
+
+    // Allow logged-in users to access their own history OR allow anyone to access
+    // history IF they are using an 'anon-' ID.
+    if (sessionUserId === customerId || customerId.startsWith('anon-')) {
+        try {
+            const history = await getChatHistory(customerId);
+            return res.json(history);
+        } catch (error) {
+            console.error(`Error fetching customer chat history for ${customerId}:`, error);
+            return res.status(500).json({ message: 'Failed to retrieve chat history.' });
+        }
+    }
+    
+    // Fallback security check if an unauthenticated user tries to access a numeric (DB) ID
+    if (!req.session.userId && !customerId.startsWith('anon-')) {
+         return res.status(403).json({ message: 'Access denied for non-anonymous chat history.' });
+    }
+    
+    // This check is now only relevant if logged-in user tries to access someone else's ID
+    if (sessionUserId !== customerId) {
          return res.status(403).json({ message: 'Access denied to this chat history.' });
     }
     
-    try {
-        const history = await getChatHistory(customerId);
-        res.json(history);
-    } catch (error) {
-        console.error(`Error fetching customer chat history for ${customerId}:`, error);
-        res.status(500).json({ message: 'Failed to retrieve chat history.' });
-    }
+    // (This part is unnecessary if the first block handles all valid cases)
 });
 
 
