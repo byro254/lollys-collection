@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-        /* --- Dark Pink & White Color Theme (Styles remain unchanged) --- */
+        /* --- Dark Pink & White Color Theme --- */
         :root { 
             --color-bg-light: #FFFFFF;
             --color-bg-page: #F4F4F9;
@@ -361,7 +361,7 @@
         }
 
         
-        /* --- Message Section Styles (Updated) --- */
+        /* --- Message Section Styles --- */
         .messages-grid {
             display: grid;
             /* Responsive grid: min 300px wide cards */
@@ -394,25 +394,6 @@
             font-size: 1.1rem;
             color: var(--color-pink-dark);
         }
-        
-        /* NEW: Clickable Username for Chat - now used in a specific table */
-        .chat-list-link {
-            display: block;
-            padding: 10px 0;
-            text-decoration: none;
-            color: var(--color-text-dark);
-            font-weight: 500;
-            border-bottom: 1px solid var(--color-border-light);
-            transition: background-color 0.2s;
-        }
-        .chat-list-link:hover {
-            background-color: var(--color-bg-page);
-            color: var(--color-pink-accent);
-        }
-        .chat-list-link i {
-            margin-right: 10px;
-        }
-        
 
         .message-header p {
             margin: 5px 0 0;
@@ -447,7 +428,7 @@
             padding-top: 10px;
             border-top: 1px solid #f0f0f0;
         }
-        /* Modal Styling (Order Details, Reply, Chat) */
+        /* Modal Styling (Order Details) */
         .modal {
             display: none; 
             position: fixed; 
@@ -507,85 +488,87 @@
             to { opacity: 1; }
         }
         
-        /* --- NEW CHAT MODAL STYLES --- */
-        #chat-modal .modal-content {
-            max-width: 450px;
-            height: 550px;
+        /* --- NEW: Chat Specific Styles --- */
+        #chat-sessions-list {
+            list-style: none;
             padding: 0;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
+            margin: 0;
         }
-
-        .chat-header-bar {
-            background-color: var(--color-pink-dark);
-            color: white;
-            padding: 15px 20px;
+        .chat-session-item {
+            padding: 15px;
+            border-bottom: 1px solid var(--color-border-medium);
+            cursor: pointer;
+            transition: background-color 0.2s;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
-        .chat-header-bar h4 {
-            margin: 0;
-            color: white;
-            font-family: var(--font-body);
+        .chat-session-item:hover {
+            background-color: var(--color-bg-page);
+        }
+        .chat-session-item:last-child {
+            border-bottom: none;
+        }
+        .chat-session-item strong {
+            color: var(--color-pink-dark);
+            font-weight: 600;
+        }
+        .chat-session-item span {
+            font-size: 0.85rem;
+            color: var(--color-text-subtle);
+        }
+
+        #chat-modal .modal-content {
+            max-width: 450px;
+            margin-top: 10vh;
+            display: flex;
+            flex-direction: column;
+            max-height: 80vh;
         }
 
         #chat-messages {
             flex-grow: 1;
-            padding: 20px;
             overflow-y: auto;
-            background-color: var(--color-bg-page);
+            border: 1px solid var(--color-border-medium);
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            height: 400px; /* Fixed height for chat window */
             display: flex;
             flex-direction: column;
             gap: 10px;
         }
-
         .chat-message {
             max-width: 80%;
-            padding: 10px;
-            border-radius: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
             line-height: 1.4;
             word-wrap: break-word;
-            font-size: 0.9rem;
         }
-
         .chat-message.admin {
+            align-self: flex-end;
             background-color: var(--color-pink-accent);
             color: white;
-            margin-right: auto;
-            border-bottom-left-radius: 5px;
+            border-bottom-right-radius: 4px;
         }
-
         .chat-message.customer {
-            background-color: var(--color-bg-light);
+            align-self: flex-start;
+            background-color: var(--color-bg-page);
             color: var(--color-text-dark);
-            margin-left: auto;
             border: 1px solid var(--color-border-medium);
-            border-bottom-right-radius: 5px;
+            border-bottom-left-radius: 4px;
         }
-
-        .chat-input-container {
-            padding: 10px 15px;
-            border-top: 1px solid var(--color-border-medium);
+        #chat-input-form {
             display: flex;
             gap: 10px;
         }
-
-        .chat-input-container input {
+        #chat-input {
             flex-grow: 1;
             margin-bottom: 0;
-            padding: 10px;
-            border-radius: 20px;
         }
-
-        .chat-input-container button {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            padding: 0;
-            flex-shrink: 0;
-            font-size: 1.1rem;
+        #chat-send-btn {
+            padding: 10px;
+            width: 100px;
         }
     </style>
 </head>
@@ -600,9 +583,7 @@
                 <li><a href="#products" class="nav-link" data-target="products"><i class="fas fa-boxes"></i> <span>Products</span></a></li>
                 <li><a href="#customers" class="nav-link" data-target="customers"><i class="fas fa-users"></i> <span>Customers</span></a></li>
                 <li><a href="#messages" class="nav-link" data-target="messages"><i class="fas fa-envelope"></i> <span>Messages</span></a></li>
-                
-                <li><a href="#client-chat" class="nav-link" data-target="client-chat"><i class="fas fa-headset"></i> <span>Client Chat</span></a></li>
-                
+                <li><a href="#chat" class="nav-link" data-target="chat"><i class="fas fa-comments"></i> <span>Client Support</span></a></li>
                 <li><a href="#settings" class="nav-link" data-target="settings"><i class="fas fa-cog"></i> <span>Settings</span></a></li>
                 <li><a href="#" class="nav-link" id="logout-link" style="margin-top: 50px;"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
             </ul>
@@ -836,18 +817,18 @@
             </div>
         </section>
         
-        <section id="client-chat" class="content-section">
-            <h2><i class="fas fa-headset"></i> Client Live Chat</h2>
+        <section id="chat" class="content-section">
+            <h2><i class="fas fa-comments"></i> Client Support (Live Chat)</h2>
             <div class="card">
-                <h3>Active/Recent Chat Sessions</h3>
-                <div id="chat-list-container">
-                    <p id="chat-list-loading">Fetching active chat sessions...</p>
-                    <div id="active-chats-list">
-                        </div>
+                <h3>Active & Recent Chat Sessions</h3>
+                <div id="chat-list-container" class="table-responsive">
+                    <p id="chat-loading" style="text-align: center; color: var(--color-text-subtle);">Loading user list...</p>
+                    <ul id="chat-sessions-list">
+                        </ul>
                 </div>
             </div>
+            <p style="margin-top: 15px; color: var(--color-text-subtle); font-size: 0.9rem;">(Note: This list is populated by fetching all registered users and simulating sessions for demonstration.)</p>
         </section>
-        
         <section id="customers" class="content-section">
             <h2><i class="fas fa-users"></i> Customer Management</h2>
             <div class="card">
@@ -919,7 +900,7 @@
         </div>
     </div>
     
-    <div id="reply-modal" class="modal" style="display: none;">
+    <div id="reply-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" onclick="document.getElementById('reply-modal').style.display='none'">&times;</span>
             <h3><i class="fas fa-reply"></i> Send Response to Customer</h3>
@@ -975,32 +956,24 @@
             </button>
         </div>
     </div>
-    
+
     <div id="chat-modal" class="modal">
         <div class="modal-content">
-            <div class="chat-header-bar">
-                <h4 id="chat-customer-name">Real-Time Chat</h4>
-                <button class="close-btn" onclick="closeChatModal()">&times;</button>
-            </div>
+            <span class="close-btn" onclick="closeChatModal()">&times;</span>
+            <h3 id="chat-modal-title" style="border-bottom: none;">Live Chat with Customer <span id="chat-customer-name">...</span></h3>
+            
             <div id="chat-messages">
-                <div class="chat-message admin">Chat connected. Waiting for customer response...</div>
-            </div>
-            <div class="chat-input-container">
-                <input type="text" id="chat-message-input" placeholder="Type message and press Enter..." disabled>
-                <button class="submit-button" id="chat-send-btn" disabled>
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </div>
+                </div>
+            
+            <form id="chat-input-form">
+                <input type="text" id="chat-input" placeholder="Type your message..." required>
+                <button type="submit" class="submit-button" id="chat-send-btn"><i class="fas fa-paper-plane"></i> Send</button>
+            </form>
         </div>
     </div>
     <script>
        // Ensure this URL matches your backend API
 const API_BASE_URL = '/api'; 
-// --- NEW CHAT VARIABLES ---
-let chatSocket = null;
-let currentChatCustomerId = null;
-let currentChatCustomerName = 'Real-Time Chat'; 
-// --- END CHAT VARIABLES ---
 
 // Chart instance reference
 let salesChartInstance = null;
@@ -1010,8 +983,12 @@ let deleteProductIdToConfirm = null;
 // Global variables for auto-refresh timers
 let dashboardIntervalId = null;
 let ordersIntervalId = null;
-let chatIntervalId = null; // NEW: Interval for chat session list
 const REFRESH_INTERVAL = 30000; // 30 seconds
+
+// --- NEW CHAT GLOBALS ---
+let webSocket = null;
+let currentChatCustomerId = null;
+// --- END NEW CHAT GLOBALS ---
 
 // --- Authentication Gate Logic (NEW) ---
 
@@ -1019,6 +996,8 @@ const REFRESH_INTERVAL = 30000; // 30 seconds
  * Redirects the user to the dedicated authentication page.
  */
 function redirectToAuthPage() {
+    // In a real application, this would redirect to your login page
+    // For this environment, we'll simulate the redirect
     console.log('Redirecting to /auth.html for login.');
      window.location.href = '/auth.html'; 
 }
@@ -1028,19 +1007,24 @@ function redirectToAuthPage() {
  */
 async function checkAdminAuthentication() {
     try {
+        // Simulated API call to a dedicated authentication check endpoint
         const response = await fetch(`${API_BASE_URL}/auth/check`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
         });
 
         if (response.ok) {
+            // User is authenticated. Hide modal and proceed.
             document.getElementById('auth-gate-modal').style.display = 'none';
-            document.body.style.overflow = 'auto'; 
+            document.body.style.overflow = 'auto'; // Re-enable scrolling
+            
+            // Re-enable interaction with the main content area
             document.querySelector('.main-content').style.pointerEvents = 'auto';
             document.querySelector('.sidebar-nav').style.pointerEvents = 'auto';
             
             return true;
         } else {
+            // User is NOT authenticated (e.g., 401 Unauthorized or 403 Forbidden)
             const result = await response.json().catch(() => ({ message: 'Unauthenticated' }));
             console.warn('Authentication required:', result.message || 'Not logged in.');
             displayAuthGate();
@@ -1049,6 +1033,7 @@ async function checkAdminAuthentication() {
 
     } catch (error) {
         console.error('Network error during auth check:', error);
+        // Treat any network error as unauthenticated access for security
         displayAuthGate();
         return false;
     }
@@ -1059,10 +1044,14 @@ async function checkAdminAuthentication() {
  */
 function displayAuthGate() {
     const authModal = document.getElementById('auth-gate-modal');
-    authModal.style.display = 'flex'; 
-    document.body.style.overflow = 'hidden'; 
+    authModal.style.display = 'flex'; // Use flex to better center content vertically
+    document.body.style.overflow = 'hidden'; // Prevent scrolling the main page
+    
+    // Disable interaction with the main content area by preventing clicks
     document.querySelector('.main-content').style.pointerEvents = 'none';
     document.querySelector('.sidebar-nav').style.pointerEvents = 'none';
+    
+    // Ensure the modal is always on top
     authModal.style.zIndex = '10000'; 
 }
 
@@ -1070,58 +1059,67 @@ function displayAuthGate() {
 // --- Auto Refresh Functions ---
 
 async function autoRefreshDashboard() {
+    // Check auth status before running refresh
     if (!(await checkAdminAuthentication())) return; 
+    // console.log('Auto-refreshing Dashboard...');
     await fetchDashboardStats();
     await fetchAndRenderSalesChart();
 }
 
 async function autoRefreshOrders() {
+    // Check auth status before running refresh
     if (!(await checkAdminAuthentication())) return; 
+    // console.log('Auto-refreshing Orders...');
     await fetchAndRenderOrders();
-}
-
-async function autoRefreshChatSessions() {
-    if (!(await checkAdminAuthentication())) return; 
-    await fetchActiveChatSessions();
 }
 
 /**
  * Manages the automatic refresh for a given section.
+ * @param {string | null} sectionId - The ID of the section to manage ('dashboard' or 'orders').
  */
 function manageAutoRefresh(sectionId) {
     // 1. Clear all existing intervals to prevent overlap
-    if (dashboardIntervalId) clearInterval(dashboardIntervalId);
-    if (ordersIntervalId) clearInterval(ordersIntervalId);
-    if (chatIntervalId) clearInterval(chatIntervalId); // NEW: Clear chat interval
-
-    dashboardIntervalId = null;
-    ordersIntervalId = null;
-    chatIntervalId = null;
+    if (dashboardIntervalId) {
+        clearInterval(dashboardIntervalId);
+        dashboardIntervalId = null;
+    }
+    if (ordersIntervalId) {
+        clearInterval(ordersIntervalId);
+        ordersIntervalId = null;
+    }
 
     // 2. Start the interval for the currently active section
     if (sectionId === 'dashboard') {
+        // Run immediately on section load
         autoRefreshDashboard(); 
+        // Then start the interval
         dashboardIntervalId = setInterval(autoRefreshDashboard, REFRESH_INTERVAL);
     } else if (sectionId === 'orders') {
+        // Run immediately on section load
         autoRefreshOrders();
+        // Then start the interval
         ordersIntervalId = setInterval(autoRefreshOrders, REFRESH_INTERVAL);
-    } else if (sectionId === 'client-chat') { // NEW: Start chat session refresh
-        autoRefreshChatSessions();
-        chatIntervalId = setInterval(autoRefreshChatSessions, REFRESH_INTERVAL * 2); // Less frequent refresh for chat list
     }
 }
 
 
-// --- Utility Functions (Dashboard, Chart, Order logic omitted for brevity, assumed functional) ---
+// --- Utility Functions ---
 
+/**
+ * Fetches dashboard statistics (customers, pending/completed orders).
+ */
 async function fetchDashboardStats() {
     try {
         const response = await fetch(`${API_BASE_URL}/dashboard/stats`);
         const stats = await response.json(); 
+
         if (!response.ok) throw new Error(stats.message || 'Failed to fetch dashboard stats.');
+
+        // FIX APPLIED: Using stats.userCount to match the server-side code.
         document.getElementById('stat-customers').textContent = stats.userCount || 0;
         document.getElementById('stat-pending-orders').textContent = stats.pendingOrders || 0;
         document.getElementById('stat-completed-orders').textContent = stats.completedOrders || 0;
+        
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
         document.getElementById('stat-customers').textContent = 'Error';
@@ -1130,24 +1128,476 @@ async function fetchDashboardStats() {
     }
 }
 
+/**
+ * Fetches sales data for the line graph. (Kept for completeness, not directly used in the fix)
+ */
+ async function fetchSalesData() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/dashboard/monthly-sales`);        const salesData = await response.json(); 
+
+        if (!response.ok) throw new Error(salesData.message || 'Failed to fetch sales data.');
+        
+        // Mock data structure if real data is empty for chart demonstration
+        if (salesData.length === 0) {
+            return [
+                { month: 'Jan', sales: 1200 },
+                { month: 'Feb', sales: 1900 },
+                { month: 'Mar', sales: 1500 },
+                { month: 'Apr', sales: 2500 },
+                { month: 'May', sales: 2100 },
+                { month: 'Jun', sales: 2800 },
+            ];
+        }
+
+        return salesData;
+    } catch (error) {
+        console.error('Error fetching sales data:', error);
+        return []; // Return empty array on failure
+    }
+}
+
+// Separate function to handle chart rendering and destruction
 async function fetchAndRenderSalesChart() {
-    // ... Chart fetching and rendering logic ...
+    try {
+        const response = await fetch(`${API_BASE_URL}/dashboard/monthly-sales`);
+        if (!response.ok) throw new Error('Failed to fetch sales data.');
+        
+        const data = await response.json();
+
+        if (data.length === 0) {
+            return;
+        }
+
+        const chartLabels = data.map(item => item.month); 
+        const chartData = data.map(item => parseFloat(item.revenue)); 
+        
+        renderSalesChart(chartLabels, chartData); 
+
+    } catch (error) {
+        console.error('Chart data fetch failed:', error);
+        if (salesChartInstance) salesChartInstance.destroy();
+        const ctx = document.getElementById('salesChart').getContext('2d');
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = "16px Arial";
+        ctx.fillStyle = "red";
+        ctx.textAlign = "center";
+        ctx.fillText("Error loading sales trend data.", ctx.canvas.width/2, ctx.canvas.height/2);
+    }
 }
 
 function renderSalesChart(labels, data) {
-    // ... Chart.js rendering logic ...
+    if (salesChartInstance) {
+        salesChartInstance.destroy();
+    }
+    
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    
+    salesChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Monthly Sales ($)',
+                data: data,
+                borderColor: 'rgb(194, 24, 91)', 
+                backgroundColor: 'rgba(233, 30, 99, 0.2)', 
+                tension: 0.3,
+                fill: true,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Sales Amount ($)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Month'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            let label = context.dataset.label || '';
+                            if (label) {
+                                label += ': ';
+                            }
+                            if (context.parsed.y !== null) {
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                            }
+                            return label;
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
+// --- Navigation & Routing ---
+
+// Function updated to include auto-refresh management
+async function showSection(targetId) {
+    // Check auth status before allowing navigation/data loading
+    if (!(await checkAdminAuthentication())) return; 
+
+    const navLinks = document.querySelectorAll('.nav-link');
+    const contentSections = document.querySelectorAll('.content-section');
+    
+    contentSections.forEach(section => section.classList.remove('active'));
+    navLinks.forEach(link => link.classList.remove('active'));
+
+    const targetSection = document.getElementById(targetId);
+    const targetLink = document.querySelector(`.nav-link[data-target="${targetId}"]`);
+    
+    if (targetSection) targetSection.classList.add('active');
+    if (targetLink) targetLink.classList.add('active');
+
+    // Manage Auto-Refresh based on active section
+    if (targetId === 'dashboard' || targetId === 'orders') {
+        manageAutoRefresh(targetId);
+    } else {
+        manageAutoRefresh(null); // Stop refresh on other tabs
+    }
+
+    // Trigger initial data fetch for the active section (or let auto-refresh handle it)
+    if (targetId === 'products') fetchAndRenderAdminProducts();
+    if (targetId === 'customers') fetchAndRenderCustomers();
+    if (targetId === 'messages') fetchMessages(); 
+    if (targetId === 'chat') fetchAndRenderChatUsers(); // NEW
+}
+
+// --- DOM Content Loaded Listener ---
+
+document.addEventListener('DOMContentLoaded', () => {
+    // START OF NEW LOGIC: Check authentication immediately on load
+    checkAdminAuthentication();
+    // END OF NEW LOGIC
+    
+    const navLinks = document.querySelectorAll('.nav-link');
+    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'dashboard'; 
+    
+    window.showAdminSection = showSection; 
+
+    navLinks.forEach(link => {
+        link.addEventListener('click', function(e) {
+            const targetId = this.getAttribute('data-target');
+            if (targetId) {
+                e.preventDefault();
+                showSection(targetId);
+                history.pushState(null, '', `#${targetId}`);
+            }
+        });
+    });
+
+    // Initial load
+    showSection(document.getElementById(initialHash) ? initialHash : 'dashboard');
+    document.getElementById('edit-product-form').addEventListener('submit', handleProductUpdate);
+    document.getElementById('product-upload-form').addEventListener('submit', handleProductUpload);
+    document.getElementById('confirm-delete-btn').addEventListener('click', async (e) => {
+        const productId = parseInt(e.target.getAttribute('data-product-id'));
+        if (productId) {
+            document.getElementById('delete-confirm-modal').style.display = 'none'; 
+            await deleteProduct(productId); 
+        }
+    });
+    
+    // Add event listener for the new reply form
+    document.getElementById('reply-form').addEventListener('submit', sendReply);
+    
+    // NEW: Add event listener for the chat input form
+    document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
+});
+
+
+// --- CUSTOMER MANAGEMENT (MODIFIED) ---
+async function fetchAndRenderCustomers() {
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const tbody = document.getElementById('customers-tbody');
+    tbody.innerHTML = '<tr><td colspan="6" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Fetching customer details...</td></tr>';
+
+    try {
+        // Mock data structure including new 'is_active' field (assuming API returns this)
+        const mockCustomers = [
+            { id: 1, full_name: 'Alice Johnson (Admin)', email: 'alice@example.com', created_at: '2024-05-10', is_admin: true, is_active: true },
+            { id: 2, full_name: 'Bob Smith (Active)', email: 'bob@example.com', created_at: '2024-06-21', is_admin: false, is_active: true },
+            { id: 3, full_name: 'Charlie Brown (Deactivated)', email: 'charlie@example.com', created_at: '2024-07-01', is_admin: false, is_active: false },
+        ];
+        
+        const response = await fetch(`${API_BASE_URL}/customers`);
+        let customers = await response.json(); 
+
+        if (!response.ok || customers.length === 0) {
+            console.warn('API call failed or returned empty. Using mock customer data.');
+            customers = mockCustomers;
+        }
+
+        tbody.innerHTML = ''; 
+
+        if (customers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="no-hover" style="text-align: center;">No registered customers found.</td></tr>';
+            return;
+        }
+
+        customers.forEach(c => {
+            const isUserAdmin = c.is_admin === true || c.is_admin === 1;
+            const isActive = c.is_active === true || c.is_active === 1;
+            
+            const adminBadge = isUserAdmin ? ' (Admin)' : '';
+            const statusText = isActive ? 'ACTIVE' : 'DEACTIVATED';
+            const badgeClass = isActive ? 'active' : 'deactivated';
+            const buttonText = isActive ? 'Deactivate' : 'Activate';
+            const buttonClass = isActive ? 'deactivate' : 'activate';
+
+            const row = `
+                <tr data-customer-id="${c.id}">
+                    <td>${c.id}</td>
+                    <td>${c.full_name} ${adminBadge}</td>
+                    <td>${c.email}</td>
+                    <td>${new Date(c.created_at).toLocaleDateString()}</td>
+                    <td><span class="status-badge ${badgeClass}">${statusText}</span></td>
+                    <td>
+                        <button class="action-btn btn-toggle-status ${buttonClass}" 
+                            onclick="toggleCustomerStatus(${c.id}, ${isActive})">
+                            ${buttonText}
+                        </button>
+                    </td>
+                </tr>
+            `;
+            tbody.insertAdjacentHTML('beforeend', row);
+        });
+
+    } catch (error) {
+        console.error('Error fetching customers:', error);
+        tbody.innerHTML = `<tr><td colspan="6" class="no-hover" style="text-align: center; color: var(--color-danger);">❌ Failed to load customers. Check API endpoint.</td></tr>`;
+    }
+}
+
+/**
+ * Toggles a customer's active status via API after confirmation. (NEW FUNCTION)
+ * @param {number} userId - The ID of the user to update.
+ * @param {boolean} currentStatus - The current active status (true=Active, false=Deactivated).
+ */
+window.toggleCustomerStatus = async function(userId, currentStatus) {
+    if (!(await checkAdminAuthentication())) return; 
+
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'Activate' : 'Deactivate';
+    const confirmMessage = `Are you sure you want to ${action} user ID #${userId}? This will immediately affect their login access.`;
+
+    const isConfirmed = await showCustomConfirmation(confirmMessage);
+    if (!isConfirmed) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/customers/${userId}/status`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ is_active: newStatus })
+        });
+
+        if (response.ok) {
+            showToast(`User #${userId} successfully ${action}d.`, 'success');
+            // Refresh table to update UI instantly
+            fetchAndRenderCustomers(); 
+        } else {
+            const result = await response.json();
+            showToast(`Failed to ${action} user: ${result.message || 'Server error.'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Status toggle error:', error);
+        showToast('Network error while toggling status.', 'error');
+    }
+};
+
+// --- ORDER MANAGEMENT (Existing logic maintained) ---
 async function fetchAndRenderOrders() {
-    // ... Order fetching and rendering logic ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const pendingTbody = document.getElementById('pending-orders-tbody');
+    const completedTbody = document.getElementById('completed-orders-tbody');
+    pendingTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading pending orders...</td></tr>';
+    completedTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading completed orders...</td></tr>';
+
+    try {
+         // Mock data if API call fails/is empty for demonstration
+        const mockOrders = [
+            { id: 101, customer_name: 'Bob Smith', delivery_location: 'New York', total: 55.99, created_at: '2025-07-20', status: 'Pending', items: [{ product_name: 'Ring', quantity: 1, unit_price: 55.99 }] },
+            { id: 102, customer_name: 'Eva Green', delivery_location: 'London', total: 120.00, created_at: '2025-07-18', status: 'Shipped', items: [{ product_name: 'Dress', quantity: 2, unit_price: 60.00 }] },
+            { id: 103, customer_name: 'Charlie Brown', delivery_location: 'Paris', total: 29.99, created_at: '2025-07-10', status: 'Completed', items: [{ product_name: 'Shoes', quantity: 1, unit_price: 29.99 }] },
+        ];
+        
+        const response = await fetch(`${API_BASE_URL}/orders`); 
+        let orders = await response.json(); 
+
+        if (!response.ok || orders.length === 0) {
+            console.warn('API call failed or returned empty. Using mock order data.');
+            orders = mockOrders;
+        }
+
+        pendingTbody.innerHTML = '';
+        completedTbody.innerHTML = '';
+        let pendingCount = 0;
+        let completedCount = 0;
+
+        orders.forEach(o => {
+            const statusText = o.status.toUpperCase();
+            const statusClass = statusText.toLowerCase().replace(' ', '-');
+            const isPending = o.status === 'Pending' || o.status === 'Shipped';
+            
+            const row = document.createElement('tr');
+            row.dataset.orderId = o.id;
+            row.innerHTML = `
+                <td>#${o.id}</td>
+                <td>${o.customer_name || o.customerName}</td>
+                <td>${o.delivery_location}</td>
+                <td>$${parseFloat(o.total).toFixed(2)}</td>
+                <td>${new Date(o.order_date || o.created_at).toLocaleDateString()}</td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                <td>
+                    ${isPending ? 
+                        `<button class="action-btn btn-complete" onclick="markOrderAsCompleted(${o.id}, event)">Mark as Completed</button>` :
+                        `<button class="table-action-btn btn-view" onclick="viewOrderDetails(${o.id}, event)"><i class="fas fa-eye"></i></button>`
+                    }
+                </td>
+            `;
+            
+            // Add listener to open modal on row click (excluding the action button click)
+            row.addEventListener('click', (e) => {
+                if (!e.target.closest('button')) {
+                    viewOrderDetails(o.id, e);
+                }
+            });
+
+            if (isPending) {
+                pendingTbody.appendChild(row);
+                pendingCount++;
+            } else {
+                completedTbody.appendChild(row);
+                completedCount++;
+            }
+        });
+
+        if (pendingCount === 0) {
+            pendingTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center;">No pending orders!</td></tr>';
+        }
+        if (completedCount === 0) {
+            completedTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center;">No completed orders yet.</td></tr>';
+        }
+
+    } catch (error) {
+        console.error('Error fetching orders:', error);
+        const errorMessage = `<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-danger);">❌ Failed to load orders. Server error.</td></tr>`;
+        pendingTbody.innerHTML = errorMessage;
+        completedTbody.innerHTML = errorMessage;
+    }
 }
 
 window.markOrderAsCompleted = async function(orderId, event) {
-    // ... Mark Order logic ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    event.stopPropagation(); 
+    
+    const isConfirmed = await showCustomConfirmation(`Are you sure you want to mark Order #${orderId} as COMPLETED?`);
+    if (!isConfirmed) return;
+    
+    const button = event.target;
+    button.disabled = true;
+    button.textContent = '...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'Completed' })
+        });
+
+        if (response.ok) {
+            fetchAndRenderOrders(); 
+            fetchDashboardStats(); 
+            showToast(`Order #${orderId} marked as completed.`, 'success');
+        } else {
+            const result = await response.json();
+            showCustomMessage(`Failed to update order: ${result.message}`, 'error');
+            button.disabled = false;
+            button.textContent = 'Mark as Completed';
+        }
+    } catch (error) {
+        console.error('Update status error:', error);
+        showCustomMessage('Network error while updating order status.', 'error');
+        button.disabled = false;
+        button.textContent = 'Mark as Completed';
+    }
 }
 
 window.viewOrderDetails = async function(orderId, event) {
-    // ... View Order logic ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    if (event) event.stopPropagation();
+    
+    const modal = document.getElementById('order-details-modal');
+    const itemContainer = document.getElementById('modal-items-list');
+    const loadingMessage = document.getElementById('modal-loading-message');
+
+    document.getElementById('modal-order-id').textContent = orderId;
+    itemContainer.innerHTML = '';
+    loadingMessage.textContent = 'Fetching details...';
+    loadingMessage.style.display = 'block';
+    
+    modal.style.display = 'block';
+
+    try {
+        const orderResponse = await fetch(`${API_BASE_URL}/orders/${orderId}`);
+        const order = (orderResponse.ok) ? await orderResponse.json() : 
+            { customer_name: 'Mock Customer', customer_email: 'mock@example.com', delivery_location: '123 Test St', order_date: new Date().toISOString(), total: 99.99 };
+
+        document.getElementById('modal-customer-name').textContent = order.customer_name || 'N/A';
+        document.getElementById('modal-customer-email').textContent = order.customer_email || 'N/A';
+        document.getElementById('modal-delivery-location').textContent = order.delivery_location || 'N/A';
+        document.getElementById('modal-order-date').textContent = new Date(order.order_date || order.created_at).toLocaleString();
+        document.getElementById('modal-total-amount').textContent = `$${parseFloat(order.total).toFixed(2)}`;
+        
+        const itemsResponse = await fetch(`${API_BASE_URL}/orders/${orderId}/items`);
+        let items = (itemsResponse.ok) ? await itemsResponse.json() :
+            [{ product_name: 'Mock Item A', quantity: 1, unit_price: 49.99 }, { product_name: 'Mock Item B', quantity: 2, unit_price: 25.00 }];
+        
+        loadingMessage.style.display = 'none';
+        
+        if (items.length === 0) {
+            itemContainer.innerHTML = '<li>No items found.</li>';
+            return;
+        }
+
+        itemContainer.innerHTML = '';
+        items.forEach(item => {
+            const li = document.createElement('li');
+            const itemTotal = (parseFloat(item.unit_price) * parseInt(item.quantity)).toFixed(2);
+            li.innerHTML = `
+                <span>${item.product_name}</span>
+                <span>${item.quantity} x $${parseFloat(item.unit_price).toFixed(2)} = <strong>$${itemTotal}</strong></span>
+            `;
+            itemContainer.appendChild(li);
+        });
+
+    } catch (error) {
+        console.error('Error fetching order details:', error);
+        loadingMessage.style.display = 'none';
+        itemContainer.innerHTML = `<li style="color: var(--color-danger); text-align: center;">Error loading details: ${error.message}</li>`;
+    }
 }
 
 // Modal close functionality 
@@ -1168,104 +1618,337 @@ window.onclick = function(event) {
     }
 }
 
-// --- Navigation & Routing ---
-async function showSection(targetId) {
-    if (!(await checkAdminAuthentication())) return; 
+// --- PRODUCT MANAGEMENT (Existing logic maintained) ---
 
-    const navLinks = document.querySelectorAll('.nav-link');
-    const contentSections = document.querySelectorAll('.content-section');
-    
-    contentSections.forEach(section => section.classList.remove('active'));
-    navLinks.forEach(link => link.classList.remove('active'));
-
-    const targetSection = document.getElementById(targetId);
-    const targetLink = document.querySelector(`.nav-link[data-target="${targetId}"]`);
-    
-    if (targetSection) targetSection.classList.add('active');
-    if (targetLink) targetLink.classList.add('active');
-
-    manageAutoRefresh(targetId);
-
-    // Trigger initial data fetch for the active section 
-    if (targetId === 'products') fetchAndRenderAdminProducts();
-    if (targetId === 'customers') fetchAndRenderCustomers();
-    if (targetId === 'messages') fetchMessages();
-    // NEW: Fetch chat sessions when the Client Chat tab is clicked
-    if (targetId === 'client-chat') fetchActiveChatSessions(); 
-}
-
-// --- DOM Content Loaded Listener ---
-document.addEventListener('DOMContentLoaded', () => {
-    checkAdminAuthentication();
-    
-    const navLinks = document.querySelectorAll('.nav-link');
-    const initialHash = window.location.hash ? window.location.hash.substring(1) : 'dashboard'; 
-    
-    window.showAdminSection = showSection; 
-
-    navLinks.forEach(link => {
-        link.addEventListener('click', function(e) {
-            const targetId = this.getAttribute('data-target');
-            if (targetId) {
-                e.preventDefault();
-                showSection(targetId);
-                history.pushState(null, '', `#${targetId}`);
-            }
-        });
-    });
-
-    showSection(document.getElementById(initialHash) ? initialHash : 'dashboard');
-    document.getElementById('edit-product-form').addEventListener('submit', handleProductUpdate);
-    document.getElementById('product-upload-form').addEventListener('submit', handleProductUpload);
-    document.getElementById('confirm-delete-btn').addEventListener('click', async (e) => {
-        const productId = parseInt(e.target.getAttribute('data-product-id'));
-        if (productId) {
-            document.getElementById('delete-confirm-modal').style.display = 'none'; 
-            await deleteProduct(productId); 
-        }
-    });
-    
-    document.getElementById('reply-form').addEventListener('submit', sendReply);
-    
-    document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
-    document.getElementById('chat-message-input').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            sendChatMessage();
-        }
-    });
-});
-
-// --- CUSTOMER MANAGEMENT (Logic retained) ---
-async function fetchAndRenderCustomers() {
-    // ... Logic to fetch and render customer table ...
-}
-window.toggleCustomerStatus = async function(userId, currentStatus) {
-    // ... Logic to toggle customer status ...
-}
-
-// --- PRODUCT MANAGEMENT (Logic retained) ---
+// Function to Handle Form Submission (Update)
 async function handleProductUpdate(e) {
-    // ... Logic to handle product update ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    e.preventDefault();
+    
+    const form = e.target;
+    const formData = new FormData(form); 
+    const productId = formData.get('id');
+    const updateBtn = document.getElementById('update-btn');
+
+    updateBtn.disabled = true;
+    updateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+    try {
+        // NOTE: The server-side API only supports image upload via POST/multipart. 
+        // A proper PUT update with multipart/form-data for image change would require a dedicated PUT route 
+        // that handles file uploads. For simplicity, we assume this route correctly handles the FormData object.
+        const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+            method: 'PUT', 
+            body: formData, 
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showToast(result.message, 'success');
+            document.getElementById('edit-product-form-container').style.display = 'none'; 
+            await fetchAndRenderAdminProducts(); 
+        } else {
+            showToast(`Update failed: ${result.message || 'Server error.'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Update Error:', error);
+        showToast('Network or client error during update.', 'error');
+    } finally {
+        updateBtn.disabled = false;
+        updateBtn.innerHTML = 'Save Changes';
+    }
 }
+
+// Product Upload Function
 async function handleProductUpload(e) {
-    // ... Logic to handle product upload ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    e.preventDefault();
+    
+    const form = e.target;
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadStatus = document.getElementById('upload-status');
+
+    const formData = new FormData(form); 
+    
+    const imageFile = formData.get('productImage');
+    if (!imageFile || imageFile.size === 0) {
+        showCustomMessage('Please select an image file to upload.', 'error');
+        return;
+    }
+
+    uploadBtn.disabled = true;
+    uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    uploadStatus.style.color = 'var(--color-info)';
+    uploadStatus.textContent = 'Processing product upload...';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/products`, {
+            method: 'POST',
+            body: formData, 
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            uploadStatus.style.color = 'var(--color-success)';
+            uploadStatus.textContent = `✅ Product "${formData.get('name')}" uploaded successfully!`;
+            form.reset(); 
+            await fetchAndRenderAdminProducts(); 
+        } else {
+            uploadStatus.style.color = 'var(--color-danger)';
+            uploadStatus.textContent = `❌ Upload failed: ${result.message || 'Server error.'}`;
+        }
+    } catch (error) {
+        console.error('Upload Error:', error);
+        uploadStatus.style.color = 'var(--color-danger)';
+        uploadStatus.textContent = `❌ Network or client error. Check console.`;
+    } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload Product';
+    }
 }
+
+
 async function deleteProduct(productId) {
-    // ... Logic to delete product ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    // This is called from the confirm button click listener
+    try {
+        const response = await fetch(`${API_BASE_URL}/products/${productId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            showToast(`Product #${productId} deleted successfully.`, 'success');
+            await fetchAndRenderAdminProducts(); // Refresh list
+        } else {
+             const result = await response.json();
+            showToast(`Deletion failed: ${result.message || 'Server error.'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Delete Error:', error);
+        showToast('Network error during product deletion.', 'error');
+    }
 }
+
+// Logout Placeholder 
+document.getElementById('logout-link').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const isConfirmed = await showCustomConfirmation('Are you sure you want to log out?');
+    if (!isConfirmed) return;
+    
+    fetch('/api/logout', { method: 'POST' });
+    showToast('Logout simulated! Redirecting to auth page...', 'info');
+     redirectToAuthPage(); 
+    window.location.href = '/auth.html';
+});    
+
+
+// --- Custom Modal/Message Box Implementation (To replace native alerts/confirms) ---
+document.body.insertAdjacentHTML('beforeend', `
+    <div id="custom-message-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px; text-align: center;">
+            <span class="close-btn" onclick="document.getElementById('custom-message-modal').style.display='none'">&times;</span>
+            <h3 id="modal-msg-title" style="border-bottom: none; margin-bottom: 10px;">Message</h3>
+            <p id="modal-msg-text"></p>
+            <div id="modal-msg-actions" style="margin-top: 20px;">
+                <button id="modal-msg-ok" class="action-button">OK</button>
+                <button id="modal-msg-cancel" class="action-button" style="background-color: var(--color-text-subtle); margin-left: 10px; display: none;">Cancel</button>
+            </div>
+        </div>
+    </div>
+`);
+
+const customMsgModal = document.getElementById('custom-message-modal');
+const msgTitle = document.getElementById('modal-msg-title');
+const msgText = document.getElementById('modal-msg-text');
+const msgOkBtn = document.getElementById('modal-msg-ok');
+const msgCancelBtn = document.getElementById('modal-msg-cancel');
+
+function showCustomMessage(message, type = 'info') {
+    const titleMap = { 'error': 'Error', 'success': 'Success', 'info': 'Notice' };
+    const colorMap = { 'error': 'var(--color-danger)', 'success': 'var(--color-success)', 'info': 'var(--color-info)' };
+    
+    msgTitle.textContent = titleMap[type] || 'Message';
+    msgTitle.style.color = colorMap[type] || 'var(--color-pink-dark)';
+    msgText.textContent = message;
+    
+    msgCancelBtn.style.display = 'none';
+    msgOkBtn.textContent = 'OK';
+    msgOkBtn.onclick = () => customMsgModal.style.display = 'none';
+    
+    customMsgModal.style.display = 'flex'; // Use flex to center message modal as well
+}
+
+function showCustomConfirmation(message) {
+    return new Promise(resolve => {
+        msgTitle.textContent = 'Confirmation';
+        msgTitle.style.color = 'var(--color-warning)';
+        msgText.textContent = message;
+
+        msgCancelBtn.style.display = 'inline-block';
+        msgOkBtn.textContent = 'Yes';
+        
+        const close = (result) => {
+            customMsgModal.style.display = 'none';
+            resolve(result);
+        };
+        
+        msgOkBtn.onclick = () => close(true);
+        msgCancelBtn.onclick = () => close(false);
+        
+        customMsgModal.style.display = 'flex'; // Use flex to center confirmation modal as well
+    });
+}
+ 
+// --- Delete Confirmation Modal Implementation ---
+async function showDeleteConfirmation(productId) {
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const product = allProducts.find(p => p.id === productId);
+
+    if (!product) {
+        showToast('Error: Product data not found for confirmation.', 'error');
+        return;
+    }
+
+    deleteProductIdToConfirm = productId;
+    
+    const productName = product.name;
+    document.getElementById('product-to-delete-name').textContent = productName;
+    document.getElementById('confirm-delete-btn').setAttribute('data-product-id', productId);
+    
+    document.getElementById('delete-confirm-modal').style.display = 'block';
+}
+
+// --- Toast Notification Implementation ---
+/**
+ * Displays a temporary, non-blocking toast notification.
+ */
+function showToast(message, type = 'info', duration = 4000) {
+    const container = document.getElementById('toast-container');
+    // Ensure the container is defined in the body (needed for pages that lack it)
+    if (!container) {
+        document.body.insertAdjacentHTML('afterbegin', `<div id="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;"></div>`);
+        return showToast(message, type, duration); // Re-run once container exists
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message; 
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10); 
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.addEventListener('transitionend', () => {
+            toast.remove();
+        });
+    }, duration);
+}
+
+// --- Function to Render a Single Product Row ---
 function renderProductRow(product) {
-    // ... Logic to render product row ...
+    const tableBody = document.getElementById('products-table-body');
+    const row = document.createElement('tr');
+    
+    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(product.price);
+    
+    row.innerHTML = `
+        <td>${product.id}</td>
+        <td>${product.name}</td>
+        <td>${product.category}</td>
+        <td>${formattedPrice}</td>
+        <td>${product.stock}</td>
+        <td><img src="${product.image_url}" alt="${product.name}" style="height: 50px; width: 50px; object-fit: cover;"></td>
+        <td>
+            <button onclick="editProduct(${product.id})" class="btn-small btn-edit">Edit</button>
+            
+            <button onclick="showDeleteConfirmation(${product.id})" class="btn-small btn-delete">Delete</button>
+        </td>
+    `;
+    
+    tableBody.appendChild(row);
 }
+
+// --- Function to Fetch All Products ---
 async function fetchAndRenderAdminProducts() {
-    // ... Logic to fetch and render admin products ...
-}
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const tableBody = document.getElementById('products-table-body');
+    const loadingMessage = document.getElementById('loading-message');
+    
+    tableBody.innerHTML = ''; 
+    loadingMessage.style.display = 'block';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/products`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const products = await response.json();
+        allProducts = products; 
+        loadingMessage.style.display = 'none'; 
+
+        if (products.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7">No products have been added yet.</td></tr>';
+            return;
+        }
+
+        products.forEach(product => {
+            renderProductRow(product);
+        });
+
+    } catch (error) {
+        console.error('Error fetching admin products:', error);
+        loadingMessage.textContent = '❌ Failed to load products. Check console for error details.';
+        loadingMessage.style.color = 'var(--color-danger)';
+    }
+}   
+ 
+
+// --- Function to Populate Form and Show Container ---
 async function editProduct(productId) {
-    // ... Logic to edit product ...
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const product = allProducts.find(p => p.id == productId);
+    
+    if (!product) {
+        showToast('Product data not available.', 'error');
+        return;
+    }
+
+    document.getElementById('edit-product-id').value = product.id;
+    document.getElementById('edit-name').value = product.name;
+    document.getElementById('edit-price').value = product.price;
+    document.getElementById('edit-category').value = product.category;
+    document.getElementById('edit-stock').value = product.stock;
+    document.getElementById('edit-description').value = product.description || '';
+    document.getElementById('edit-existing-image-url').value = product.image_url;
+    document.getElementById('current-edit-image').src = product.image_url;
+    
+    document.getElementById('edit-product-form-container').style.display = 'block';
+    
+    document.getElementById('edit-product-form-container').scrollIntoView({ behavior: 'smooth' });
 }
 
 
-// --- Message Section (REVERTED to Contact Form Submissions ONLY) ---
+// -----------------------------------------------------
+// MESSAGE & REPLY LOGIC (Updated)
+// -----------------------------------------------------
+
 const messagesList = document.getElementById('messages-list');
 const messagesLoading = document.getElementById('messages-loading');
 
@@ -1274,19 +1957,39 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString(undefined, options);
 }
 
+/**
+ * Opens the reply modal and pre-fills the customer's email and current date.
+ * @param {string} customerEmail - The email address of the customer to reply to.
+ */
+window.openReplyModal = async function(customerEmail) {
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const replyModal = document.getElementById('reply-modal');
+    
+    // 1. Pre-fill customer email
+    document.getElementById('reply-email-to').value = customerEmail;
+    
+    // 2. Set current date
+    const now = new Date();
+    document.getElementById('reply-date').value = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+    
+    // 3. Clear content area
+    document.getElementById('reply-content').value = '';
+    
+    // 4. Show modal
+    replyModal.style.display = 'block';
+}
+
+
 function renderMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
-    
-    // NOTE: Removed chat link from here. Only the email reply button remains.
-    const senderName = message.sender_name || 'Anonymous User';
-    const senderEmail = message.sender_email || 'No email provided';
-
     card.innerHTML = `
         <div>
             <div class="message-header">
-                <h4><i class="fas fa-user-circle"></i> ${senderName}</h4>
-                <p>${senderEmail}</p>
+                <h4>${message.sender_name || 'N/A'}</h4>
+                <p>${message.sender_email || 'No email provided'}</p>
             </div>
             <div class="message-body">
                 <p>${message.message_content.replace(/\n/g, '<br>')}</p>
@@ -1297,8 +2000,8 @@ function renderMessageCard(message) {
         </div>
         <div class="message-actions">
             <button class="action-btn" 
-                    onclick="openReplyModal('${senderEmail}')">
-                <i class="fas fa-envelope"></i> Email Reply
+                    onclick="openReplyModal('${message.sender_email}')">
+                <i class="fas fa-reply"></i> Respond
             </button>
         </div>
     `;
@@ -1306,6 +2009,7 @@ function renderMessageCard(message) {
 }
 
 async function fetchMessages() {
+    // Check auth status before running
     if (!(await checkAdminAuthentication())) return; 
     
     messagesList.innerHTML = ''; 
@@ -1318,7 +2022,7 @@ async function fetchMessages() {
         if (!response.ok) {
             messagesLoading.style.display = 'none';
             const error = await response.json().catch(() => ({ message: 'Unauthenticated or server error.' }));
-            messagesList.innerHTML = `<p class="status-error" style="color: var(--color-danger);">Error fetching messages: ${error.message || 'Server error.'}</p>`;
+            messagesList.innerHTML = `<p class="status-error" style="color: var(--color-danger);">Error fetching messages: ${error.message || 'Server error. Check if admin route is secured/defined.'}</p>`;
             return;
         }
 
@@ -1327,7 +2031,7 @@ async function fetchMessages() {
         messagesLoading.style.display = 'none';
 
         if (messages.length === 0) {
-            messagesList.innerHTML = '<p class="status-info" style="color: var(--color-text-subtle);">No contact form messages found.</p>';
+            messagesList.innerHTML = '<p class="status-info" style="color: var(--color-text-subtle);">No customer messages found.</p>';
         } else {
             messages.forEach(message => {
                 messagesList.appendChild(renderMessageCard(message));
@@ -1341,235 +2045,279 @@ async function fetchMessages() {
     }
 }
 
-// Retained email reply functions
+/**
+ * Handles the submission of the reply form and sends the email via API.
+ */
 async function sendReply(e) {
-    // ... Email reply submission logic ...
-}
-window.openReplyModal = function(customerEmail) {
-    // ... Logic to open email reply modal ...
-}
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    e.preventDefault();
+    
+    const form = e.target;
+    const sendBtn = document.getElementById('send-reply-btn');
 
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+
+    const payload = {
+        to: document.getElementById('reply-email-to').value,
+        from: document.getElementById('reply-email-from').value,
+        subject: document.getElementById('reply-subject').value,
+        content: document.getElementById('reply-content').value,
+    };
+    
+    try {
+        // Assuming a dedicated API endpoint for sending email replies
+        const response = await fetch(`${API_BASE_URL}/admin/messages/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            document.getElementById('reply-modal').style.display = 'none';
+            form.reset();
+            showToast(`Reply sent successfully to ${payload.to}!`, 'success');
+        } else {
+             const result = await response.json();
+            showToast(`Failed to send email: ${result.message || 'Server error.'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Email send error:', error);
+        showToast('Network error while sending reply.', 'error');
+    } finally {
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reply';
+    }
+}
 
 // -----------------------------------------------------
-// NEW CLIENT CHAT SECTION LOGIC
+// NEW REAL-TIME CHAT LOGIC
 // -----------------------------------------------------
-
-const activeChatsList = document.getElementById('active-chats-list');
-const chatListLoading = document.getElementById('chat-list-loading');
 
 /**
- * Renders the list of active/recent chat sessions.
- * NOTE: The server logic does not currently provide a dedicated API for 'active sessions'
- * so this function is a placeholder and will assume the API returns an array of
- * objects with { customer_id, customer_name, last_message_time }.
+ * Fetches all registered users (customers) and renders them as clickable chat sessions.
  */
-async function fetchActiveChatSessions() {
-    if (!(await checkAdminAuthentication())) return; 
-
-    activeChatsList.innerHTML = '';
-    chatListLoading.style.display = 'block';
-
+async function fetchAndRenderChatUsers() {
+    const list = document.getElementById('chat-sessions-list');
+    const loading = document.getElementById('chat-loading');
+    list.innerHTML = '';
+    loading.style.display = 'block';
+    
     try {
-        // 🚨 Placeholder API: Needs to be implemented on the backend to return chat sessions.
-        // Backend should query DISTINCT customer_id from the 'chats' table and join with 'users'
-        const response = await fetch(`${API_BASE_URL}/admin/chat/sessions`); 
-        
-        if (!response.ok) throw new Error('Failed to fetch chat sessions.');
+        // Fetch all users (customers) from the /api/customers endpoint
+        const response = await fetch(`${API_BASE_URL}/customers`);
+        const users = await response.json();
 
-        const sessions = await response.json();
-        chatListLoading.style.display = 'none';
+        if (!response.ok) {
+            throw new Error(users.message || 'Failed to fetch user list for chat.');
+        }
 
-        if (sessions.length === 0) {
-            activeChatsList.innerHTML = '<p style="color: var(--color-text-subtle); text-align: center;">No active or recent chat sessions found.</p>';
+        loading.style.display = 'none';
+
+        if (users.length === 0) {
+            list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No registered users found.</li>';
             return;
         }
 
-        sessions.forEach(session => {
-            const customerId = session.customer_id;
-            // Fallback for anonymous users
-            const customerName = session.customer_name || `Anonymous User (${customerId.substring(0, 8)})`;
-            const lastActive = session.last_message_time ? ` (Last message: ${new Date(session.last_message_time).toLocaleTimeString()})` : '';
-
-            const link = document.createElement('a');
-            link.href = 'javascript:void(0);';
-            link.className = 'chat-list-link';
-            link.innerHTML = `<i class="fas fa-comment-dots"></i> ${customerName}${lastActive}`;
-            
-            link.dataset.customerId = customerId;
-            link.dataset.customerName = customerName;
-            
-            // Attach the click handler to open the chat modal
-            link.onclick = (e) => {
-                e.preventDefault();
-                openChatModal(e.currentTarget);
-            };
-
-            activeChatsList.appendChild(link);
+        users.filter(u => !u.is_admin).forEach(user => {
+            const listItem = document.createElement('li');
+            listItem.className = 'chat-session-item';
+            listItem.dataset.customerId = user.id;
+            // NOTE: Last message simulation or actual last message API would be better here
+            listItem.innerHTML = `
+                <div>
+                    <strong>${user.full_name}</strong>
+                    <p style="margin: 0; font-size: 0.8rem;">ID: ${user.id} | ${user.email}</p>
+                </div>
+                <span><i class="fas fa-arrow-right"></i> Chat</span>
+            `;
+            listItem.onclick = () => openChatModal(user.id, user.full_name);
+            list.appendChild(listItem);
         });
-        
+
     } catch (error) {
-        console.error('Network error fetching chat sessions:', error);
-        chatListLoading.textContent = `❌ Error: Failed to load chat sessions.`;
+        console.error('Error fetching chat users:', error);
+        loading.textContent = '❌ Failed to load chat users. Check API.';
+        loading.style.color = 'var(--color-danger)';
     }
 }
 
-
 /**
- * Creates and displays a new chat message in the modal.
- * @param {string} message - The message content.
- * @param {'admin'|'customer'} sender - Who sent the message.
+ * Opens the chat modal, connects the WebSocket, and loads history.
+ * @param {number} customerId - The ID of the customer to chat with.
+ * @param {string} customerName - The name of the customer.
  */
-function appendChatMessage(message, sender) {
-    const chatBody = document.getElementById('chat-messages');
-    const msgDiv = document.createElement('div');
-    msgDiv.textContent = message;
-    msgDiv.classList.add('chat-message', sender);
-    chatBody.appendChild(msgDiv);
-    chatBody.scrollTop = chatBody.scrollHeight;
-}
-
-/**
- * Handles the click event from the chat list to open the modal.
- * @param {HTMLElement} element - The link element that was clicked.
- */
-window.openChatModal = async function(element) {
+async function openChatModal(customerId, customerName) {
     if (!(await checkAdminAuthentication())) return; 
     
-    const customerId = element.dataset.customerId;
-    const customerName = element.dataset.customerName;
-
-    if (!customerId) {
-        showToast('Cannot start chat: Missing customer ID.', 'error');
-        return;
+    // 1. Close any existing connection
+    if (webSocket) {
+        webSocket.close();
+        webSocket = null;
     }
-
+    
+    // 2. Set current chat context
     currentChatCustomerId = customerId;
-    currentChatCustomerName = customerName;
-    document.getElementById('chat-customer-name').textContent = `Chatting with ${customerName}`;
-    document.getElementById('chat-messages').innerHTML = ''; 
-    document.getElementById('chat-modal').style.display = 'flex';
-    document.getElementById('chat-message-input').disabled = true;
-    document.getElementById('chat-send-btn').disabled = true;
-    appendChatMessage('Connecting to chat service...', 'admin');
+    document.getElementById('chat-customer-name').textContent = customerName;
+    document.getElementById('chat-messages').innerHTML = '';
+    
+    // 3. Load chat history
+    await loadChatHistory(customerId);
 
-    await fetchChatHistory(customerId);
-    connectChatSocket(customerId);
-};
+    // 4. Connect WebSocket
+    connectWebSocket(customerId);
+    
+    // 5. Show modal
+    document.getElementById('chat-modal').style.display = 'flex';
+}
 
 /**
- * Closes the chat modal and cleans up the WebSocket connection.
+ * Closes the chat modal and disconnects the WebSocket.
  */
-window.closeChatModal = function() {
+function closeChatModal() {
     document.getElementById('chat-modal').style.display = 'none';
-    if (chatSocket) {
-        chatSocket.close();
-        chatSocket = null;
-        showToast('Chat connection closed.', 'info', 2000);
+    if (webSocket) {
+        webSocket.close();
+        webSocket = null;
     }
     currentChatCustomerId = null;
-    currentChatCustomerName = 'Real-Time Chat';
-};
+}
 
 /**
- * Connects the WebSocket and handles events.
- * @param {string} customerId - ID of the customer for the chat session.
+ * Establishes a WebSocket connection for the current session.
+ * @param {number} customerId - The ID of the customer.
  */
-function connectChatSocket(customerId) {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsHost = window.location.host; 
-    const finalWsUrl = `${wsProtocol}//${wsHost}/ws/admin/chat/${customerId}`;
+function connectWebSocket(customerId) {
+    // Determine the correct protocol (ws or wss)
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    // The server is hosted on the same origin, so we use host only
+    const host = window.location.host; 
     
-    if (chatSocket) chatSocket.close();
+    // WebSocket URL from server.js: /ws/admin/chat/:customerId
+    const wsUrl = `${protocol}://${host}/ws/admin/chat/${customerId}`;
+    
+    webSocket = new WebSocket(wsUrl);
+
+    webSocket.onopen = () => {
+        console.log(`WebSocket connected for customer ${customerId}`);
+        showToast('Live Chat connected.', 'success', 2000);
+    };
+
+    webSocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            if (data.sender && data.message) {
+                appendMessage(data.sender, data.message);
+            }
+        } catch (e) {
+            console.error('Failed to parse incoming WebSocket message:', e);
+        }
+    };
+
+    webSocket.onclose = (event) => {
+        console.log(`WebSocket closed: Code ${event.code}`);
+        // Only show error if not manually closed
+        if (currentChatCustomerId !== null) { 
+             showToast('Live Chat disconnected. Admin session may have expired.', 'error', 5000);
+        }
+        webSocket = null;
+    };
+
+    webSocket.onerror = (error) => {
+        console.error('WebSocket Error:', error);
+        showToast('WebSocket error. Check console.', 'error', 5000);
+    };
+}
+
+/**
+ * Fetches and renders the chat history.
+ * @param {number} customerId - The ID of the customer.
+ */
+async function loadChatHistory(customerId) {
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Loading history...</p>`;
 
     try {
-        chatSocket = new WebSocket(finalWsUrl);
+        // API Endpoint from server.js: /api/admin/chat/history/:customerId
+        const response = await fetch(`${API_BASE_URL}/admin/chat/history/${customerId}`);
+        const history = await response.json();
+
+        if (!response.ok) throw new Error(history.message || 'Failed to fetch chat history.');
+
+        chatMessages.innerHTML = '';
+        if (history.length === 0) {
+            chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Start the conversation!</p>`;
+        } else {
+            history.forEach(msg => {
+                // The DB stores 'admin' or 'customer' as the sender role
+                const senderRole = msg.sender_role.toLowerCase(); 
+                appendMessage(senderRole, msg.message_content);
+            });
+        }
+        // Scroll to bottom after loading history
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
     } catch (error) {
-        console.error("WebSocket connection failed to initialize:", error);
-        appendChatMessage("Failed to establish WebSocket connection. Check console and URL.", 'admin');
+        console.error('Error loading chat history:', error);
+        chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-danger);">❌ Failed to load history.</p>`;
+    }
+}
+
+/**
+ * Appends a message to the chat window and scrolls to the bottom.
+ * @param {string} sender - The sender role ('admin' or 'customer').
+ * @param {string} messageText - The content of the message.
+ */
+function appendMessage(sender, messageText) {
+    const chatMessages = document.getElementById('chat-messages');
+    
+    // Ensure the initial loading message is cleared if it's the first message
+    if (chatMessages.querySelector('p')) {
+        chatMessages.innerHTML = '';
+    }
+    
+    const msgEl = document.createElement('div');
+    // Assign class based on sender for styling
+    msgEl.className = `chat-message ${sender.toLowerCase()}`;
+    msgEl.textContent = messageText;
+    
+    chatMessages.appendChild(msgEl);
+    
+    // Scroll to the bottom of the chat window
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+/**
+ * Handles sending a message via the WebSocket connection.
+ */
+function sendChatMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+
+    if (!message || !webSocket || webSocket.readyState !== WebSocket.OPEN) {
+        showToast('Chat is not connected. Please try opening the chat modal again.', 'error');
         return;
     }
 
-    chatSocket.onopen = function() {
-        appendChatMessage('Connection successful! You can start chatting.', 'admin');
-        document.getElementById('chat-message-input').disabled = false;
-        document.getElementById('chat-send-btn').disabled = false;
-        document.getElementById('chat-message-input').focus();
-    };
-
-    chatSocket.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        const sender = (data.sender === 'admin') ? 'admin' : 'customer'; 
-        appendChatMessage(data.message, sender);
-    };
-
-    chatSocket.onclose = function() {
-        appendChatMessage('Connection closed. Refresh list to re-initiate chat.', 'admin');
-        document.getElementById('chat-message-input').disabled = true;
-        document.getElementById('chat-send-btn').disabled = true;
-        chatSocket = null;
-    };
-
-    chatSocket.onerror = function(error) {
-        console.error('WebSocket Error:', error);
-        appendChatMessage('Connection error occurred. Check server logs.', 'admin');
-    };
-}
-
-/**
- * Sends a message from the admin to the customer via WebSocket.
- */
-function sendChatMessage() {
-    const input = document.getElementById('chat-message-input');
-    const message = input.value.trim();
-
-    if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-        const payload = {
-            sender: 'admin', 
-            message: message,
-        };
-        chatSocket.send(JSON.stringify(payload));
-        
-        appendChatMessage(message, 'admin'); 
-        input.value = ''; 
-        input.focus();
-    } else if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
-        showToast('Chat is not connected. Please reopen the chat modal.', 'error');
+    if (!currentChatCustomerId) {
+        showToast('No customer selected for chat.', 'error');
+        return;
     }
-}
-
-/**
- * Fetches historical chat messages for the current customer ID.
- */
-async function fetchChatHistory(customerId) {
-    const chatBody = document.getElementById('chat-messages');
-    try {
-        // Use the Admin API route for history
-        const response = await fetch(`${API_BASE_URL}/admin/chat/history/${customerId}`);
-        
-        if (!response.ok) {
-            appendChatMessage('Could not load chat history. Starting fresh conversation.', 'admin');
-            return;
-        }
-
-        const history = await response.json();
-        chatBody.innerHTML = ''; 
-        
-        if (history.length === 0) {
-            appendChatMessage('No prior chat history found. Start the conversation!', 'admin');
-            return;
-        }
-
-        history.forEach(msg => {
-            // Note: History messages are already stored as 'admin' or 'customer' sender_role
-            const sender = (msg.sender === 'admin') ? 'admin' : 'customer';
-            appendChatMessage(msg.message_content, sender);
-        });
-        chatBody.scrollTop = chatBody.scrollHeight;
-
-    } catch (error) {
-        console.error('Error fetching chat history:', error);
-        appendChatMessage('Error loading chat history due to a network error.', 'admin');
-    }
+    
+    // 1. Send message to WebSocket server
+    const payload = {
+        message: message 
+    };
+    webSocket.send(JSON.stringify(payload));
+    
+    // 2. Immediately append the message to the admin's UI
+    appendMessage('admin', message);
+    
+    // 3. Clear input
+    input.value = '';
+    input.focus();
 }
 
    </script>
