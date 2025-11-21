@@ -283,24 +283,25 @@ async function updateUserStatus(userId, newStatus) {
 }
 
 // ---------------------------------------------------------------- //
-// --- NEW CHAT FUNCTIONS ---
+// --- UPDATED CHAT FUNCTIONS ---
 // ---------------------------------------------------------------- //
 
 /**
- * Saves a new chat message to the database.
- * Assumes a 'chats' table exists with columns: customer_id, sender_role, message_content.
- * @param {string} customerId - The ID of the customer (or user ID).
+ * Saves a new chat message to the database, including sender and recipient IDs.
+ * @param {string} customerId - The ID of the primary chat session owner (key).
  * @param {('admin'|'customer')} senderRole - Role of the sender.
+ * @param {string} senderId - The actual ID of the user who sent the message.
+ * @param {string} recipientId - The actual ID of the user who should receive the message.
  * @param {string} message - The content of the message.
  * @returns {Promise<object>} The result of the database query.
  */
-async function saveChatMessage(customerId, senderRole, message) {
+async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
+    // 🚨 UPDATED QUERY: Inserting into the new ID columns
     const query = `
-        INSERT INTO chats (customer_id, sender_role, message_content)
-        VALUES (?, ?, ?);
+        INSERT INTO chats (customer_id, sender_role, received_from_id, sent_to_id, message_content)
+        VALUES (?, ?, ?, ?, ?);
     `;
-    // Note: Assuming customerId can be a string (UUID) if the user is not logged in
-    const [result] = await pool.query(query, [customerId, senderRole, message]);
+    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
     return result;
 }
 
@@ -311,11 +312,13 @@ async function saveChatMessage(customerId, senderRole, message) {
  */
 async function getChatHistory(customerId) {
     const query = `
-        SELECT sender_role AS sender, message_content, sent_at
+        SELECT sender_role, received_from_id, sent_to_id, message_content, sent_at
         FROM chats
         WHERE customer_id = ?
         ORDER BY sent_at ASC;
     `;
+    // NOTE: We select all new ID fields (received_from_id, sent_to_id) for debugging
+    // or complex client-side routing logic.
     const [rows] = await pool.query(query, [customerId]); 
     return rows;
 }
@@ -338,7 +341,7 @@ module.exports = {
     updateUserProfile, // New function to update user profile fields
     updateUserStatus, // New function to update user active status
     
-    // 🚨 NEW CHAT FUNCTIONS
+    // 🚨 NEW CHAT FUNCTIONS (Signature changed for saveChatMessage)
     saveChatMessage, 
     getChatHistory,
 };

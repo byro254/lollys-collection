@@ -1,4 +1,4 @@
-// server.js (Final Production Build with Routing Logic)
+// server.js (Updated to handle sent_to_id and received_from_id)
 
 // 1. Load environment variables first
 require('dotenv').config(); 
@@ -21,6 +21,7 @@ const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
 // Import DB functions
+// NOTE: saveChatMessage signature must now match the updated function in db.js
 const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
 
 const passwordResetCache = {}; 
@@ -59,6 +60,8 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_FULL_NAME = process.env.ADMIN_FULL_NAME;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
+// Admin ID used for chat, using the session ID set during login
+const ADMIN_CHAT_ID = 'admin_env'; 
 
 // --- Multer and Nodemailer setup ---
 const UPLOAD_DIR = path.join(__dirname, 'public/images/products');
@@ -332,7 +335,7 @@ app.post('/api/admin/login', async (req, res) => {
             if (match) {
                 req.session.isAuthenticated = true;
                 req.session.isAdmin = true;
-                req.session.userId = 'admin_env'; 
+                req.session.userId = ADMIN_CHAT_ID; // Use global const
                 req.session.fullName = ADMIN_FULL_NAME;
                 return res.json({ 
                     message: 'Admin login successful.', 
@@ -1254,32 +1257,37 @@ const chatSessions = new Map();
 const wss = new WebSocket.Server({ noServer: true });
 
 // Function to handle message saving and relaying
-async function handleChatMessage(ws, message, sender, customerId) {
+async function handleChatMessage(ws, message, senderRole, customerId) {
     if (!message || !customerId) return;
     
+    // Determine the sender/recipient IDs based on the role and session data
+    const sessionData = chatSessions.get(customerId);
+    if (!sessionData) return console.log(`Session data missing for customer ${customerId}`);
+
+    // The user's ID is the session key (customerId). The admin ID is the constant.
+    const senderId = (senderRole === 'admin') ? ADMIN_CHAT_ID : customerId;
+    const recipientId = (senderRole === 'admin') ? customerId : ADMIN_CHAT_ID;
+    
     const payload = {
-        sender: sender,
+        sender: senderRole,
         message: message
     };
     
-    // 1. Save to Database
+    // 1. Save to Database (using the updated function signature)
     try {
-        await saveChatMessage(customerId, sender, message);
+        await saveChatMessage(customerId, senderRole, senderId, recipientId, message);
     } catch (dbError) {
         console.error(`DB Save Error for ${customerId}:`, dbError);
         // Optionally send a notification back to the sender that the message failed to save
     }
 
     // 2. Relay the message to the other participant in the session
-    const session = chatSessions.get(customerId);
-    if (session) {
-        const target = (sender === 'admin' ? session.customer : session.admin);
-        
-        if (target && target.readyState === WebSocket.OPEN) {
-            target.send(JSON.stringify(payload));
-        } else {
-            console.log(`Relay failed: ${sender}'s target is not open or undefined.`);
-        }
+    const target = (senderRole === 'admin' ? sessionData.customer : sessionData.admin);
+    
+    if (target && target.readyState === WebSocket.OPEN) {
+        target.send(JSON.stringify(payload));
+    } else {
+        console.log(`Relay failed: ${senderRole}'s target is not open or undefined.`);
     }
 }
 
@@ -1339,6 +1347,7 @@ wss.on('connection', (ws, req) => {
             const message = parsed.message ? String(parsed.message).trim() : null;
             
             if (message && message.length > 0) {
+                // Pass the message and the role of the sender
                 handleChatMessage(ws, message, role, customerId);
             }
         } catch (error) {

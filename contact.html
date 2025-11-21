@@ -528,14 +528,18 @@
        // Function: fetchChatHistory
 // Update this function in your contact.html <script> section.
 
+// Function: fetchChatHistory
+// Update this function in your contact.html <script> section.
+
 async function fetchChatHistory() {
     try {
-        // Ensure customerId is a string for the URL
+        // Use the customerId (which is the logged-in user's ID or anon-ID)
         const response = await fetch(`/api/chat/history/${customerId}`);
         
-        // NEW: Check for 401/403 responses before attempting to read JSON
+        // Check for 401/403 access issues
         if (response.status === 401 || response.status === 403) {
-            showAccessDeniedModal(response.status);
+            // Assuming showAccessDeniedModal is defined elsewhere in your full file:
+            // showAccessDeniedModal(response.status); 
             throw new Error(`Access Denied (Status ${response.status})`);
         }
 
@@ -550,17 +554,20 @@ async function fetchChatHistory() {
         }
         
         history.forEach(msg => {
-            // FIX APPLIED HERE: Added null check (msg.sender_role || 'system')
-            const senderRole = (msg.sender_role || 'system').toLowerCase(); 
+            // Safely get the sender role from the database message object
+            const senderRole = (msg.sender_role || 'admin').toLowerCase(); 
             
-            // Map the cleaned role to the appropriate CSS class
+            // Map the database role to the client's CSS class:
+            // 'customer' role from DB = 'user' class (right aligned)
+            // 'admin' role from DB = 'admin' class (left aligned)
             const senderClass = (senderRole === 'customer') ? 'user' : 'admin';
             
             appendMessage(msg.message_content, senderClass);
         });
+        
     } catch (error) {
         console.error('Error loading chat history:', error);
-        // If history load fails, just show the connection message
+        // If history load fails, keep the chat connected but show the error
         appendMessage("Connected. Unable to load previous messages.", 'admin');
     }
 }
