@@ -2104,6 +2104,9 @@ async function sendReply(e) {
 // NEW REAL-TIME CHAT LOGIC (Rearranged to fix ReferenceError)
 // -----------------------------------------------------
 
+// Function: appendMessage
+// Place this updated function in your admin.html <script> section.
+
 /**
  * Appends a message to the chat window and scrolls to the bottom.
  * @param {string} sender - The sender role ('admin', 'customer', or 'system').
@@ -2118,8 +2121,15 @@ function appendMessage(sender, messageText) {
     }
     
     const msgEl = document.createElement('div');
-    // Assign class based on sender for styling
-    msgEl.className = `chat-message ${sender.toLowerCase()}`;
+    
+    // 1. Determine the correct CSS class (ensures only admin/customer/system are used)
+    let cssClass = sender.toLowerCase();
+    if (cssClass !== 'admin' && cssClass !== 'customer' && cssClass !== 'system') {
+        // Default any unrecognized role to 'system'
+        cssClass = 'system';
+    }
+    
+    msgEl.className = `chat-message ${cssClass}`;
     msgEl.textContent = messageText;
     
     chatMessages.appendChild(msgEl);
@@ -2127,12 +2137,13 @@ function appendMessage(sender, messageText) {
     // Scroll to the bottom of the chat window
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
-
-
 /**
  * Fetches and renders the chat history.
  * @param {number} customerId - The ID of the customer.
  */
+// Function: loadChatHistory
+// Place this updated function in your admin.html <script> section.
+
 async function loadChatHistory(customerId) {
     const chatMessages = document.getElementById('chat-messages');
     chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Loading history...</p>`;
@@ -2152,8 +2163,11 @@ async function loadChatHistory(customerId) {
             chatMessages.innerHTML = `<p style="text-align: center; color: var(--color-text-subtle);">Start the conversation!</p>`;
         } else {
             history.forEach(msg => {
-                // FIX APPLIED HERE: Added default value for sender_role to prevent TypeError
-                const senderRole = (msg.sender_role || 'system').toLowerCase(); 
+                // FIX APPLIED HERE: If sender_role is not 'admin', assume it's the customer role 
+                // to use the correct CSS class for left-alignment.
+                const senderRole = (msg.sender_role && msg.sender_role.toLowerCase() === 'admin') 
+                                 ? 'admin' 
+                                 : 'customer'; 
                 appendMessage(senderRole, msg.message_content);
             });
         }

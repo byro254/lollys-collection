@@ -525,31 +525,45 @@
             chatBody.scrollTop = chatBody.scrollHeight;
         }
         
-        async function fetchChatHistory() {
-            try {
-                // Ensure customerId is a string for the URL
-                const response = await fetch(`/api/chat/history/${customerId}`);
-                if (!response.ok) throw new Error('Failed to load history.');
+       // Function: fetchChatHistory
+// Update this function in your contact.html <script> section.
 
-                const history = await response.json();
-                chatBody.innerHTML = ''; // Clear initial message
-
-                if (history.length === 0) {
-                     appendMessage("Welcome! A support agent will be with you shortly.", 'admin');
-                     return;
-                }
-                
-                history.forEach(msg => {
-                    // The DB stores 'admin' or 'customer' as the sender role
-                    const senderClass = (msg.sender_role.toLowerCase() === 'customer') ? 'user' : 'admin';
-                    appendMessage(msg.message_content, senderClass);
-                });
-            } catch (error) {
-                console.error('Error loading chat history:', error);
-                // If history load fails, just show the connection message
-                appendMessage("Connected. Unable to load previous messages.", 'admin');
-            }
+async function fetchChatHistory() {
+    try {
+        // Ensure customerId is a string for the URL
+        const response = await fetch(`/api/chat/history/${customerId}`);
+        
+        // NEW: Check for 401/403 responses before attempting to read JSON
+        if (response.status === 401 || response.status === 403) {
+            showAccessDeniedModal(response.status);
+            throw new Error(`Access Denied (Status ${response.status})`);
         }
+
+        if (!response.ok) throw new Error('Failed to load history.');
+
+        const history = await response.json();
+        chatBody.innerHTML = ''; // Clear initial message
+
+        if (history.length === 0) {
+             appendMessage("Welcome! A support agent will be with you shortly.", 'admin');
+             return;
+        }
+        
+        history.forEach(msg => {
+            // FIX APPLIED HERE: Added null check (msg.sender_role || 'system')
+            const senderRole = (msg.sender_role || 'system').toLowerCase(); 
+            
+            // Map the cleaned role to the appropriate CSS class
+            const senderClass = (senderRole === 'customer') ? 'user' : 'admin';
+            
+            appendMessage(msg.message_content, senderClass);
+        });
+    } catch (error) {
+        console.error('Error loading chat history:', error);
+        // If history load fails, just show the connection message
+        appendMessage("Connected. Unable to load previous messages.", 'admin');
+    }
+}
 
         function connectChatSocket() {
             if (chatSocket && chatSocket.readyState !== WebSocket.CLOSED) {
