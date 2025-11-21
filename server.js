@@ -19,7 +19,12 @@ const cors = require('cors');
 // 🚨 NEW: WebSocket Dependencies
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
+const africastalking = require('africastalking')({
+    apiKey: process.env.AT_API_KEY,
+    username: process.env.AT_USERNAME
+});
 
+const sms = africastalking.SMS;
 // Import DB functions
 // NOTE: saveChatMessage signature must now match the updated function in db.js
 const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
@@ -1083,103 +1088,43 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
 // Route to handle password reset request (Step 1: Send Email)
 
 
-app.post('/api/request-otp', async (req, res) => {
-    const { email } = req.body;
-    
-    // Normalize
-    const normalizedEmail = email.toLowerCase().trim();
+app.post("/api/request-otp", async (req, res) => {
+    const { phone } = req.body;
 
-    const user = await db.findUserByEmail(email); 
-    if (!user) {
-        return res.status(200).json({ message: 'If the account exists, an OTP has been sent to your email.' });
-    }
+    const otp = Math.floor(100000 + Math.random() * 900000);
+    const expiry = Date.now() + 5 * 60 * 1000;
+
+    // Save OTP in memory
+    otpStore[phone] = { otp, expiry };
 
     try {
-        const otp = Math.floor(100000 + Math.random() * 900000).toString(); 
-        const expiry = Date.now() + 5 * 60 * 1000; 
-
-        // Store with normalized key
-        otpCache[normalizedEmail] = { otp, expiry };
-        
-        // 🚨 RESEND INTEGRATION FOR OTP
-        const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
-
-        // ⬇️ FIX 1: TEMPORARILY OVERRIDE RECIPIENT FOR RESEND TESTING
-        const testingRecipient = 'oyoookoth42@gmail.com'; 
-        // ------------------------------------------------------------------
-
-        const { error } = await resend.emails.send({
-            from: `Lolly's Security <${senderEmail}>`,
-            to: testingRecipient, // Use the verified testing email
-            subject: 'Lollys Collection Password Reset OTP',
-            text: `Your One-Time Password (OTP) for password reset is: ${otp}\n\nThis OTP is valid for 5 minutes. Please enter it on the website to proceed.`
+        await sms.send({
+            to: phone,
+            message: `Your Lolly's Collection OTP is ${otp}. It expires in 5 minutes.`
         });
 
-        if (error) {
-            console.error('Resend OTP Error:', error);
-            // It's crucial not to send the real error status to the client, 
-            // especially if the account doesn't exist (timing attack mitigation).
-            // However, since the error is a 403 due to the recipient, log it.
-        }
-
-        res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
-
+        res.json({ message: "OTP sent via SMS!" });
     } catch (error) {
-        console.error('OTP Request Error:', error);
-        res.status(500).json({ message: 'Error processing OTP request.' });
+        console.log(error);
+        res.status(500).json({ error: "Failed to send SMS." });
     }
 });
 
+
 // 🚨 VERIFY OTP - Debugging & Normalization
-app.post('/api/verify-otp', async (req, res) => {
-    const { email, otp } = req.body;
+app.post("/api/verify-otp", (req, res) => {
+    const { phone, otp } = req.body;
 
-    // 1. Basic Validation
-    if (!email || !otp) {
-        return res.status(400).json({ message: 'Email and OTP are required.' });
-    }
+    const entry = otpStore[phone];
+    if (!entry) return res.status(400).json({ message: "No OTP found." });
 
-    // 2. Normalize Inputs
-    const normalizedEmail = email.toLowerCase().trim();
-    const inputOtp = String(otp).trim(); 
+    if (Date.now() > entry.expiry)
+        return res.status(400).json({ message: "OTP expired." });
 
-    // 3. Retrieve from Cache
-    const cacheEntry = otpCache[normalizedEmail];
-    
-    // --- DEBUGGING LOGS ---
-    console.log(`DEBUG VERIFY: Checking email: [${normalizedEmail}]`);
-    console.log(`DEBUG VERIFY: Input OTP: [${inputOtp}]`);
-    console.log(`DEBUG VERIFY: Stored Cache:`, cacheEntry);
-    
-    // 4. Check Logic
-    if (!cacheEntry) {
-        console.log('DEBUG FAIL: No cache entry found.');
-        return res.status(400).json({ message: 'Invalid or expired OTP (Session not found).' });
-    }
+    if (entry.otp != otp)
+        return res.status(400).json({ message: "Invalid OTP." });
 
-    if (cacheEntry.otp !== inputOtp) {
-        console.log(`DEBUG FAIL: OTP Mismatch.`);
-        delete otpCache[normalizedEmail]; 
-        return res.status(400).json({ message: 'Invalid OTP provided.' });
-    }
-
-    if (Date.now() > cacheEntry.expiry) {
-        console.log('DEBUG FAIL: OTP Expired.');
-        delete otpCache[normalizedEmail];
-        return res.status(400).json({ message: 'OTP has expired.' });
-    }
-    
-    // 5. Success
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 10 * 60 * 1000; 
-
-    verificationCache[verificationToken] = { email: normalizedEmail, expiry };
-    delete otpCache[normalizedEmail];
-
-    res.status(200).json({ 
-        message: 'OTP verified successfully.',
-        verificationToken: verificationToken
-    });
+    res.json({ message: "OTP verified!", verified: true });
 });
 // Route to handle password reset submission (Step 2: Update Password)
 app.post('/api/reset-password', async (req, res) => {

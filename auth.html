@@ -259,7 +259,8 @@
             
             <div id="forgot-step-1">
                 <p>Enter your email to receive a One-Time Password (OTP).</p>
-                <form id="request-otp-form"> <input type="email" id="forgot-email-input" placeholder="Email Address" required>
+                <form id="request-otp-form"> <input type="tel" id="forgot-phone-input" placeholder="Phone Number (e.g. +2547xxxxxxx)" required>
+
                     <button type="submit">Send OTP</button>
                 </form>
             </div>
@@ -487,7 +488,8 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/request-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
+                    body: JSON.stringify({ phone })
+
                 });
 
                 const result = await response.json();
@@ -518,7 +520,8 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/verify-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, otp })
+                   body: JSON.stringify({ phone, otp })
+
                 });
 
                 const result = await response.json();

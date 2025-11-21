@@ -158,17 +158,18 @@ async function updatePassword(userId, hashedPassword) {
     }
 }
 
-// db.js (New function to append and export)
+
+
+// db.js - Corrected findUserOrders function
 
 /**
- * Fetches all orders for a specific user, with all nested items (MySQL syntax).
- * FIX: Using 'id' instead of 'order_id' for the primary key.
+ * Fetches all orders for a specific user, with all nested items.
  */
 async function findUserOrders(userId) {
-    // 1. Fetch all orders for the given user ID
+    // 1. Fetch all orders for the given user ID (OrderSql remains unchanged)
     const orderSql = `
         SELECT 
-            id, created_at , total, status, delivery_location,  customer_name 
+            id, created_at , total, status, delivery_location, customer_name 
         FROM orders 
         WHERE user_id = ? 
         ORDER BY created_at DESC
@@ -179,7 +180,10 @@ async function findUserOrders(userId) {
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
         const itemSql = `
             SELECT 
-                product_id as id, product_name as name, unit_price as price, quantity as quantity
+                id AS itemId,  -- Use the unique ID from order_items table and alias it
+                product_name as name, 
+                unit_price as price, 
+                quantity as quantity
             FROM order_items 
             WHERE order_id = ? 
         `;
