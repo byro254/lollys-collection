@@ -1101,15 +1101,22 @@ app.post('/api/request-otp', async (req, res) => {
         // 🚨 RESEND INTEGRATION FOR OTP
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
+        // ⬇️ FIX 1: TEMPORARILY OVERRIDE RECIPIENT FOR RESEND TESTING
+        const testingRecipient = 'oyoookoth42@gmail.com'; 
+        // ------------------------------------------------------------------
+
         const { error } = await resend.emails.send({
             from: `Lolly's Security <${senderEmail}>`,
-            to: user.email,
+            to: testingRecipient, // Use the verified testing email
             subject: 'Lollys Collection Password Reset OTP',
             text: `Your One-Time Password (OTP) for password reset is: ${otp}\n\nThis OTP is valid for 5 minutes. Please enter it on the website to proceed.`
         });
 
         if (error) {
             console.error('Resend OTP Error:', error);
+            // It's crucial not to send the real error status to the client, 
+            // especially if the account doesn't exist (timing attack mitigation).
+            // However, since the error is a 403 due to the recipient, log it.
         }
 
         res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
@@ -1354,14 +1361,14 @@ wss.on('connection', (ws, req) => {
 server.on('upgrade', (req, socket, head) => {
     // 1. Extract customerId from URL path
     const urlParts = req.url.split('/');
-    let customerId;
+    let customerIdFromUrl;
     let role;
 
     if (req.url.startsWith('/ws/admin/chat/')) {
-        customerId = urlParts[4];
+        customerIdFromUrl = urlParts[4];
         role = 'admin';
     } else if (req.url.startsWith('/ws/chat/')) {
-        customerId = urlParts[3];
+        customerIdFromUrl = urlParts[3];
         role = 'customer';
     } else {
         socket.destroy();
@@ -1379,6 +1386,17 @@ server.on('upgrade', (req, socket, head) => {
             secure: process.env.NODE_ENV === 'production' 
         }
     })(req, {}, () => {
+        
+        // ⬇️ FIX 2: WebSocket Mismatch Fix
+        let finalCustomerId = customerIdFromUrl;
+        
+        if (role === 'customer' && req.session.userId) {
+            // If the user is logged in, force the use of their DB ID as the session key.
+            // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
+            finalCustomerId = String(req.session.userId);
+        }
+        // ------------------------------------
+
         // 3. Security Check
         const isAdminRequest = role === 'admin';
         const isCustomerRequest = role === 'customer';
@@ -1391,10 +1409,8 @@ server.on('upgrade', (req, socket, head) => {
                 return;
             }
         } else if (isCustomerRequest) {
-            // Note: Customer chat doesn't strictly need login, but if it does, check here.
-            // For now, assume customer ID is passed from client (e.g., UUID or DB ID if logged in)
-            // A simple check could be if customerId is valid format, or if req.session.userId matches.
-            if (!customerId) {
+            // Note: Customer chat doesn't strictly need login. The ID is for tracking history.
+            if (!finalCustomerId) { // Use finalCustomerId for validation
                  console.log('Customer WebSocket Missing ID.');
                  socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
                  socket.destroy();
@@ -1406,7 +1422,8 @@ server.on('upgrade', (req, socket, head) => {
         }
         
         // 4. Attach params/session data for use in the wss.on('connection') handler
-        req.params = { customerId, role };
+        // CRITICAL: Use the finalCustomerId (which is the DB ID if logged in)
+        req.params = { customerId: finalCustomerId, role }; 
         
         // 5. Handle WebSocket handshake
         wss.handleUpgrade(req, socket, head, (ws) => {
@@ -1436,15 +1453,17 @@ app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
 
 /**
  * GET /api/chat/history/:customerId
- * Retrieves chat history for the customer client (requires authentication check).
+ * Retrieves chat history for the customer client.
  */
 app.get('/api/chat/history/:customerId', async (req, res) => {
     const customerId = req.params.customerId;
     const sessionUserId = String(req.session.userId); 
 
-    // Allow logged-in users to access their own history OR allow anyone to access
-    // history IF they are using an 'anon-' ID.
-    if (sessionUserId === customerId || customerId.startsWith('anon-')) {
+    // FIX 3: Centralize logic to determine if the customerId is valid for this request.
+    const isAnon = customerId.startsWith('anon-');
+    const isMatchingLoggedInUser = req.session.userId && (sessionUserId === customerId);
+    
+    if (isAnon || isMatchingLoggedInUser) {
         try {
             const history = await getChatHistory(customerId);
             return res.json(history);
@@ -1454,17 +1473,9 @@ app.get('/api/chat/history/:customerId', async (req, res) => {
         }
     }
     
-    // Fallback security check if an unauthenticated user tries to access a numeric (DB) ID
-    if (!req.session.userId && !customerId.startsWith('anon-')) {
-         return res.status(403).json({ message: 'Access denied for non-anonymous chat history.' });
-    }
-    
-    // This check is now only relevant if logged-in user tries to access someone else's ID
-    if (sessionUserId !== customerId) {
-         return res.status(403).json({ message: 'Access denied to this chat history.' });
-    }
-    
-    // (This part is unnecessary if the first block handles all valid cases)
+    // Default denial for unauthenticated user requesting a numeric (DB) ID, 
+    // or a logged-in user requesting a different DB ID.
+    return res.status(403).json({ message: 'Access denied to this chat history.' });
 });
 
 
