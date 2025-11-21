@@ -171,7 +171,7 @@
             transform: none !important;
         }
         
-        /* --- NEW CHAT STYLES --- */
+        /* --- CHAT STYLES --- */
         .chat-icon-button {
             position: fixed;
             bottom: 20px;
@@ -258,6 +258,17 @@
             border-radius: 20px;
             margin-right: 10px;
         }
+        
+        /* Style for disabled inputs/buttons */
+        .chat-input-area input:disabled {
+            background-color: #f5f5f5;
+            cursor: not-allowed;
+        }
+        .chat-input-area button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
 
         .chat-input-area button {
             background-color: var(--color-pink-accent);
@@ -295,7 +306,7 @@
             border-bottom-left-radius: 5px;
         }
         
-        /* END NEW CHAT STYLES */
+        /* END CHAT STYLES */
 
         @media (min-width: 768px) {
             .header {
@@ -389,11 +400,11 @@
                 <button class="chat-close-btn" id="chat-close-btn">&times;</button>
             </div>
             <div class="chat-body" id="chat-body">
-                <div class="message admin">Hello! How can I help you today?</div>
+                <div class="message admin">Hello! Please wait while we connect you to support...</div>
             </div>
             <form class="chat-input-area" id="chat-form">
-                <input type="text" id="chat-input" placeholder="Type your message..." required>
-                <button type="submit" id="chat-send-btn">
+                <input type="text" id="chat-input" placeholder="Type your message..." required disabled>
+                <button type="submit" id="chat-send-btn" disabled>
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </form>
@@ -407,17 +418,27 @@
         const statusMessage = document.getElementById('status-message');
         const sendButton = form.querySelector('.send-button');
         
-        // --- NEW CHAT ELEMENTS ---
+        // --- CHAT ELEMENTS ---
         const chatIcon = document.getElementById('chat-icon-button');
         const chatOverlay = document.getElementById('chat-modal-overlay');
         const chatCloseBtn = document.getElementById('chat-close-btn');
         const chatForm = document.getElementById('chat-form');
         const chatInput = document.getElementById('chat-input');
         const chatBody = document.getElementById('chat-body');
-        // --- END NEW CHAT ELEMENTS ---
+        // --- END CHAT ELEMENTS ---
 
-
-        // 🚨 UPDATED: Using the correct server endpoint '/api/user/profile'
+        // --- NEW CHAT STATE VARIABLES ---
+        let chatSocket = null;
+        let customerId = localStorage.getItem('chat_customer_id'); // Persistent ID for history
+        
+        // Generate a UUID if none exists (for anonymous users)
+        if (!customerId) {
+            customerId = 'anon-' + Math.random().toString(36).substring(2, 9);
+            localStorage.setItem('chat_customer_id', customerId);
+        }
+        
+        // --- UTILITY FUNCTIONS ---
+        
         async function fetchUserProfile() {
             try {
                 // Fetch profile data from the authenticated endpoint
@@ -434,8 +455,14 @@
                         emailInput.value = user.email;
                         emailInput.readOnly = true;
                     }
+                    
+                    // If user is logged in, use their DB ID for chat
+                    if (user.id) {
+                        customerId = user.id;
+                        localStorage.setItem('chat_customer_id', customerId);
+                    }
                 }
-                // If not logged in (e.g., 401), the fields remain empty and editable, which is the correct fallback behavior.
+                // If not logged in (e.g., 401), the fields remain editable.
             } catch (error) {
                 console.warn('Could not fetch user profile:', error);
             }
@@ -452,6 +479,7 @@
             }, 5000);
         }
 
+        // Standard Contact Form Submission (for non-real-time messages)
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
@@ -496,12 +524,101 @@
             }
         });
         
-        // --- NEW CHAT WIDGET LOGIC ---
+        // --- CHAT FUNCTIONS ---
+
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = text;
+            msgDiv.classList.add('message', sender);
+            chatBody.appendChild(msgDiv);
+            // Auto-scroll to the newest message
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+        
+        async function fetchChatHistory() {
+            try {
+                const response = await fetch(`/api/chat/history/${customerId}`);
+                if (!response.ok) throw new Error('Failed to load history.');
+
+                const history = await response.json();
+                chatBody.innerHTML = ''; // Clear initial message
+
+                if (history.length === 0) {
+                     appendMessage("Welcome! A support agent will be with you shortly.", 'admin');
+                     return;
+                }
+                
+                history.forEach(msg => {
+                    const senderClass = (msg.sender === 'customer') ? 'user' : 'admin';
+                    appendMessage(msg.message_content, senderClass);
+                });
+            } catch (error) {
+                console.error('Error loading chat history:', error);
+                appendMessage('Error loading previous messages.', 'admin');
+            }
+        }
+
+        function connectChatSocket() {
+            if (chatSocket && chatSocket.readyState !== WebSocket.CLOSED) {
+                chatSocket.close();
+            }
+
+            // Determine protocol: wss:// for HTTPS, ws:// for HTTP
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.host;
+            const chatUrl = `${wsProtocol}//${wsHost}/ws/chat/${customerId}`;
+            
+            chatSocket = new WebSocket(chatUrl);
+            
+            // 1. Connection Open
+            chatSocket.onopen = () => {
+                chatBody.innerHTML = ''; // Clear 'connecting' message
+                appendMessage('Connected to live support. Waiting for agent...', 'admin');
+                chatInput.disabled = false;
+                document.getElementById('chat-send-btn').disabled = false;
+                fetchChatHistory(); // Load history after connection
+            };
+
+            // 2. Message Received
+            chatSocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    // Sender is dictated by the backend ('admin' or 'customer')
+                    const senderClass = (data.sender === 'admin') ? 'admin' : 'user'; 
+                    appendMessage(data.message, senderClass);
+                } catch (e) {
+                    console.error('Failed to parse chat message:', e);
+                }
+            };
+
+            // 3. Connection Closed
+            chatSocket.onclose = () => {
+                appendMessage('Connection lost. Please try reloading the page.', 'admin');
+                chatInput.disabled = true;
+                document.getElementById('chat-send-btn').disabled = true;
+            };
+            
+            // 4. Error Handler
+            chatSocket.onerror = (error) => {
+                console.error('WebSocket Error:', error);
+                appendMessage('A connection error occurred. Check network.', 'admin');
+            };
+        }
+
+        // --- EVENT LISTENERS ---
         
         chatIcon.addEventListener('click', () => {
             chatOverlay.style.display = 'block';
-            // Scroll to bottom when opening
-            chatBody.scrollTop = chatBody.scrollHeight;
+            
+            if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
+                connectChatSocket();
+            } else if (chatSocket.readyState === WebSocket.OPEN) {
+                // Already open, ensure inputs are enabled and scroll to bottom
+                chatInput.disabled = false;
+                document.getElementById('chat-send-btn').disabled = false;
+                chatBody.scrollTop = chatBody.scrollHeight;
+            }
+            
         });
 
         chatCloseBtn.addEventListener('click', () => {
@@ -515,54 +632,26 @@
             }
         });
         
-        function appendMessage(text, sender) {
-            const msgDiv = document.createElement('div');
-            msgDiv.textContent = text;
-            msgDiv.classList.add('message', sender);
-            chatBody.appendChild(msgDiv);
-            // Auto-scroll to the newest message
-            chatBody.scrollTop = chatBody.scrollHeight;
-        }
-
-        // 💡 Placeholder for your backend API/WebSocket connection
-        const CHAT_API_ENDPOINT = '/api/chat/send'; // Replace with your actual chat API endpoint
-
-        chatForm.addEventListener('submit', async function(e) {
+        chatForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const messageText = chatInput.value.trim();
 
-            if (messageText) {
-                // 1. Display message locally immediately
-                appendMessage(messageText, 'user');
-
-                // 2. Send message to the server
-                try {
-                    const response = await fetch(CHAT_API_ENDPOINT, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            // Add authentication headers (e.g., 'Authorization') here if needed
-                        },
-                        body: JSON.stringify({ message: messageText })
-                    });
-                    
-                    if (!response.ok) {
-                         // Fallback display if server fails to send
-                        appendMessage('Failed to send message. Please try again.', 'admin');
-                    }
-                    
-                    // You would typically use WebSockets here to receive the admin's reply
-                    // For now, we simulate an automated response for demonstration:
-                    setTimeout(() => {
-                        appendMessage("Admin received your message and will respond shortly!", 'admin');
-                    }, 1000);
-
-                } catch (error) {
-                    console.error('Chat API Error:', error);
-                    appendMessage('Network error. Check connection.', 'admin');
-                }
+            if (messageText && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                
+                const payload = JSON.stringify({
+                    sender: 'customer', 
+                    message: messageText
+                });
+                
+                chatSocket.send(payload); // Send message via WebSocket
+                
+                // Display message locally immediately
+                appendMessage(messageText, 'user'); 
 
                 chatInput.value = ''; // Clear input field
+                chatInput.focus();
+            } else if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+                 appendMessage('Not connected. Please wait for the connection to open.', 'admin');
             }
         });
 
