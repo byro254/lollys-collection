@@ -23,7 +23,7 @@ const africastalking = require('africastalking')({
     apiKey: process.env.AT_API_KEY,
     username: process.env.AT_USERNAME
 });
-
+const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // NOTE: saveChatMessage signature must now match the updated function in db.js
@@ -44,7 +44,7 @@ const sessionStore = new MySQLStore(sessionStoreOptions);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const verificationCache = {};
-const otpCache = {};
+
 const loginAttempts = {}; 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 hour
@@ -1091,11 +1091,16 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
 app.post("/api/request-otp", async (req, res) => {
     const { phone } = req.body;
 
-    const otp = Math.floor(100000 + Math.random() * 900000);
+    if (!phone) {
+        return res.status(400).json({ message: "Phone number is required." });
+    }
+
+    // Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = Date.now() + 5 * 60 * 1000;
 
-    // Save OTP in memory
-    otpStore[phone] = { otp, expiry };
+    // Save OTP
+    otpCache[phone] = { otp, expiry };
 
     try {
         await sms.send({
@@ -1103,10 +1108,10 @@ app.post("/api/request-otp", async (req, res) => {
             message: `Your Lolly's Collection OTP is ${otp}. It expires in 5 minutes.`
         });
 
-        res.json({ message: "OTP sent via SMS!" });
+        return res.json({ message: "OTP sent via SMS!" });
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: "Failed to send SMS." });
+        console.error("SMS Error:", error);
+        return res.status(500).json({ message: "Failed to send OTP via SMS." });
     }
 });
 
@@ -1115,17 +1120,31 @@ app.post("/api/request-otp", async (req, res) => {
 app.post("/api/verify-otp", (req, res) => {
     const { phone, otp } = req.body;
 
-    const entry = otpStore[phone];
-    if (!entry) return res.status(400).json({ message: "No OTP found." });
+    if (!phone || !otp) {
+        return res.status(400).json({ message: "Phone number and OTP are required." });
+    }
 
-    if (Date.now() > entry.expiry)
+    const entry = otpCache[phone];
+
+    if (!entry) {
+        return res.status(400).json({ message: "No OTP found for this number." });
+    }
+
+    if (Date.now() > entry.expiry) {
+        delete otpCache[phone];
         return res.status(400).json({ message: "OTP expired." });
+    }
 
-    if (entry.otp != otp)
+    if (entry.otp !== otp) {
         return res.status(400).json({ message: "Invalid OTP." });
+    }
 
-    res.json({ message: "OTP verified!", verified: true });
+    // OTP OK — delete it now
+    delete otpCache[phone];
+
+    return res.json({ message: "OTP verified successfully!", verified: true });
 });
+
 // Route to handle password reset submission (Step 2: Update Password)
 app.post('/api/reset-password', async (req, res) => {
     // 1. Accept the verification token (vtoken), email, and new password
