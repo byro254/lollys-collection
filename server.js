@@ -16,9 +16,12 @@ const MySQLStore = require('express-mysql-session')(session);
 const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
+// 🚨 NEW: WebSocket Dependencies
+const http = require('http'); // Native Node.js HTTP module
+const WebSocket = require('ws'); // ws library for WebSockets
 
 // Import DB functions
-const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus} = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -40,6 +43,8 @@ const loginAttempts = {};
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 hour
 const app = express();
+// 🚨 NEW: Create HTTP Server instance
+const server = http.createServer(app); 
 
 app.set('trust proxy', 1);
 const port = process.env.PORT || 3000; 
@@ -638,133 +643,7 @@ app.get('/api/dashboard/monthly-sales', isAdmin, async (req, res) => {
         res.status(500).json({ message: 'Failed to retrieve sales data.' });
     }
 });
-// admin.html <script> tag (Global Scope)
-let salesChartInstance = null;
 
-
-// --- Sales Data Fetching Function ---
-async function fetchAndRenderSalesChart() {
-    try {
-        // Corrected URL: /api/dashboard/monthly-sales
-        const response = await fetch(`${API_BASE_URL}/dashboard/monthly-sales`); 
-        
-        if (!response.ok) {
-            console.error('Failed to fetch sales data:', response.statusText);
-            throw new Error('Failed to fetch sales data.');
-        }
-        
-        const data = await response.json();
-
-        // Check for empty data and display a message
-        if (data.length === 0) {
-            document.getElementById('salesChartContainer').innerHTML = '<p style="text-align: center; color: var(--color-text-subtle);">No completed orders yet to display sales trend.</p>';
-            return;
-        }
-
-        const labels = data.map(item => item.month); 
-        // 🚨 CRITICAL FIX: Ensure mapping uses 'revenue' (from server) and is parsed as float
-        const chartData = data.map(item => parseFloat(item.revenue)); 
-        
-        // 🚀 CALL TO RENDERER: Invoke the rendering function with the processed data
-        renderSalesChart(labels, chartData); 
-
-    } catch (error) {
-        console.error('Chart data fetch failed:', error);
-        // Display an error message if the container exists
-        const container = document.getElementById('salesChartContainer');
-        if (container) {
-             container.innerHTML = '<p style="text-align: center; color: red;">Error loading sales trend data.</p>';
-        }
-    }
-}
-
-// admin.html <script> tag
-
-// --- Sales Chart Rendering Function ---
-function renderSalesChart(labels, data) {
-    // Destroy existing chart instance if it exists
-    if (salesChartInstance) {
-        salesChartInstance.destroy();
-    }
-    
-    const ctxElement = document.getElementById('salesChart');
-    if (!ctxElement) {
-        console.error('Canvas element with ID "salesChart" not found.');
-        return;
-    }
-    
-    const ctx = ctxElement.getContext('2d');
-    
-    salesChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Monthly Sales ($)',
-                data: data,
-                borderColor: 'rgb(194, 24, 91)', 
-                backgroundColor: 'rgba(233, 30, 99, 0.2)', 
-                tension: 0.3,
-                fill: true,
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    // 💰 FIX 1: Set suggested minimum and step size to improve visibility
-                    suggestedMin: 0, // Ensure it always starts at 0
-                    // Note: If you have sales > $1000, you might want stepSize: 500
-                    ticks: {
-                        stepSize: 100, // Forces steps of 100 (0, 100, 200, 300...)
-                        callback: function(value, index, values) {
-                            return '$' + value; // Format the tick label
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Sales Amount ($)'
-                    }
-                },
-                x: {
-                    // 📅 FIX 2: Format the month labels for better readability
-                    ticks: {
-                        callback: function(value, index) {
-                            // Converts 'YYYY-MM' format to readable 'Month YYYY'
-                            const date = new Date(labels[index] + '-01'); // Append -01 for valid date parsing
-                            return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Month'
-                    }
-                }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) {
-                                label += ': ';
-                            }
-                            if (context.parsed.y !== null) {
-                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
-                            }
-                            return label;
-                        }
-                    }
-                }
-            }
-        }
-    });
-}
 // ------------------------------------------------------------------
 // --- PRODUCT, CART, and ORDER API Endpoints ---
 // ------------------------------------------------------------------
@@ -1017,7 +896,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         const userConfirmationBody = `
             <h2>🛍️ Order #${orderId} Confirmation - Lolly's Collection</h2>
             <p>Hello ${name},</p>
-            <p>Thank you for your order! We have successfully received it. You will be contacted shortly on ${phone} or ${email} to confirm delivery.</p>
+            <p>Thank V you for your order! We have successfully received it. You will be contacted shortly on ${phone} or ${email} to confirm delivery.</p>
             <p><strong>Total:</strong> $${numericTotal.toFixed(2)}</p>
             <h3>Your Items:</h3>
             <ul>${orderDetailsHtml}</ul>
@@ -1355,7 +1234,233 @@ app.post('/api/reset-password', async (req, res) => {
         res.status(500).json({ message: 'Failed to reset password, please try again later.' });
     }
 });
-app.listen(port, async () => {
+
+// =========================================================
+//                   REAL-TIME CHAT SETUP
+// =========================================================
+
+// Global Map to hold active WebSocket connections for Admin and Customer
+// Key: customerId (string) -> Value: { admin: WebSocket | null, customer: WebSocket | null }
+const chatSessions = new Map(); 
+
+// Create a WebSocket Server
+const wss = new WebSocket.Server({ noServer: true });
+
+// Function to handle message saving and relaying
+async function handleChatMessage(ws, message, sender, customerId) {
+    if (!message || !customerId) return;
+    
+    const payload = {
+        sender: sender,
+        message: message
+    };
+    
+    // 1. Save to Database
+    try {
+        await saveChatMessage(customerId, sender, message);
+    } catch (dbError) {
+        console.error(`DB Save Error for ${customerId}:`, dbError);
+        // Optionally send a notification back to the sender that the message failed to save
+    }
+
+    // 2. Relay the message to the other participant in the session
+    const session = chatSessions.get(customerId);
+    if (session) {
+        const target = (sender === 'admin' ? session.customer : session.admin);
+        
+        if (target && target.readyState === WebSocket.OPEN) {
+            target.send(JSON.stringify(payload));
+        } else {
+            console.log(`Relay failed: ${sender}'s target is not open or undefined.`);
+        }
+    }
+}
+
+// Function to clean up a session
+function cleanupSession(customerId, role) {
+    const session = chatSessions.get(customerId);
+    if (session) {
+        // Close the other side if it's still open
+        const otherWs = (role === 'admin') ? session.customer : session.admin;
+        if (otherWs && otherWs.readyState === WebSocket.OPEN) {
+            // Send a close notification if possible
+            otherWs.send(JSON.stringify({ sender: 'system', message: `The ${role} has disconnected from the chat.` }));
+            // otherWs.close(); // Don't auto-close the customer's side just because the admin left
+        }
+        
+        // Clear the specific role's reference
+        if (role === 'admin') {
+            session.admin = null;
+        } else if (role === 'customer') {
+            session.customer = null;
+        }
+        
+        // If both are null, delete the session entirely
+        if (!session.admin && !session.customer) {
+            chatSessions.delete(customerId);
+            console.log(`Chat session ${customerId} fully deleted.`);
+        } else {
+            // Update the map to persist the change
+            chatSessions.set(customerId, session);
+        }
+    }
+}
+
+
+// --- WebSocket Connection Handler ---
+wss.on('connection', (ws, req) => {
+    // Session and params were parsed during the upgrade process
+    const customerId = req.params.customerId;
+    const role = req.params.role; // 'admin' or 'customer'
+    const userId = req.session.userId;
+    
+    // Initialize or retrieve the session
+    let session = chatSessions.get(customerId) || { admin: null, customer: null };
+
+    if (role === 'admin') {
+        session.admin = ws;
+    } else { // 'customer'
+        session.customer = ws;
+    }
+    chatSessions.set(customerId, session);
+    
+    console.log(`New WebSocket connection: ${role} ID ${userId} for Customer ${customerId}`);
+
+    ws.on('message', (data) => {
+        try {
+            const parsed = JSON.parse(data);
+            const message = parsed.message ? String(parsed.message).trim() : null;
+            
+            if (message && message.length > 0) {
+                handleChatMessage(ws, message, role, customerId);
+            }
+        } catch (error) {
+            console.error('Invalid WebSocket message received:', error);
+        }
+    });
+
+    ws.on('close', () => {
+        console.log(`WebSocket disconnected: ${role} ID ${userId} for Customer ${customerId}`);
+        cleanupSession(customerId, role);
+    });
+
+    ws.on('error', (err) => {
+        console.error(`WebSocket Error (${role} for ${customerId}):`, err);
+    });
+});
+
+
+// --- HTTP Upgrade (WebSocket Handshake) ---
+server.on('upgrade', (req, socket, head) => {
+    // 1. Extract customerId from URL path
+    const urlParts = req.url.split('/');
+    let customerId;
+    let role;
+
+    if (req.url.startsWith('/ws/admin/chat/')) {
+        customerId = urlParts[4];
+        role = 'admin';
+    } else if (req.url.startsWith('/ws/chat/')) {
+        customerId = urlParts[3];
+        role = 'customer';
+    } else {
+        socket.destroy();
+        return;
+    }
+    
+    // 2. Retrieve session from session store
+    session({
+        secret: process.env.SESSION_SECRET , 
+        resave: false,
+        saveUninitialized: false, 
+        store: sessionStore, 
+        cookie: { 
+            maxAge: 1000 * 60 * 60 * 24, 
+            secure: process.env.NODE_ENV === 'production' 
+        }
+    })(req, {}, () => {
+        // 3. Security Check
+        const isAdminRequest = role === 'admin';
+        const isCustomerRequest = role === 'customer';
+
+        if (isAdminRequest) {
+            if (!req.session.isAuthenticated || !req.session.isAdmin) {
+                console.log('Admin WebSocket Auth Failed.');
+                socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+                socket.destroy();
+                return;
+            }
+        } else if (isCustomerRequest) {
+            // Note: Customer chat doesn't strictly need login, but if it does, check here.
+            // For now, assume customer ID is passed from client (e.g., UUID or DB ID if logged in)
+            // A simple check could be if customerId is valid format, or if req.session.userId matches.
+            if (!customerId) {
+                 console.log('Customer WebSocket Missing ID.');
+                 socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+                 socket.destroy();
+                 return;
+            }
+        } else {
+             socket.destroy();
+             return;
+        }
+        
+        // 4. Attach params/session data for use in the wss.on('connection') handler
+        req.params = { customerId, role };
+        
+        // 5. Handle WebSocket handshake
+        wss.handleUpgrade(req, socket, head, (ws) => {
+            wss.emit('connection', ws, req);
+        });
+    });
+});
+
+// =========================================================
+//                   NEW CHAT API ENDPOINTS (History)
+// =========================================================
+
+/**
+ * GET /api/admin/chat/history/:customerId
+ * Retrieves chat history for a specific customer.
+ */
+app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
+    const customerId = req.params.customerId;
+    try {
+        const history = await getChatHistory(customerId);
+        res.json(history);
+    } catch (error) {
+        console.error(`Error fetching admin chat history for ${customerId}:`, error);
+        res.status(500).json({ message: 'Failed to retrieve chat history.' });
+    }
+});
+
+/**
+ * GET /api/chat/history/:customerId
+ * Retrieves chat history for the customer client (requires authentication check).
+ */
+app.get('/api/chat/history/:customerId', isAuthenticated, async (req, res) => {
+    const customerId = req.params.customerId;
+    // Security check: Customer can only retrieve their own history
+    if (String(req.session.userId) !== customerId) {
+         return res.status(403).json({ message: 'Access denied to this chat history.' });
+    }
+    
+    try {
+        const history = await getChatHistory(customerId);
+        res.json(history);
+    } catch (error) {
+        console.error(`Error fetching customer chat history for ${customerId}:`, error);
+        res.status(500).json({ message: 'Failed to retrieve chat history.' });
+    }
+});
+
+
+// =========================================================
+//                   START SERVER (MODIFIED)
+// =========================================================
+
+// Change app.listen to server.listen
+server.listen(port, async () => {
     console.log(`Server running on port ${port}`);
 
     try {

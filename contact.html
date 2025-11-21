@@ -111,7 +111,7 @@
 
         .send-button { 
             background-color: var(--color-pink-dark);
-            color: var(--color-pink-accent); 
+            color: var(--color-bg-light); /* FIX: Changed to white for better contrast */
             padding: 12px 20px; 
             border: none; 
             border-radius: 4px; 
@@ -170,6 +170,132 @@
             border: none !important;
             transform: none !important;
         }
+        
+        /* --- NEW CHAT STYLES --- */
+        .chat-icon-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            background-color: var(--color-pink-accent);
+            color: var(--color-bg-light);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            border: none;
+            font-size: 1.8rem;
+            cursor: pointer;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background-color 0.3s;
+        }
+
+        .chat-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none; /* Hidden by default */
+        }
+
+        .chat-modal-content {
+            position: fixed;
+            bottom: 85px; /* Above the icon button */
+            right: 20px;
+            width: 90%;
+            max-width: 350px;
+            height: 450px;
+            background-color: var(--color-bg-light);
+            border-radius: 10px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background-color: var(--color-pink-dark);
+            color: var(--color-bg-light);
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 500;
+            font-size: 1.1rem;
+        }
+
+        .chat-close-btn {
+            background: none;
+            border: none;
+            color: var(--color-bg-light);
+            font-size: 1.2rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .chat-body {
+            flex-grow: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background-color: var(--color-bg-page);
+        }
+
+        .chat-input-area {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .chat-input-area input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            margin-right: 10px;
+        }
+
+        .chat-input-area button {
+            background-color: var(--color-pink-accent);
+            color: var(--color-bg-light);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        .message {
+            margin-bottom: 10px;
+            max-width: 80%;
+            padding: 8px 12px;
+            border-radius: 15px;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background-color: var(--color-pink-accent);
+            color: var(--color-bg-light);
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+
+        .message.admin {
+            background-color: var(--color-bg-light);
+            color: var(--color-text-dark);
+            margin-right: auto;
+            border: 1px solid #e0e0e0;
+            border-bottom-left-radius: 5px;
+        }
+        
+        /* END NEW CHAT STYLES */
 
         @media (min-width: 768px) {
             .header {
@@ -251,7 +377,28 @@
             </div>
         </div>
     </section>
-    
+
+    <button class="chat-icon-button" id="chat-icon-button">
+        <i class="fas fa-comments"></i>
+    </button>
+
+    <div class="chat-modal-overlay" id="chat-modal-overlay">
+        <div class="chat-modal-content" id="chat-modal-content">
+            <div class="chat-header">
+                <span>Live Chat Support</span>
+                <button class="chat-close-btn" id="chat-close-btn">&times;</button>
+            </div>
+            <div class="chat-body" id="chat-body">
+                <div class="message admin">Hello! How can I help you today?</div>
+            </div>
+            <form class="chat-input-area" id="chat-form">
+                <input type="text" id="chat-input" placeholder="Type your message..." required>
+                <button type="submit" id="chat-send-btn">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
     <script>
         const form = document.getElementById('contact-form');
         const nameInput = document.getElementById('contact-name');
@@ -259,6 +406,16 @@
         const messageInput = document.getElementById('contact-message');
         const statusMessage = document.getElementById('status-message');
         const sendButton = form.querySelector('.send-button');
+        
+        // --- NEW CHAT ELEMENTS ---
+        const chatIcon = document.getElementById('chat-icon-button');
+        const chatOverlay = document.getElementById('chat-modal-overlay');
+        const chatCloseBtn = document.getElementById('chat-close-btn');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const chatBody = document.getElementById('chat-body');
+        // --- END NEW CHAT ELEMENTS ---
+
 
         // 🚨 UPDATED: Using the correct server endpoint '/api/user/profile'
         async function fetchUserProfile() {
@@ -336,6 +493,76 @@
             } finally {
                 sendButton.textContent = 'Send Message';
                 sendButton.disabled = false;
+            }
+        });
+        
+        // --- NEW CHAT WIDGET LOGIC ---
+        
+        chatIcon.addEventListener('click', () => {
+            chatOverlay.style.display = 'block';
+            // Scroll to bottom when opening
+            chatBody.scrollTop = chatBody.scrollHeight;
+        });
+
+        chatCloseBtn.addEventListener('click', () => {
+            chatOverlay.style.display = 'none';
+        });
+
+        // Close modal if user clicks outside the content area
+        chatOverlay.addEventListener('click', function(e) {
+            if (e.target === chatOverlay) {
+                chatOverlay.style.display = 'none';
+            }
+        });
+        
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.textContent = text;
+            msgDiv.classList.add('message', sender);
+            chatBody.appendChild(msgDiv);
+            // Auto-scroll to the newest message
+            chatBody.scrollTop = chatBody.scrollHeight;
+        }
+
+        // 💡 Placeholder for your backend API/WebSocket connection
+        const CHAT_API_ENDPOINT = '/api/chat/send'; // Replace with your actual chat API endpoint
+
+        chatForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const messageText = chatInput.value.trim();
+
+            if (messageText) {
+                // 1. Display message locally immediately
+                appendMessage(messageText, 'user');
+
+                // 2. Send message to the server
+                try {
+                    const response = await fetch(CHAT_API_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            // Add authentication headers (e.g., 'Authorization') here if needed
+                        },
+                        body: JSON.stringify({ message: messageText })
+                    });
+                    
+                    if (!response.ok) {
+                         // Fallback display if server fails to send
+                        appendMessage('Failed to send message. Please try again.', 'admin');
+                    }
+                    
+                    // You would typically use WebSockets here to receive the admin's reply
+                    // For now, we simulate an automated response for demonstration:
+                    setTimeout(() => {
+                        appendMessage("Admin received your message and will respond shortly!", 'admin');
+                    }, 1000);
+
+                } catch (error) {
+                    console.error('Chat API Error:', error);
+                    appendMessage('Network error. Check connection.', 'admin');
+                }
+
+                chatInput.value = ''; // Clear input field
             }
         });
 

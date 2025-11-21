@@ -361,7 +361,7 @@
         }
 
         
-        /* --- Message Section Styles --- */
+        /* --- Message Section Styles (Updated) --- */
         .messages-grid {
             display: grid;
             /* Responsive grid: min 300px wide cards */
@@ -393,6 +393,19 @@
             font-weight: 600;
             font-size: 1.1rem;
             color: var(--color-pink-dark);
+        }
+        
+        /* NEW: Clickable Username for Chat */
+        .message-sender-link {
+            cursor: pointer;
+            text-decoration: none;
+            color: var(--color-pink-dark);
+            font-weight: 600;
+            transition: color 0.2s;
+        }
+        .message-sender-link:hover {
+            color: var(--color-pink-accent);
+            text-decoration: underline;
         }
 
         .message-header p {
@@ -428,7 +441,7 @@
             padding-top: 10px;
             border-top: 1px solid #f0f0f0;
         }
-        /* Modal Styling (Order Details) */
+        /* Modal Styling (Order Details, Reply, Chat) */
         .modal {
             display: none; 
             position: fixed; 
@@ -486,6 +499,87 @@
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
+        }
+        
+        /* --- NEW CHAT MODAL STYLES --- */
+        #chat-modal .modal-content {
+            max-width: 450px;
+            height: 550px;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header-bar {
+            background-color: var(--color-pink-dark);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chat-header-bar h4 {
+            margin: 0;
+            color: white;
+            font-family: var(--font-body);
+        }
+
+        #chat-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: var(--color-bg-page);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .chat-message {
+            max-width: 80%;
+            padding: 10px;
+            border-radius: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            font-size: 0.9rem;
+        }
+
+        .chat-message.admin {
+            background-color: var(--color-pink-accent);
+            color: white;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+        }
+
+        .chat-message.customer {
+            background-color: var(--color-bg-light);
+            color: var(--color-text-dark);
+            margin-left: auto;
+            border: 1px solid var(--color-border-medium);
+            border-bottom-right-radius: 5px;
+        }
+
+        .chat-input-container {
+            padding: 10px 15px;
+            border-top: 1px solid var(--color-border-medium);
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-container input {
+            flex-grow: 1;
+            margin-bottom: 0;
+            padding: 10px;
+            border-radius: 20px;
+        }
+
+        .chat-input-container button {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            padding: 0;
+            flex-shrink: 0;
+            font-size: 1.1rem;
         }
     </style>
 </head>
@@ -803,7 +897,7 @@
         </div>
     </div>
     
-    <div id="reply-modal" class="modal">
+    <div id="reply-modal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close-btn" onclick="document.getElementById('reply-modal').style.display='none'">&times;</span>
             <h3><i class="fas fa-reply"></i> Send Response to Customer</h3>
@@ -859,9 +953,33 @@
             </button>
         </div>
     </div>
+    
+    <div id="chat-modal" class="modal">
+        <div class="modal-content">
+            <div class="chat-header-bar">
+                <h4 id="chat-customer-name">Real-Time Chat</h4>
+                <button class="close-btn" onclick="closeChatModal()">&times;</button>
+            </div>
+            <div id="chat-messages">
+                <div class="chat-message admin">Chat connected. Waiting for customer response...</div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-message-input" placeholder="Type message and press Enter..." disabled>
+                <button class="submit-button" id="chat-send-btn" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
     <script>
        // Ensure this URL matches your backend API
 const API_BASE_URL = '/api'; 
+// --- NEW CHAT VARIABLES ---
+const CHAT_WEBSOCKET_URL = 'ws://localhost:3000/ws/chat'; // Placeholder: Replace with your actual WebSocket URL
+let chatSocket = null;
+let currentChatCustomerId = null;
+let currentChatCustomerName = 'Real-Time Chat'; 
+// --- END CHAT VARIABLES ---
 
 // Chart instance reference
 let salesChartInstance = null;
@@ -1197,7 +1315,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     // Add event listener for the new reply form
+    // The Reply Modal is now deprecated in favor of the Chat Modal, but keeping the function for form submission.
     document.getElementById('reply-form').addEventListener('submit', sendReply);
+    
+    // NEW: Chat input event listeners
+    document.getElementById('chat-send-btn').addEventListener('click', sendChatMessage);
+    document.getElementById('chat-message-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            sendChatMessage();
+        }
+    });
 });
 
 
@@ -1490,6 +1618,10 @@ window.onclick = function(event) {
     // Also close reply modal if clicked outside
     if (event.target == document.getElementById('reply-modal')) {
         document.getElementById('reply-modal').style.display = "none";
+    }
+    // Also close chat modal if clicked outside
+    if (event.target == document.getElementById('chat-modal')) {
+        closeChatModal();
     }
 }
 
@@ -1818,7 +1950,7 @@ async function editProduct(productId) {
 
 
 // -----------------------------------------------------
-// MESSAGE & REPLY LOGIC (Updated)
+// MESSAGE & CHAT LOGIC (Updated)
 // -----------------------------------------------------
 
 const messagesList = document.getElementById('messages-list');
@@ -1829,39 +1961,28 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString(undefined, options);
 }
 
-/**
- * Opens the reply modal and pre-fills the customer's email and current date.
- * @param {string} customerEmail - The email address of the customer to reply to.
- */
-window.openReplyModal = async function(customerEmail) {
-    // Check auth status before running
-    if (!(await checkAdminAuthentication())) return; 
-    
-    const replyModal = document.getElementById('reply-modal');
-    
-    // 1. Pre-fill customer email
-    document.getElementById('reply-email-to').value = customerEmail;
-    
-    // 2. Set current date
-    const now = new Date();
-    document.getElementById('reply-date').value = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
-    
-    // 3. Clear content area
-    document.getElementById('reply-content').value = '';
-    
-    // 4. Show modal
-    replyModal.style.display = 'block';
-}
-
+// NOTE: The openReplyModal and sendReply functions are retained below for compatibility 
+// with the existing reply-modal, but the primary method for response will be the chat modal.
 
 function renderMessageCard(message) {
     const card = document.createElement('div');
     card.className = 'message-card';
+    
+    // Fallback to email for ID if no user ID is associated with the form submission
+    const customerId = message.user_id || message.sender_email; 
+    const senderName = message.sender_name || 'Anonymous User';
+    const senderEmail = message.sender_email || 'No email provided';
+
     card.innerHTML = `
         <div>
             <div class="message-header">
-                <h4>${message.sender_name || 'N/A'}</h4>
-                <p>${message.sender_email || 'No email provided'}</p>
+                <a class="message-sender-link" 
+                   data-customer-id="${customerId}"
+                   data-customer-name="${senderName}"
+                   onclick="openChatModal(this)">
+                    <i class="fas fa-comment-dots"></i> ${senderName}
+                </a>
+                <p>${senderEmail}</p>
             </div>
             <div class="message-body">
                 <p>${message.message_content.replace(/\n/g, '<br>')}</p>
@@ -1872,8 +1993,8 @@ function renderMessageCard(message) {
         </div>
         <div class="message-actions">
             <button class="action-btn" 
-                    onclick="openReplyModal('${message.sender_email}')">
-                <i class="fas fa-reply"></i> Respond
+                    onclick="openReplyModal('${senderEmail}')">
+                <i class="fas fa-envelope"></i> Email Reply (Old)
             </button>
         </div>
     `;
@@ -1917,11 +2038,8 @@ async function fetchMessages() {
     }
 }
 
-/**
- * Handles the submission of the reply form and sends the email via API.
- */
+// Retained the old email reply function just in case the new chat feature is unavailable
 async function sendReply(e) {
-    // Check auth status before running
     if (!(await checkAdminAuthentication())) return; 
     e.preventDefault();
     
@@ -1939,7 +2057,6 @@ async function sendReply(e) {
     };
     
     try {
-        // Assuming a dedicated API endpoint for sending email replies
         const response = await fetch(`${API_BASE_URL}/admin/messages/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1962,6 +2079,185 @@ async function sendReply(e) {
         sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reply';
     }
 }
+// Retained the old email reply modal opener
+window.openReplyModal = function(customerEmail) {
+    document.getElementById('reply-email-to').value = customerEmail;
+    const now = new Date();
+    document.getElementById('reply-date').value = now.toLocaleDateString() + ' ' + now.toLocaleTimeString();
+    document.getElementById('reply-content').value = '';
+    document.getElementById('reply-modal').style.display = 'block';
+}
+
+// -----------------------------------------------------
+// REAL-TIME CHAT LOGIC (NEW)
+// -----------------------------------------------------
+
+/**
+ * Creates and displays a new chat message in the modal.
+ * @param {string} message - The message content.
+ * @param {'admin'|'customer'} sender - Who sent the message.
+ */
+function appendChatMessage(message, sender) {
+    const chatBody = document.getElementById('chat-messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.textContent = message;
+    msgDiv.classList.add('chat-message', sender);
+    chatBody.appendChild(msgDiv);
+    // Auto-scroll to the bottom
+    chatBody.scrollTop = chatBody.scrollHeight;
+}
+
+/**
+ * Handles the click of the message sender link or Respond button.
+ * Initiates the chat connection and displays the modal.
+ * @param {HTMLElement} element - The link or button element that was clicked.
+ */
+window.openChatModal = async function(element) {
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const customerId = element.dataset.customerId;
+    const customerName = element.dataset.customerName;
+
+    if (!customerId) {
+        showToast('Cannot start chat: Missing customer ID.', 'error');
+        return;
+    }
+
+    currentChatCustomerId = customerId;
+    currentChatCustomerName = customerName;
+    document.getElementById('chat-customer-name').textContent = `Chatting with ${customerName}`;
+    document.getElementById('chat-messages').innerHTML = ''; // Clear old messages
+    document.getElementById('chat-modal').style.display = 'flex';
+    document.getElementById('chat-message-input').disabled = true;
+    document.getElementById('chat-send-btn').disabled = true;
+    appendChatMessage('Connecting to chat service...', 'admin');
+
+    // 1. Fetch chat history
+    await fetchChatHistory(customerId);
+
+    // 2. Establish WebSocket connection
+    connectChatSocket(customerId);
+};
+
+/**
+ * Closes the chat modal and cleans up the WebSocket connection.
+ */
+window.closeChatModal = function() {
+    document.getElementById('chat-modal').style.display = 'none';
+    if (chatSocket) {
+        chatSocket.close();
+        chatSocket = null;
+        showToast('Chat connection closed.', 'info', 2000);
+    }
+    currentChatCustomerId = null;
+    currentChatCustomerName = 'Real-Time Chat';
+};
+
+/**
+ * Connects the WebSocket and handles events.
+ * @param {string} customerId - ID of the customer for the chat session.
+ */
+function connectChatSocket(customerId) {
+    // Determine the correct protocol (ws or wss) based on the current page protocol (http or https)
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Use the current host to prevent cross-origin issues, or use the CHAT_WEBSOCKET_URL if it's external
+    const wsHost = window.location.host; 
+    const finalWsUrl = `${wsProtocol}//${wsHost}/ws/admin/chat/${customerId}`;
+    
+    // Close any existing socket before opening a new one
+    if (chatSocket) chatSocket.close();
+
+    try {
+        chatSocket = new WebSocket(finalWsUrl);
+    } catch (error) {
+        console.error("WebSocket connection failed to initialize:", error);
+        appendChatMessage("Failed to establish WebSocket connection. Check console and URL.", 'admin');
+        return;
+    }
+
+    chatSocket.onopen = function() {
+        appendChatMessage('Connection successful! You can start chatting.', 'admin');
+        document.getElementById('chat-message-input').disabled = false;
+        document.getElementById('chat-send-btn').disabled = false;
+    };
+
+    chatSocket.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        // Assuming the server sends a 'sender' field: 'admin' or 'customer'
+        const sender = (data.sender === 'admin') ? 'admin' : 'customer'; 
+        appendChatMessage(data.message, sender);
+    };
+
+    chatSocket.onclose = function() {
+        appendChatMessage('Connection closed. Please refresh to re-initiate chat.', 'admin');
+        document.getElementById('chat-message-input').disabled = true;
+        document.getElementById('chat-send-btn').disabled = true;
+        chatSocket = null;
+    };
+
+    chatSocket.onerror = function(error) {
+        console.error('WebSocket Error:', error);
+        appendChatMessage('Connection error occurred. Check server logs.', 'admin');
+    };
+}
+
+/**
+ * Sends a message from the admin to the customer via WebSocket.
+ */
+function sendChatMessage() {
+    const input = document.getElementById('chat-message-input');
+    const message = input.value.trim();
+
+    if (message && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+        const payload = {
+            sender: 'admin', // Identify self as admin
+            message: message,
+            // You might need to include a session/token for auth if the server requires it
+        };
+        chatSocket.send(JSON.stringify(payload));
+        
+        // Display message locally immediately
+        appendChatMessage(message, 'admin'); 
+        input.value = ''; // Clear input
+        input.focus();
+    } else if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        showToast('Chat is not connected. Please reopen the chat modal.', 'error');
+    }
+}
+
+/**
+ * Fetches historical chat messages for the current customer ID.
+ * @param {string} customerId - The customer ID to fetch history for.
+ */
+async function fetchChatHistory(customerId) {
+    const chatBody = document.getElementById('chat-messages');
+    try {
+        const response = await fetch(`${API_BASE_URL}/admin/chat/history/${customerId}`);
+        
+        if (!response.ok) {
+            appendChatMessage('Could not load chat history. Starting fresh conversation.', 'admin');
+            return;
+        }
+
+        const history = await response.json();
+        chatBody.innerHTML = ''; // Clear "Connecting" message
+        
+        if (history.length === 0) {
+            appendChatMessage('No prior chat history found.', 'admin');
+            return;
+        }
+
+        history.forEach(msg => {
+            const sender = (msg.sender === 'admin') ? 'admin' : 'customer';
+            appendChatMessage(msg.message_content, sender);
+        });
+
+    } catch (error) {
+        console.error('Error fetching chat history:', error);
+        appendChatMessage('Error loading chat history due to a network error.', 'admin');
+    }
+}
+
    </script>
     
 </body>

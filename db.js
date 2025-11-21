@@ -161,17 +161,6 @@ async function updatePassword(userId, hashedPassword) {
 // db.js (New function to append and export)
 
 /**
- * Fetches all orders for a specific user, with all nested items.
- * Queries both the 'orders' and 'order_items' tables.
- */
-// db.js
-
-/**
- * Fetches all orders for a specific user, with all nested items (MySQL syntax).
- */
-// db.js
-
-/**
  * Fetches all orders for a specific user, with all nested items (MySQL syntax).
  * FIX: Using 'id' instead of 'order_id' for the primary key.
  */
@@ -292,6 +281,49 @@ async function updateUserStatus(userId, newStatus) {
         throw error;
     }
 }
+
+// ---------------------------------------------------------------- //
+// --- NEW CHAT FUNCTIONS ---
+// ---------------------------------------------------------------- //
+
+/**
+ * Saves a new chat message to the database.
+ * Assumes a 'chats' table exists with columns: customer_id, sender_role, message_content.
+ * @param {string} customerId - The ID of the customer (or user ID).
+ * @param {('admin'|'customer')} senderRole - Role of the sender.
+ * @param {string} message - The content of the message.
+ * @returns {Promise<object>} The result of the database query.
+ */
+async function saveChatMessage(customerId, senderRole, message) {
+    const query = `
+        INSERT INTO chats (customer_id, sender_role, message_content)
+        VALUES (?, ?, ?);
+    `;
+    // Note: Assuming customerId can be a string (UUID) if the user is not logged in
+    const [result] = await pool.query(query, [customerId, senderRole, message]);
+    return result;
+}
+
+/**
+ * Fetches the entire chat history for a specific customer.
+ * @param {string} customerId - The ID of the customer (or user ID) for the chat session.
+ * @returns {Promise<Array<object>>} List of chat message objects, ordered by time.
+ */
+async function getChatHistory(customerId) {
+    const query = `
+        SELECT sender_role AS sender, message_content, sent_at
+        FROM chats
+        WHERE customer_id = ?
+        ORDER BY sent_at ASC;
+    `;
+    const [rows] = await pool.query(query, [customerId]); 
+    return rows;
+}
+
+
+// ---------------------------------------------------------------- //
+// --- MODULE EXPORTS (Updated to include new chat functions) ---
+// ---------------------------------------------------------------- //
 module.exports = {
     pool,
   
@@ -305,4 +337,8 @@ module.exports = {
     findUserOrders, // New function to fetch all orders with items for a user
     updateUserProfile, // New function to update user profile fields
     updateUserStatus, // New function to update user active status
-    };
+    
+    // 🚨 NEW CHAT FUNCTIONS
+    saveChatMessage, 
+    getChatHistory,
+};
