@@ -318,13 +318,13 @@ async function updateUserStatus(userId, newStatus) {
  * @param {string} message - The content of the message.
  * @returns {Promise<object>} The result of the database query.
  */
-async function saveChatMessage(customerId, senderRole, senderId, recipientId, message,messageText) {
-    // 🚨 UPDATED QUERY: Inserting into the new ID columns
+async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
+    // 🚨 FIX: Using the confirmed table name 'chat_messages'
     const query = `
-        INSERT INTO chats_messages (customer_id, sender_role, received_from_id, sent_to_id, message_content)
+        INSERT INTO chat_messages (customer_id, sender_role, received_from_id, sent_to_id, message_content)
         VALUES (?, ?, ?, ?, ?);
     `;
-    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message,messageText]);
+    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
     return result;
 }
 
@@ -334,18 +334,17 @@ async function saveChatMessage(customerId, senderRole, senderId, recipientId, me
  * @returns {Promise<Array<object>>} List of chat message objects, ordered by time.
  */
 async function getChatHistory(customerId) {
+    // 🚨 FIX: Using the confirmed table name 'chat_messages'
     const query = `
         SELECT sender_role, received_from_id, sent_to_id, message_content, sent_at
-        FROM chats
+        FROM chat_messages
         WHERE customer_id = ?
         ORDER BY sent_at ASC;
     `;
-    // NOTE: We select all new ID fields (received_from_id, sent_to_id) for debugging
-    // or complex client-side routing logic.
+    // NOTE: Column names `sent_at` and `sent_to_id/received_from_id` are assumed to be correct in your schema.
     const [rows] = await pool.query(query, [customerId]); 
     return rows;
 }
-
 
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new chat functions) ---
