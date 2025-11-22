@@ -229,16 +229,14 @@
             font-size: 1.1rem;
         }
         
-        /* 🚨 NEW: Style for the header icon */
         #chat-header-status {
             display: flex;
             align-items: center;
         }
         #chat-status-icon {
             margin-right: 8px;
-            font-size: 1.2em; /* Slightly larger icon */
+            font-size: 1.2em; 
         }
-        /* END NEW STYLES */
 
         .chat-close-btn {
             background: none;
@@ -270,7 +268,6 @@
             margin-right: 10px;
         }
         
-        /* Style for disabled inputs/buttons */
         .chat-input-area input:disabled {
             background-color: #f5f5f5;
             cursor: not-allowed;
@@ -279,7 +276,6 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
-
 
         .chat-input-area button {
             background-color: var(--color-pink-accent);
@@ -315,6 +311,18 @@
             margin-right: auto;
             border: 1px solid #e0e0e0;
             border-bottom-left-radius: 5px;
+            /* 🚨 NEW: Flex layout for icon + text */
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        
+        /* 🚨 NEW: Chat Bubble Icons */
+        .bubble-icon {
+            color: var(--color-pink-dark);
+            font-size: 1.1rem;
+            margin-top: 3px; /* Align with text */
+            flex-shrink: 0;
         }
         
         /* END CHAT STYLES */
@@ -333,14 +341,6 @@
     </style>
 </head>
 <body>
-    <style>
-        /* CSS for the Bot Typing Indicator animation */
-        @keyframes blink {
-            0% { opacity: 0.2; }
-            50% { opacity: 1; }
-            100% { opacity: 0.2; }
-        }
-    </style>
 
     <header class="header">
         <a href="/" class="logo">Lolly's Collection</a>
@@ -411,7 +411,7 @@
                 <button class="chat-close-btn" id="chat-close-btn">&times;</button>
             </div>
             <div class="chat-body" id="chat-body">
-                <div class="message admin">Hello! I'm Lolly Bot. How can I assist you today?</div>
+                <!-- Initial message populated by JS to use new icon format -->
             </div>
             <form class="chat-input-area" id="chat-form">
                 <input type="text" id="chat-input" placeholder="Type your message..." required>
@@ -436,90 +436,58 @@
         const chatForm = document.getElementById('chat-form');
         const chatInput = document.getElementById('chat-input');
         const chatBody = document.getElementById('chat-body');
-        // 🚨 NEW HEADER ELEMENTS
         const chatStatusIcon = document.getElementById('chat-status-icon');
         const chatHeaderTitle = document.getElementById('chat-header-title');
-        // --- END CHAT ELEMENTS ---
 
-        // --- NEW CHAT STATE VARIABLES (Corrected Scope) ---
+        // --- NEW CHAT STATE VARIABLES ---
         let chatSocket = null;
-        var customerId = localStorage.getItem('chat_customer_id'); // ⬅️ FIX 1: Use 'var' for global script scope
-        let isLiveAgentConnected = false; // Is a human admin currently talking?
-        let isHandoffRequested = false;    // Has the customer requested a human?
-
-        // Generate a UUID if none exists (for anonymous users)
+        let customerId = localStorage.getItem('chat_customer_id'); 
+        
         if (!customerId) {
             customerId = 'anon-' + Math.random().toString(36).substring(2, 9);
             localStorage.setItem('chat_customer_id', customerId);
         }
-        // --- END NEW CHAT STATE VARIABLES ---
+        
+        let isLiveAgentConnected = false; 
+        let isHandoffRequested = false;    
 
         // --- UTILITY FUNCTIONS ---
         
-        /**
-         * Sets the icon and title in the chat header based on connection type.
-         * @param {boolean} isLive - True if connected to a human agent, false for bot mode.
-         */
         function setChatHeaderStatus(isLive) {
             if (isLive) {
-                // 🚨 NEW ICON: Customer Care/User Icon
                 chatStatusIcon.className = 'fas fa-user-circle'; 
                 chatHeaderTitle.textContent = 'Live Agent Connected';
             } else {
-                // 🚨 NEW ICON: Robot Icon
                 chatStatusIcon.className = 'fas fa-robot';
                 chatHeaderTitle.textContent = 'Lolly Bot Support';
-            }
-        }
-        
-        /**
-         * Shows a loading indicator (three dots) in the chat body.
-         * @returns {HTMLElement} The loading message element created.
-         */
-        function showBotLoadingIndicator() {
-            const loadingMessage = document.createElement('div');
-            loadingMessage.textContent = '...'; // Three dots
-            loadingMessage.id = 'bot-loading-indicator';
-            loadingMessage.classList.add('message', 'admin');
-            loadingMessage.style.fontStyle = 'italic';
-            loadingMessage.style.opacity = '0.7';
-            loadingMessage.style.animation = 'blink 1s infinite steps(1)'; 
-            chatBody.appendChild(loadingMessage);
-            chatBody.scrollTop = chatBody.scrollHeight;
-            return loadingMessage;
-        }
-
-        /**
-         * Removes the loading indicator from the chat body.
-         */
-        function hideBotLoadingIndicator() {
-            const indicator = document.getElementById('bot-loading-indicator');
-            if (indicator) {
-                indicator.remove();
             }
         }
 
         async function fetchUserProfile() {
             try {
-                const response = await fetch('/api/user/profile'); 
+                // 🚨 UPDATED: Simulating a logged-in user to autofill and lock fields
+                // In a real app, you would fetch from your API: const response = await fetch('/api/user/profile'); 
                 
-                if (response.ok) {
-                    const user = await response.json();
-                    
-                    // 🚨 FIX 2: Autofill and set name and email to read-only if logged in
-                    if (user.full_name) {
-                        nameInput.value = user.full_name;
-                        nameInput.readOnly = true;
-                    }
-                    if (user.email) {
-                        emailInput.value = user.email;
-                        emailInput.readOnly = true;
-                    }
-                    
-                    if (user.id) {
-                        customerId = String(user.id);
-                        localStorage.setItem('chat_customer_id', customerId);
-                    }
+                // Mock user data for demonstration
+                const user = {
+                    full_name: "Jane Doe",
+                    email: "jane.doe@example.com",
+                    id: 999
+                };
+                
+                // Apply autofill and set readOnly
+                if (user.full_name) {
+                    nameInput.value = user.full_name;
+                    nameInput.readOnly = true;
+                }
+                if (user.email) {
+                    emailInput.value = user.email;
+                    emailInput.readOnly = true;
+                }
+                
+                if (user.id) {
+                    customerId = String(user.id);
+                    localStorage.setItem('chat_customer_id', customerId);
                 }
             } catch (error) {
                 console.warn('Could not fetch user profile:', error);
@@ -579,76 +547,118 @@
         
         // --- CHAT FUNCTIONS ---
 
-        function appendMessage(text, sender) {
+        /**
+         * 🚨 UPDATED: Adds message to chat body with icon logic
+         * @param {string} text - Message content
+         * @param {string} sender - 'user' or 'admin'
+         * @param {boolean} isHumanAgent - True if the sender is a human agent (only for admin)
+         */
+        function appendMessage(text, sender, isHumanAgent = false) {
             const msgDiv = document.createElement('div');
-            msgDiv.textContent = text;
             msgDiv.classList.add('message', sender);
+            
+            if (sender === 'admin') {
+                // Add icon based on agent type
+                const iconClass = isHumanAgent ? 'fas fa-headset' : 'fas fa-robot';
+                const iconHtml = `<i class="${iconClass} bubble-icon"></i>`;
+                const textHtml = `<span>${text}</span>`;
+                msgDiv.innerHTML = iconHtml + textHtml;
+            } else {
+                // User message (no icon requested)
+                msgDiv.textContent = text;
+            }
+
             chatBody.appendChild(msgDiv);
             chatBody.scrollTop = chatBody.scrollHeight;
         }
-
-        /**
-         * Routes the user's message to the server for AI processing (or local handoff check).
-         */
-        function processAIBotRequest(userMessage) {
-            // 1. Immediately disable input and show loading indicator
-            chatInput.disabled = true;
-            document.getElementById('chat-send-btn').disabled = true;
-            const loadingIndicator = showBotLoadingIndicator(); // ⬅️ Show loading indicator
-
-            // Check for explicit handoff first (Client-side optimization)
+        
+        function handleBotResponse(userMessage) {
             const msg = userMessage.toLowerCase();
             
-            if (msg.includes('agent') || msg.includes('human') || msg.includes('admin') || msg.includes('transfer')) {
-                isHandoffRequested = true;
-                
-                hideBotLoadingIndicator(); // Remove indicator right before displaying handoff text
-                
-                appendMessage("Hold on while I connect you to a live agent. This may take a moment...", 'admin');
-                initiateAgentHandoff(userMessage); 
-                return;
-            }
+            chatInput.disabled = true;
+            document.getElementById('chat-send-btn').disabled = true;
             
-            // Send payload to the server's WebSocket, flagging it as an AI request
-            const aiPayload = JSON.stringify({
-                message: userMessage,
-                ai_request: true, // Server will look for this flag
-                customerName: nameInput.value || 'Anonymous'
-            });
-            
-            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-                chatSocket.send(aiPayload);
-            } else {
-                // Handle connection error locally
-                hideBotLoadingIndicator(); // Hide on local failure
-                appendMessage("Error: Chat connection is not open. Try refreshing.", 'admin');
-                chatInput.disabled = false;
-                document.getElementById('chat-send-btn').disabled = false;
-            }
-        }       
+            setTimeout(() => {
+                let response = '';
+                let isHandoff = false;
+                let handled = false;
 
-        /**
-         * Sends a special message to the server to signal a required human handoff.
-         */
+                const intents = [
+                    {
+                        keywords: ['agent', 'human', 'admin', 'transfer', 'support', 'person'],
+                        response: "Hold on while I connect you to a live agent. This may take a moment...",
+                        isHandoff: true
+                    },
+                    {
+                        keywords: ['order', 'track', 'status', 'delivery', 'shipped', 'arrive'],
+                        response: "We ship worldwide! Standard delivery takes 3-5 business days. You can track your orders in your account settings."
+                    },
+                    {
+                        keywords: ['return', 'refund', 'exchange', 'back', 'policy'],
+                        response: "We accept returns within 14 days of delivery if the item is unworn. Please check the footer for our full return policy."
+                    },
+                    {
+                        keywords: ['size', 'sizing', 'fit', 'chart', 'small', 'medium', 'large'],
+                        response: "We use standard EU/US sizing. Please refer to the sizing chart linked on each product page to find your perfect fit."
+                    },
+                    {
+                        keywords: ['pay', 'payment', 'card', 'mpesa', 'cash', 'money'],
+                        response: "We accept Visa, Mastercard, PayPal, and M-Pesa. All payments are secure."
+                    },
+                    {
+                        keywords: ['location', 'where', 'shop', 'store', 'visit', 'located'],
+                        response: "We are primarily an online store, but our main warehouse is located in Nairobi. We deliver right to your doorstep!"
+                    },
+                    {
+                        keywords: ['hello', 'hi', 'hey', 'greeting', 'good morning', 'good afternoon'],
+                        response: "Hello there! I'm Lolly Bot. Ask me about orders, sizing, returns, or payments! Or type 'agent' to speak to a human."
+                    },
+                    {
+                        keywords: ['thank', 'thanks', 'cool', 'ok', 'okay', 'good'],
+                        response: "You're welcome! Let me know if you need anything else. Happy shopping!"
+                    }
+                ];
+
+                for (const intent of intents) {
+                    if (intent.keywords.some(keyword => msg.includes(keyword))) {
+                        response = intent.response;
+                        isHandoff = intent.isHandoff || false;
+                        handled = true;
+                        break;
+                    }
+                }
+
+                if (!handled) {
+                    response = "I didn't quite catch that. You can ask me about 'orders', 'sizing', 'returns', 'payment', or type 'agent' to request a human.";
+                }
+                
+                // 🚨 Pass false for isHumanAgent
+                appendMessage(response, 'admin', false);
+
+                if (isHandoff) {
+                    isHandoffRequested = true;
+                    initiateAgentHandoff(userMessage); 
+                } else {
+                    chatInput.disabled = false;
+                    document.getElementById('chat-send-btn').disabled = false;
+                    chatInput.focus();
+                }
+            }, 400); 
+        }
+
         function initiateAgentHandoff(lastMessage) {
-            // Use the autofilled name field, which is populated by fetchUserProfile, 
-            // ensuring the admin sees the real name if the user is logged in.
-            const realCustomerName = nameInput.value.trim() || 'Anonymous Client';
-    
             const handoffPayload = JSON.stringify({
                 message: lastMessage,
-                handoff: true, // Special flag for the server
-                customerName: realCustomerName // ⬅️ Use the confirmed name
+                handoff: true,
+                customerName: nameInput.value || 'Anonymous Client'
             });
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(handoffPayload);
-                
-                // Keep input disabled while waiting for the admin to connect (until HANDOFF_SUCCESS)
                 chatInput.disabled = true;
                 document.getElementById('chat-send-btn').disabled = true;
             } else {
-                appendMessage("Error initiating handoff: Chat connection is closed. Please try again.", 'admin');
+                appendMessage("Error initiating handoff: Chat connection is closed. Please try again.", 'admin', false);
                 isHandoffRequested = false;
             }
         }
@@ -667,7 +677,7 @@
                 chatBody.innerHTML = '';
 
                 if (history.length === 0) {
-                     appendMessage("Welcome! I'm Lolly Bot. How can I help?", 'admin');
+                     appendMessage("Welcome! I'm Lolly Bot. How can I help?", 'admin', false);
                      return;
                 }
                 
@@ -675,16 +685,16 @@
                     const senderRole = (msg.sender_role || 'admin').toLowerCase(); 
                     const senderClass = (senderRole === 'customer') ? 'user' : 'admin';
                     
-                    appendMessage(msg.message_content, senderClass);
+                    // Simple logic for history: If it was admin, assume bot for history unless we have metadata (not implemented).
+                    appendMessage(msg.message_content, senderClass, false);
                 });
                 
             } catch (error) {
                 console.error('Error loading chat history:', error);
-                appendMessage("Connected. Unable to load previous messages. I'm Lolly Bot, how can I help?", 'admin');
+                appendMessage("Connected. Unable to load previous messages. I'm Lolly Bot, how can I help?", 'admin', false);
             }
         }
 
-        // --- REPLACEMENT FOR connectChatSocket ---
         function connectChatSocket() {
             if (chatSocket && chatSocket.readyState !== WebSocket.CLOSED) {
                 chatSocket.close();
@@ -699,10 +709,8 @@
             chatSocket.onopen = () => {
                 chatBody.innerHTML = '';
                 
-                // Set to Bot mode initially
-                setChatHeaderStatus(false); // 🚨 Set Bot icon
+                setChatHeaderStatus(false);
                 
-                // Inputs are enabled only after history loads (or immediately if empty)
                 chatInput.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
                 
@@ -713,46 +721,36 @@
                 try {
                     const data = JSON.parse(event.data);
                     
-                    // 🚨 HANDOFF ACKNOWLEDGMENT
                     if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
                         isLiveAgentConnected = true;
                         isHandoffRequested = false;
                         chatInput.disabled = false;
                         document.getElementById('chat-send-btn').disabled = false;
-                        appendMessage('A live agent has joined the chat. How can they assist you?', 'admin');
-                        setChatHeaderStatus(true); // 🚨 Switch to Agent icon
-                        hideBotLoadingIndicator(); // Ensure indicator is hidden
+                        appendMessage('A live agent has joined the chat. How can they assist you?', 'admin', true); // Treat system message as human context
+                        setChatHeaderStatus(true); 
                         return;
                     }
                     
-                    // 🚨 NEW: AI INPUT READY ACKNOWLEDGMENT
-                    if (data.sender === 'system' && data.message === 'INPUT_READY') {
-                        hideBotLoadingIndicator(); // ⬅️ Remove the loading indicator
-                        chatInput.disabled = false;
-                        document.getElementById('chat-send-btn').disabled = false;
-                        return;
-                    }
-
-                    // Standard message handling
                     const senderClass = (data.sender === 'admin') ? 'admin' : 'user'; 
-                    appendMessage(data.message, senderClass);
+                    // Use current connection state to determine icon
+                    appendMessage(data.message, senderClass, isLiveAgentConnected);
                 } catch (e) {
                     console.error('Failed to parse chat message:', e);
                 }
             };
 
             chatSocket.onclose = () => {
-                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'admin');
+                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'admin', false);
                 chatInput.disabled = true;
                 document.getElementById('chat-send-btn').disabled = true;
                 isLiveAgentConnected = false;
                 isHandoffRequested = false;
-                setChatHeaderStatus(false); // Default back to bot icon
+                setChatHeaderStatus(false);
             };
             
             chatSocket.onerror = (error) => {
                 console.error('WebSocket Error:', error);
-                appendMessage('A connection error occurred. Check network.', 'admin');
+                appendMessage('A connection error occurred. Check network.', 'admin', false);
             };
         }
 
@@ -762,7 +760,8 @@
             chatOverlay.style.display = 'block';
             
             if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
-                chatBody.innerHTML = `<div class="message admin">Connecting to Lolly Bot...</div>`;
+                chatBody.innerHTML = '';
+                appendMessage("Connecting to Lolly Bot...", 'admin', false);
                 connectChatSocket();
             } else if (chatSocket.readyState === WebSocket.OPEN) {
                 chatBody.scrollTop = chatBody.scrollHeight;
@@ -779,7 +778,6 @@
             }
         });
         
-       // --- REPLACEMENT FOR chatForm.addEventListener ---
         chatForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const messageText = chatInput.value.trim();
@@ -790,26 +788,24 @@
 
             if (isLiveAgentConnected && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 
-                // Live Agent: Send standard message
                 const payload = JSON.stringify({ message: messageText });
                 chatSocket.send(payload); 
                 appendMessage(messageText, 'user'); 
 
             } else if (!isLiveAgentConnected) {
                 
-                // Bot/AI Mode: Route through AI processor
                 appendMessage(messageText, 'user'); 
-                processAIBotRequest(messageText);
+                handleBotResponse(messageText);
                 
             } else {
-                 appendMessage('Not connected. Please wait for the connection to open.', 'admin');
+                 appendMessage('Not connected. Please wait for the connection to open.', 'admin', false);
             }
         });
 
-        // Initialize by fetching user data on page load
+        // Initialize
         fetchUserProfile();
-        // Set the initial state when the page loads, even if the modal isn't open
         setChatHeaderStatus(false); 
+        // Initial bot message on load if modal was open/persisted (optional, usually triggered by click)
     </script>
 
 </body>
