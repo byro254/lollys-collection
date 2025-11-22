@@ -892,52 +892,63 @@
             };
 
             chatSocket.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'CONNECTION_STATUS') {
-                        if (data.connected && !isLiveAgentConnected) {
-                            isLiveAgentConnected = true;
-                            isHandoffRequested = false;
-                            localStorage.setItem('chat_live_agent_active', 'true');
-                            setChatHeaderStatus(true);
-                        }
-                        return;
-                    }
-                    
-                    if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
-                        isLiveAgentConnected = true;
-                        isHandoffRequested = false;
-                        localStorage.setItem('chat_live_agent_active', 'true');
-                        appendMessage('A live agent has joined the chat. How can they assist you?', 'system', false); 
-                        setChatHeaderStatus(true); 
-                        return;
-                    }
+    try {
+        const data = JSON.parse(event.data);
+        
+        // 1. Handle CONNECTION_STATUS and control messages (Handled correctly above)
+        if (data.type === 'CONNECTION_STATUS') {
+            if (data.connected && !isLiveAgentConnected) {
+                isLiveAgentConnected = true;
+                isHandoffRequested = false;
+                localStorage.setItem('chat_live_agent_active', 'true');
+                setChatHeaderStatus(true);
+            }
+            return;
+        }
+        
+        if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
+            isLiveAgentConnected = true;
+            isHandoffRequested = false;
+            localStorage.setItem('chat_live_agent_active', 'true');
+            appendMessage('A live agent has joined the chat. How can they assist you?', 'system', false); 
+            setChatHeaderStatus(true); 
+            return;
+        }
 
-                    if (data.sender === 'system' && (data.message.includes('admin has disconnected') || data.message === 'AGENT_LEFT')) {
-                        isLiveAgentConnected = false;
-                        isHandoffRequested = false;
-                        localStorage.removeItem('chat_live_agent_active');
-                        setChatHeaderStatus(false); 
-                        
-                        appendMessage('The admin has disconnected from the chat.', 'system', false);
-                        
-                        setTimeout(() => {
-                            appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
-                            awaitingRating = true; 
-                        }, 1000);
-                        
-                        chatInput.disabled = false;
-                        document.getElementById('chat-send-btn').disabled = false;
-                        return;
-                    }
-                    
-                    const senderClass = (data.sender === 'admin') ? 'admin' : 'user'; 
-                    appendMessage(data.message, senderClass, isLiveAgentConnected);
-                } catch (e) {
-                    console.error('Failed to parse chat message:', e);
-                }
-            };
+        if (data.sender === 'system' && (data.message.includes('admin has disconnected') || data.message === 'AGENT_LEFT')) {
+            isLiveAgentConnected = false;
+            isHandoffRequested = false;
+            localStorage.removeItem('chat_live_agent_active');
+            setChatHeaderStatus(false); 
+            
+            appendMessage('The admin has disconnected from the chat.', 'system', false);
+            
+            setTimeout(() => {
+                appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
+                awaitingRating = true; 
+            }, 1000);
+            
+            chatInput.disabled = false;
+            document.getElementById('chat-send-btn').disabled = false;
+            return;
+        }
+        
+        // 🚨 CRITICAL FIX: Explicitly determine the sender role for general messages
+        let senderRole;
+        if (data.sender === 'system') {
+            senderRole = 'system'; // This catches the "busy" message
+        } else if (data.sender === 'admin') {
+            senderRole = 'admin';
+        } else {
+            senderRole = 'user'; 
+        }
+
+        appendMessage(data.message, senderRole, isLiveAgentConnected);
+        
+    } catch (e) {
+        console.error('Failed to parse chat message:', e);
+    }
+};
 
             chatSocket.onclose = () => {
                 appendMessage('Connection lost. Reconnecting...', 'system', false);
