@@ -233,9 +233,10 @@ async function findUserByPhone(phone) {
  * @returns {Promise<{name: string, email: string} | null>} - User profile or null.
  */
 async function findUserById(userId) {
-    try {
+    try {
         const [rows] = await pool.execute(
-            'SELECT full_name, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
+            // CRITICAL: SELECT the id field itself!
+            'SELECT id, full_name, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
             [userId]
         );
         
@@ -244,6 +245,8 @@ async function findUserById(userId) {
         }
 
         return {
+            // 🚨 FIX 1: Include the user ID in the returned object
+            id: rows[0].id, 
             name: rows[0].full_name,
             email: rows[0].email,
             phoneNumber: rows[0].phone_number,
@@ -320,11 +323,12 @@ async function updateUserStatus(userId, newStatus) {
  */
 async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
     const query = `
-        INSERT INTO chat_messages (customer_id, sender_role, sender_id, received_from_id, recipient_id, message_content)
-        VALUES (?, ?, ?, ?, ?, ?);
+        INSERT INTO chat_messages (customer_id, sender_role, sender_id, received_from_id, recipient_id, sent_to_id, message_content)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
     `;
-    // We pass senderId twice to fill both the sender_id and received_from_id columns
-    const [result] = await pool.query(query, [customerId, senderRole, senderId, senderId, recipientId, message]);
+    // The values now include the recipientId twice to satisfy both recipient_id AND sent_to_id columns.
+    // Order: customerId, senderRole, senderId(1), senderId(2), recipientId(1), recipientId(2), message
+    const [result] = await pool.query(query, [customerId, senderRole, senderId, senderId, recipientId, recipientId, message]);
     return result;
 }
 

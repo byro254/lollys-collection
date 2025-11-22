@@ -975,6 +975,16 @@
             }
         });
         
+        chatCloseBtn.addEventListener('click', () => {
+            chatOverlay.style.display = 'none';
+        });
+        chatOverlay.addEventListener('click', function(e) {
+            // This handles clicks OUTSIDE the modal content
+            const modalContent = document.getElementById('chat-modal-content');
+            if (e.target === chatOverlay || !modalContent.contains(e.target)) {
+                chatOverlay.style.display = 'none';
+            }
+        });  
         chatForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const messageText = chatInput.value.trim();
