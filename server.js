@@ -1520,13 +1520,13 @@ wss.on('connection', (ws, req) => {
 
     ws.on('message', (data) => {
         try {
-            const parsed = JSON.parse(data);
-            const message = parsed.message ? String(parsed.message).trim() : null;
+           const message = data.toString();
+           
             
-            if (message && message.length > 0) {
-                // Pass the message and the role of the sender
-                handleChatMessage(ws, message, role, customerId);
-            }
+           if (message && message.length > 0) {
+            // Pass the message (which is the JSON string from the client) and the role
+            handleChatMessage(ws, message, role, customerId);
+        }
         } catch (error) {
             console.error('Invalid WebSocket message received:', error);
         }
