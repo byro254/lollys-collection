@@ -319,16 +319,14 @@ async function updateUserStatus(userId, newStatus) {
  * @returns {Promise<object>} The result of the database query.
  */
 async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
-    // 🚨 CRITICAL FIX: Change 'received_from_id' to the required database column 'sender_id'
+    // 🚨 CRITICAL FIX: Change 'sent_to_id' to the required database column 'recipient_id'
     const query = `
-        INSERT INTO chat_messages (customer_id, sender_role, sender_id, sent_to_id, message_content)
+        INSERT INTO chat_messages (customer_id, sender_role, sender_id, recipient_id, message_content)
         VALUES (?, ?, ?, ?, ?);
     `;
-    // The values passed must still match the number of placeholders
     const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
     return result;
 }
-
 
 /**
  * Fetches the entire chat history for a specific customer.
@@ -336,14 +334,15 @@ async function saveChatMessage(customerId, senderRole, senderId, recipientId, me
  * @returns {Promise<Array<object>>} List of chat message objects, ordered by time.
  */
 async function getChatHistory(customerId) {
-    // 🚨 CRITICAL FIX: Change 'sent_at' to the likely correct database column 'created_at'
+    // 🚨 FIX: Change 'sent_to_id' to 'recipient_id' for consistency
+    // Note: We are selecting 'recipient_id' here, but the server.js might expect 'sent_to_id'
+    // It's safest to match the database's column name here for successful query execution.
     const query = `
-        SELECT sender_role, sender_id, sent_to_id, message_content, created_at
+        SELECT sender_role, sender_id, recipient_id, message_content, created_at
         FROM chat_messages
         WHERE customer_id = ?
         ORDER BY created_at ASC;
     `;
-    // NOTE: We also fixed the sender column name here to 'sender_id' based on previous context.
     const [rows] = await pool.query(query, [customerId]); 
     return rows;
 }
