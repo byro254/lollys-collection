@@ -15,6 +15,7 @@
             --color-bg-page: #F4F4F9;
             --color-pink-dark: #C2185B;
             --color-pink-accent: #E91E63;
+            --color-pink-light: #F8BBD0; /* 🚨 NEW: Light Pink for User */
             --color-text-dark: #333333;
             --color-text-subtle: #757575;
             --color-shadow: rgba(0,0,0,0.08);
@@ -290,40 +291,72 @@
             cursor: pointer;
         }
 
+        /* 🚨 UPDATED MESSAGE BUBBLES */
         .message {
             margin-bottom: 10px;
             max-width: 80%;
             padding: 8px 12px;
             border-radius: 15px;
             word-wrap: break-word;
+            font-size: 0.95rem;
+            position: relative;
         }
 
+        /* USER: Light Pink, Dark Text */
         .message.user {
-            background-color: var(--color-pink-accent);
-            color: var(--color-bg-light);
+            background-color: var(--color-pink-light); 
+            color: var(--color-text-dark);
             margin-left: auto;
             border-bottom-right-radius: 5px;
         }
 
-        .message.admin {
+        /* BOT: White, Dark Text, Border */
+        .message.bot {
             background-color: var(--color-bg-light);
             color: var(--color-text-dark);
             margin-right: auto;
             border: 1px solid #e0e0e0;
             border-bottom-left-radius: 5px;
-            /* 🚨 NEW: Flex layout for icon + text */
             display: flex;
             align-items: flex-start;
             gap: 10px;
         }
+
+        /* ADMIN (AGENT): Dark Pink, White Text */
+        .message.agent {
+            background-color: var(--color-pink-dark);
+            color: var(--color-bg-light);
+            margin-right: auto;
+            border: 1px solid var(--color-pink-dark);
+            border-bottom-left-radius: 5px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+
+        /* SYSTEM: Gray, Centered, Small */
+        .message.system {
+            background-color: #E0E0E0;
+            color: #555;
+            margin: 10px auto;
+            text-align: center;
+            font-size: 0.85rem;
+            border-radius: 20px;
+            padding: 4px 15px;
+            width: fit-content;
+            max-width: 90%;
+            display: block; /* Overrides flex */
+        }
         
-        /* 🚨 NEW: Chat Bubble Icons */
         .bubble-icon {
-            color: var(--color-pink-dark);
             font-size: 1.1rem;
-            margin-top: 3px; /* Align with text */
+            margin-top: 3px; 
             flex-shrink: 0;
         }
+        
+        /* Adjust icon color based on context */
+        .message.bot .bubble-icon { color: var(--color-pink-dark); }
+        .message.agent .bubble-icon { color: white; }
         
         /* END CHAT STYLES */
 
@@ -411,7 +444,7 @@
                 <button class="chat-close-btn" id="chat-close-btn">&times;</button>
             </div>
             <div class="chat-body" id="chat-body">
-                <!-- Initial message populated by JS to use new icon format -->
+                <!-- Initial message populated by JS -->
             </div>
             <form class="chat-input-area" id="chat-form">
                 <input type="text" id="chat-input" placeholder="Type your message..." required>
@@ -443,13 +476,19 @@
         let chatSocket = null;
         let customerId = localStorage.getItem('chat_customer_id'); 
         
+        // Global store for user profile to ensure accurate handshake data
+        let currentUserProfile = {};
+        
         if (!customerId) {
             customerId = 'anon-' + Math.random().toString(36).substring(2, 9);
             localStorage.setItem('chat_customer_id', customerId);
         }
         
         let isLiveAgentConnected = false; 
-        let isHandoffRequested = false;    
+        let isHandoffRequested = false;
+        
+        // Flag to track if bot is expecting a rating
+        let awaitingRating = false;
 
         // --- UTILITY FUNCTIONS ---
         
@@ -465,32 +504,34 @@
 
         async function fetchUserProfile() {
             try {
-                // 🚨 UPDATED: Simulating a logged-in user to autofill and lock fields
-                // In a real app, you would fetch from your API: const response = await fetch('/api/user/profile'); 
+                const response = await fetch('/api/user/profile');
                 
-                // Mock user data for demonstration
-                const user = {
-                    full_name: "Jane Doe",
-                    email: "jane.doe@example.com",
-                    id: 999
-                };
-                
-                // Apply autofill and set readOnly
-                if (user.full_name) {
-                    nameInput.value = user.full_name;
-                    nameInput.readOnly = true;
-                }
-                if (user.email) {
-                    emailInput.value = user.email;
-                    emailInput.readOnly = true;
-                }
-                
-                if (user.id) {
-                    customerId = String(user.id);
-                    localStorage.setItem('chat_customer_id', customerId);
+                if (response.ok) {
+                    const user = await response.json();
+                    
+                    currentUserProfile = user;
+                    
+                    if (user.full_name) {
+                        nameInput.value = user.full_name;
+                        nameInput.readOnly = true;
+                    }
+                    if (user.email) {
+                        emailInput.value = user.email;
+                        emailInput.readOnly = true;
+                    }
+                    
+                    if (user.id) {
+                        customerId = String(user.id);
+                        localStorage.setItem('chat_customer_id', customerId);
+                    }
+                } else {
+                    console.log('User not logged in, using anonymous mode.');
                 }
             } catch (error) {
                 console.warn('Could not fetch user profile:', error);
+            } finally {
+                // 🚨 LOAD HISTORY AFTER USER ID IS CONFIRMED
+                loadChatHistory();
             }
         }
 
@@ -547,29 +588,77 @@
         
         // --- CHAT FUNCTIONS ---
 
-        /**
-         * 🚨 UPDATED: Adds message to chat body with icon logic
-         * @param {string} text - Message content
-         * @param {string} sender - 'user' or 'admin'
-         * @param {boolean} isHumanAgent - True if the sender is a human agent (only for admin)
-         */
-        function appendMessage(text, sender, isHumanAgent = false) {
+        // 🚨 UPDATED: appendMessage now handles distinct styling classes
+        function appendMessage(text, sender, isHumanAgent = false, saveToStorage = true) {
             const msgDiv = document.createElement('div');
-            msgDiv.classList.add('message', sender);
             
-            if (sender === 'admin') {
-                // Add icon based on agent type
-                const iconClass = isHumanAgent ? 'fas fa-headset' : 'fas fa-robot';
-                const iconHtml = `<i class="${iconClass} bubble-icon"></i>`;
-                const textHtml = `<span>${text}</span>`;
-                msgDiv.innerHTML = iconHtml + textHtml;
+            // Determine exact class based on sender and agent status
+            let cssClass = 'user';
+            let iconHtml = '';
+            
+            if (sender === 'system') {
+                cssClass = 'system';
+            } else if (sender === 'admin') {
+                if (isHumanAgent) {
+                    cssClass = 'agent';
+                    iconHtml = `<i class="fas fa-headset bubble-icon"></i>`;
+                } else {
+                    cssClass = 'bot';
+                    iconHtml = `<i class="fas fa-robot bubble-icon"></i>`;
+                }
+            }
+
+            msgDiv.classList.add('message', cssClass);
+            
+            // Render content
+            if (iconHtml) {
+                msgDiv.innerHTML = `${iconHtml}<span>${text}</span>`;
             } else {
-                // User message (no icon requested)
                 msgDiv.textContent = text;
             }
 
             chatBody.appendChild(msgDiv);
             chatBody.scrollTop = chatBody.scrollHeight;
+
+            if (saveToStorage) {
+                saveMessageLocally({ text, sender, isHumanAgent, timestamp: new Date().toISOString() });
+            }
+        }
+
+        function saveMessageLocally(msgObj) {
+            const storageKey = 'lolly_chat_history_' + customerId;
+            let history = [];
+            try {
+                history = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            } catch (e) {
+                console.warn('Error reading chat history', e);
+            }
+            history.push(msgObj);
+            // Limit history to last 50 messages to prevent overflow
+            if (history.length > 50) history = history.slice(-50);
+            localStorage.setItem(storageKey, JSON.stringify(history));
+        }
+
+        function loadChatHistory() {
+            const storageKey = 'lolly_chat_history_' + customerId;
+            let history = [];
+            try {
+                history = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            } catch (e) {
+                console.warn('Error loading chat history', e);
+            }
+
+            chatBody.innerHTML = ''; // Clear existing
+
+            if (history.length > 0) {
+                history.forEach(msg => {
+                    // Pass false to prevent re-saving duplicates
+                    appendMessage(msg.text, msg.sender, msg.isHumanAgent, false); 
+                });
+            } else {
+                // If no history, show welcome message and save it
+                appendMessage("Welcome! I'm Lolly Bot. How can I help?", 'admin', false, true);
+            }
         }
         
         function handleBotResponse(userMessage) {
@@ -579,6 +668,29 @@
             document.getElementById('chat-send-btn').disabled = true;
             
             setTimeout(() => {
+                // Rating Logic
+                if (awaitingRating) {
+                     let response = "Thank you so much for your feedback! We'll use it to improve our service.";
+                     
+                     if (['1', '2', '3', '4', '5'].some(num => msg.includes(num)) || 
+                         ['one', 'two', 'three', 'four', 'five'].some(num => msg.includes(num)) ||
+                         ['star', 'bad', 'good', 'excellent', 'poor'].some(w => msg.includes(w))) {
+                         
+                         // In a real app, send rating to backend
+                         
+                     } else {
+                         response = "Thanks! We've noted your feedback. Let us know if you need anything else.";
+                     }
+                     
+                     appendMessage(response, 'admin', false);
+                     awaitingRating = false; 
+                     
+                     chatInput.disabled = false;
+                     document.getElementById('chat-send-btn').disabled = false;
+                     chatInput.focus();
+                     return; 
+                }
+
                 let response = '';
                 let isHandoff = false;
                 let handled = false;
@@ -588,6 +700,14 @@
                         keywords: ['agent', 'human', 'admin', 'transfer', 'support', 'person'],
                         response: "Hold on while I connect you to a live agent. This may take a moment...",
                         isHandoff: true
+                    },
+                    {
+                        keywords: ['bad', 'terrible', 'worst', 'hate', 'sucks', 'stupid', 'useless', 'angry', 'disappointed', 'slow', 'broken', 'wrong', 'horrible', 'rubbish', 'fail', 'awful', 'not working'],
+                        response: "I'm so sorry to hear you're having a difficult time. 😔 We truly value you and want to make this right. Please let us know exactly what went wrong, or type 'agent' so a manager can help you personally."
+                    },
+                    {
+                        keywords: ['love', 'amazing', 'great', 'beautiful', 'best', 'happy', 'wonderful', 'excellent', 'perfect', 'awesome', 'nice', 'cool'],
+                        response: "You just made our day! 💖 We're thrilled to hear you're happy. Thank you for being such a wonderful customer!"
                     },
                     {
                         keywords: ['order', 'track', 'status', 'delivery', 'shipped', 'arrive'],
@@ -614,7 +734,7 @@
                         response: "Hello there! I'm Lolly Bot. Ask me about orders, sizing, returns, or payments! Or type 'agent' to speak to a human."
                     },
                     {
-                        keywords: ['thank', 'thanks', 'cool', 'ok', 'okay', 'good'],
+                        keywords: ['thank', 'thanks', 'ok', 'okay', 'good'],
                         response: "You're welcome! Let me know if you need anything else. Happy shopping!"
                     }
                 ];
@@ -632,7 +752,6 @@
                     response = "I didn't quite catch that. You can ask me about 'orders', 'sizing', 'returns', 'payment', or type 'agent' to request a human.";
                 }
                 
-                // 🚨 Pass false for isHumanAgent
                 appendMessage(response, 'admin', false);
 
                 if (isHandoff) {
@@ -647,10 +766,12 @@
         }
 
         function initiateAgentHandoff(lastMessage) {
+            const verifiedName = currentUserProfile.full_name || nameInput.value || 'Anonymous Client';
+
             const handoffPayload = JSON.stringify({
                 message: lastMessage,
                 handoff: true,
-                customerName: nameInput.value || 'Anonymous Client'
+                customerName: verifiedName
             });
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
@@ -663,38 +784,6 @@
             }
         }
         
-        async function fetchChatHistory() {
-            try {
-                const response = await fetch(`/api/chat/history/${customerId}`);
-                
-                if (response.status === 401 || response.status === 403) {
-                    throw new Error(`Access Denied (Status ${response.status})`);
-                }
-
-                if (!response.ok) throw new Error('Failed to load history.');
-
-                const history = await response.json();
-                chatBody.innerHTML = '';
-
-                if (history.length === 0) {
-                     appendMessage("Welcome! I'm Lolly Bot. How can I help?", 'admin', false);
-                     return;
-                }
-                
-                history.forEach(msg => {
-                    const senderRole = (msg.sender_role || 'admin').toLowerCase(); 
-                    const senderClass = (senderRole === 'customer') ? 'user' : 'admin';
-                    
-                    // Simple logic for history: If it was admin, assume bot for history unless we have metadata (not implemented).
-                    appendMessage(msg.message_content, senderClass, false);
-                });
-                
-            } catch (error) {
-                console.error('Error loading chat history:', error);
-                appendMessage("Connected. Unable to load previous messages. I'm Lolly Bot, how can I help?", 'admin', false);
-            }
-        }
-
         function connectChatSocket() {
             if (chatSocket && chatSocket.readyState !== WebSocket.CLOSED) {
                 chatSocket.close();
@@ -707,14 +796,9 @@
             chatSocket = new WebSocket(chatUrl);
             
             chatSocket.onopen = () => {
-                chatBody.innerHTML = '';
-                
                 setChatHeaderStatus(false);
-                
                 chatInput.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
-                
-                fetchChatHistory(); 
             };
 
             chatSocket.onmessage = (event) => {
@@ -726,13 +810,31 @@
                         isHandoffRequested = false;
                         chatInput.disabled = false;
                         document.getElementById('chat-send-btn').disabled = false;
-                        appendMessage('A live agent has joined the chat. How can they assist you?', 'admin', true); // Treat system message as human context
+                        // 🚨 CHANGED: Pass 'system' as sender for the styled system bubble
+                        appendMessage('A live agent has joined the chat. How can they assist you?', 'system', false); 
                         setChatHeaderStatus(true); 
+                        return;
+                    }
+
+                    if (data.sender === 'system' && data.message === 'AGENT_LEFT') {
+                        isLiveAgentConnected = false;
+                        isHandoffRequested = false;
+                        setChatHeaderStatus(false); 
+                        
+                        // 🚨 CHANGED: Pass 'system' as sender
+                        appendMessage('The agent has ended the conversation.', 'system', false);
+                        
+                        setTimeout(() => {
+                            appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
+                            awaitingRating = true; 
+                        }, 1000);
+                        
+                        chatInput.disabled = false;
+                        document.getElementById('chat-send-btn').disabled = false;
                         return;
                     }
                     
                     const senderClass = (data.sender === 'admin') ? 'admin' : 'user'; 
-                    // Use current connection state to determine icon
                     appendMessage(data.message, senderClass, isLiveAgentConnected);
                 } catch (e) {
                     console.error('Failed to parse chat message:', e);
@@ -740,7 +842,7 @@
             };
 
             chatSocket.onclose = () => {
-                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'admin', false);
+                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'system', false);
                 chatInput.disabled = true;
                 document.getElementById('chat-send-btn').disabled = true;
                 isLiveAgentConnected = false;
@@ -750,7 +852,7 @@
             
             chatSocket.onerror = (error) => {
                 console.error('WebSocket Error:', error);
-                appendMessage('A connection error occurred. Check network.', 'admin', false);
+                appendMessage('A connection error occurred. Check network.', 'system', false);
             };
         }
 
@@ -760,9 +862,9 @@
             chatOverlay.style.display = 'block';
             
             if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
-                chatBody.innerHTML = '';
-                appendMessage("Connecting to Lolly Bot...", 'admin', false);
+                // Logic handled by loadChatHistory and connectChatSocket
                 connectChatSocket();
+                setTimeout(() => { chatBody.scrollTop = chatBody.scrollHeight; }, 100);
             } else if (chatSocket.readyState === WebSocket.OPEN) {
                 chatBody.scrollTop = chatBody.scrollHeight;
             }
@@ -798,14 +900,12 @@
                 handleBotResponse(messageText);
                 
             } else {
-                 appendMessage('Not connected. Please wait for the connection to open.', 'admin', false);
+                 appendMessage('Not connected. Please wait for the connection to open.', 'system', false);
             }
         });
 
-        // Initialize
         fetchUserProfile();
         setChatHeaderStatus(false); 
-        // Initial bot message on load if modal was open/persisted (optional, usually triggered by click)
     </script>
 
 </body>
