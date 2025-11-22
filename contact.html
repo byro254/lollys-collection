@@ -714,24 +714,38 @@
                         response: "We accept returns within 14 days of delivery if the item is unworn. Please check the footer for our full return policy."
                     },
                     {
-                        keywords: ['size', 'sizing', 'fit', 'chart', 'small', 'medium', 'large'],
+                        keywords: ['size', 'sizing', 'fit', 'chart', 'small', 'medium', 'large', 'xl', 'xxl', 'measurements', 'length', 'width', 'height', 'weight', 'dimensions', 'size guide', 'size chart'],
                         response: "We use standard EU/US sizing. Please refer to the sizing chart linked on each product page to find your perfect fit."
                     },
                     {
-                        keywords: ['pay', 'payment', 'card', 'mpesa', 'cash', 'money'],
+                        keywords: ['pay', 'payment', 'card', 'mpesa', 'cash', 'money', 'method', 'options', 'buy', 'purchase', 'checkout', 'cost', 'price', 'fee', 'charge', 'wallet', 'transaction', 'visa', 'mastercard', 'paypal'],
                         response: "We accept Visa, Mastercard, PayPal, and M-Pesa. All payments are secure."
                     },
                     {
-                        keywords: ['location', 'where', 'shop', 'store', 'visit', 'located'],
+                        keywords: ['location', 'where', 'shop', 'store', 'visit', 'located', 'physical', 'address', 'headquarters', 'office', 'warehouse', 'based', 'city', 'country', 'region', 'area', 'place'],
                         response: "We are primarily an online store, but our main warehouse is located in Nairobi. We deliver right to your doorstep!"
                     },
                     {
-                        keywords: ['hello', 'hi', 'hey', 'greeting', 'good morning', 'good afternoon'],
+                        keywords: ['hello', 'hi', 'hey', 'greeting', 'good morning', 'good afternoon', 'good evening', 'sup', 'yo', 'howdy', 'hola', 'hey there', 'greetings', 'salutations', 'what\'s up', 'hiya'],
                         response: "Hello there! I'm Lolly Bot. Ask me about orders, sizing, returns, or payments! Or type 'agent' to speak to a human."
                     },
                     {
-                        keywords: ['thank', 'thanks', 'ok', 'okay', 'good'],
+                        keywords: ['thank', 'thanks', 'ok', 'okay', 'good', 'great', 'appreciate', 'grateful', 'wonderful', 'helpful', 'awesome', 'cool', 'nice', 'perfect', 'excellent', 'amazing'],
                         response: "You're welcome! Let me know if you need anything else. Happy shopping!"
+                    },
+                    { 
+                        keywords: ['bye', 'goodbye', 'see you', 'later', 'farewell', 'take care', 'catch you later', 'talk to you later', 'see ya', 'adios', 'ciao', 'sayonara', 'au revoir'],
+                        response: "Goodbye! If you need any more help, just open the chat again. Have a fantastic day!"
+                    },
+                    {
+                        keywords: ['help', 'support', 'assist', 'question', 'inquiry', 'issue', 'problem', 'need', 'guide', 'information', 'clarify', 'explain', 'understand', 'confused', 'lost'],
+                        response: "I'm here to help! You can ask me about orders, sizing, returns, or payments. Or type 'agent' to speak to a human."
+                    },
+                    {   keywords: ['rating', 'rate', 'feedback', 'review', 'score', 'stars', 'experience'],
+                        response: "I'd love to hear your feedback! On a scale of 1 to 5 stars, how would you rate your experience with our service today?",
+                    },
+                    {   keywords: ['shipping', 'ship', 'delivery', 'deliver', 'dispatch', 'send', 'courier', 'postage', 'freight', 'logistics'],
+                        response: "We offer worldwide shipping with various options at checkout. Delivery times vary by location but typically take 3-5 business days."
                     }
                 ];
 
@@ -834,15 +848,19 @@
                         return;
                     }
 
-                    if (data.sender === 'system' && data.message === 'AGENT_LEFT') {
+                    // 🚨 UPDATED: Handle Disconnect with correct text and bot prompt
+                    // Looks for specific text or AGENT_LEFT code
+                    if (data.sender === 'system' && (data.message.includes('admin has disconnected') || data.message === 'AGENT_LEFT')) {
                         isLiveAgentConnected = false;
                         isHandoffRequested = false;
                         localStorage.removeItem('chat_live_agent_active'); // 🚨 Clear state
                         setChatHeaderStatus(false); 
                         
-                        appendMessage('The agent has ended the conversation.', 'system', false);
+                        // Explicitly set text
+                        appendMessage('The admin has disconnected from the chat.', 'system', false);
                         
                         setTimeout(() => {
+                            // Bot takes over (admin sender, but isHumanAgent=false)
                             appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
                             awaitingRating = true; 
                         }, 1000);
