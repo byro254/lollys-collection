@@ -1411,7 +1411,6 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
         if (senderRole === 'customer' && parsed.ai_request) {
             
             // ... (AI request logic is correct)
-            
             return;
 
         // 2. Handoff Request Routing (Customer to Admin Notification)
@@ -1458,6 +1457,25 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
              }
              // Do NOT save the handshake message to history
              return; 
+
+        // 5. 🚨 NEW: Background Connection Check (Heartbeat)
+        } else if (senderRole === 'customer' && parsed.check_status) {
+            
+            // Check if an admin is present in this specific customer's session
+            const session = chatSessions.get(customerId);
+            const isAdminOnline = !!(session && session.admin && session.admin.readyState === WebSocket.OPEN);
+            
+            // Reply with system status packet
+            const statusPayload = JSON.stringify({
+                sender: 'system',
+                type: 'CONNECTION_STATUS',
+                connected: isAdminOnline
+            });
+            
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(statusPayload);
+            }
+            return;
 
         // 4. Standard Live Chat Routing (Saves and Relays)
         } else {

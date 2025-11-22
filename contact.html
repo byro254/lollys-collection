@@ -15,7 +15,7 @@
             --color-bg-page: #F4F4F9;
             --color-pink-dark: #C2185B;
             --color-pink-accent: #E91E63;
-            --color-pink-light: #F8BBD0; /* 🚨 NEW: Light Pink for User */
+            --color-pink-light: #F8BBD0; 
             --color-text-dark: #333333;
             --color-text-subtle: #757575;
             --color-shadow: rgba(0,0,0,0.08);
@@ -476,7 +476,7 @@
         let chatSocket = null;
         let customerId = localStorage.getItem('chat_customer_id'); 
         
-        // Global store for user profile to ensure accurate handshake data
+        // Global store for user profile
         let currentUserProfile = {};
         
         if (!customerId) {
@@ -484,11 +484,15 @@
             localStorage.setItem('chat_customer_id', customerId);
         }
         
-        let isLiveAgentConnected = false; 
+        // 🚨 STATE PERSISTENCE: Check if we were already connected to a live agent
+        let isLiveAgentConnected = localStorage.getItem('chat_live_agent_active') === 'true';
         let isHandoffRequested = false;
         
         // Flag to track if bot is expecting a rating
         let awaitingRating = false;
+        
+        // Interval reference for heartbeat
+        let statusInterval = null;
 
         // --- UTILITY FUNCTIONS ---
         
@@ -530,7 +534,6 @@
             } catch (error) {
                 console.warn('Could not fetch user profile:', error);
             } finally {
-                // 🚨 LOAD HISTORY AFTER USER ID IS CONFIRMED
                 loadChatHistory();
             }
         }
@@ -588,7 +591,6 @@
         
         // --- CHAT FUNCTIONS ---
 
-        // 🚨 UPDATED: appendMessage now handles distinct styling classes
         function appendMessage(text, sender, isHumanAgent = false, saveToStorage = true) {
             const msgDiv = document.createElement('div');
             
@@ -634,7 +636,6 @@
                 console.warn('Error reading chat history', e);
             }
             history.push(msgObj);
-            // Limit history to last 50 messages to prevent overflow
             if (history.length > 50) history = history.slice(-50);
             localStorage.setItem(storageKey, JSON.stringify(history));
         }
@@ -664,8 +665,8 @@
         function handleBotResponse(userMessage) {
             const msg = userMessage.toLowerCase();
             
-            chatInput.disabled = true;
-            document.getElementById('chat-send-btn').disabled = true;
+            // 🚨 REMOVED: Disabling input is annoying for users
+            // chatInput.disabled = true; 
             
             setTimeout(() => {
                 // Rating Logic
@@ -675,18 +676,13 @@
                      if (['1', '2', '3', '4', '5'].some(num => msg.includes(num)) || 
                          ['one', 'two', 'three', 'four', 'five'].some(num => msg.includes(num)) ||
                          ['star', 'bad', 'good', 'excellent', 'poor'].some(w => msg.includes(w))) {
-                         
-                         // In a real app, send rating to backend
-                         
+                         // Send rating to backend logic here
                      } else {
                          response = "Thanks! We've noted your feedback. Let us know if you need anything else.";
                      }
                      
                      appendMessage(response, 'admin', false);
                      awaitingRating = false; 
-                     
-                     chatInput.disabled = false;
-                     document.getElementById('chat-send-btn').disabled = false;
                      chatInput.focus();
                      return; 
                 }
@@ -758,15 +754,20 @@
                     isHandoffRequested = true;
                     initiateAgentHandoff(userMessage); 
                 } else {
-                    chatInput.disabled = false;
-                    document.getElementById('chat-send-btn').disabled = false;
                     chatInput.focus();
                 }
             }, 400); 
         }
 
         function initiateAgentHandoff(lastMessage) {
-            const verifiedName = currentUserProfile.full_name || nameInput.value || 'Anonymous Client';
+            // 🚨 UPDATED LOGIC: Aggressively find the name to ensure prefilling works
+            let verifiedName = 'Valued Customer';
+            
+            if (currentUserProfile && currentUserProfile.full_name) {
+                verifiedName = currentUserProfile.full_name;
+            } else if (nameInput && nameInput.value && nameInput.value.trim() !== '') {
+                verifiedName = nameInput.value.trim();
+            }
 
             const handoffPayload = JSON.stringify({
                 message: lastMessage,
@@ -776,8 +777,7 @@
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(handoffPayload);
-                chatInput.disabled = true;
-                document.getElementById('chat-send-btn').disabled = true;
+                // 🚨 CHANGED: Input is NOT disabled while waiting
             } else {
                 appendMessage("Error initiating handoff: Chat connection is closed. Please try again.", 'admin', false);
                 isHandoffRequested = false;
@@ -788,6 +788,8 @@
             if (chatSocket && chatSocket.readyState !== WebSocket.CLOSED) {
                 chatSocket.close();
             }
+            
+            if (statusInterval) clearInterval(statusInterval);
 
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsHost = window.location.host;
@@ -796,21 +798,37 @@
             chatSocket = new WebSocket(chatUrl);
             
             chatSocket.onopen = () => {
-                setChatHeaderStatus(false);
+                // Don't reset live status here; rely on Persistence + Handshake
                 chatInput.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
+                
+                // 🚨 NEW: Heartbeat to check connection status constantly
+                statusInterval = setInterval(() => {
+                    if (chatSocket.readyState === WebSocket.OPEN) {
+                         chatSocket.send(JSON.stringify({ check_status: true }));
+                    }
+                }, 3000);
             };
 
             chatSocket.onmessage = (event) => {
                 try {
                     const data = JSON.parse(event.data);
                     
+                    if (data.type === 'CONNECTION_STATUS') {
+                        // Update state based on server response
+                        if (data.connected && !isLiveAgentConnected) {
+                            isLiveAgentConnected = true;
+                            isHandoffRequested = false;
+                            localStorage.setItem('chat_live_agent_active', 'true');
+                            setChatHeaderStatus(true);
+                        }
+                        return;
+                    }
+                    
                     if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
                         isLiveAgentConnected = true;
                         isHandoffRequested = false;
-                        chatInput.disabled = false;
-                        document.getElementById('chat-send-btn').disabled = false;
-                        // 🚨 CHANGED: Pass 'system' as sender for the styled system bubble
+                        localStorage.setItem('chat_live_agent_active', 'true'); // 🚨 Persist state
                         appendMessage('A live agent has joined the chat. How can they assist you?', 'system', false); 
                         setChatHeaderStatus(true); 
                         return;
@@ -819,9 +837,9 @@
                     if (data.sender === 'system' && data.message === 'AGENT_LEFT') {
                         isLiveAgentConnected = false;
                         isHandoffRequested = false;
+                        localStorage.removeItem('chat_live_agent_active'); // 🚨 Clear state
                         setChatHeaderStatus(false); 
                         
-                        // 🚨 CHANGED: Pass 'system' as sender
                         appendMessage('The agent has ended the conversation.', 'system', false);
                         
                         setTimeout(() => {
@@ -842,17 +860,16 @@
             };
 
             chatSocket.onclose = () => {
-                appendMessage('Connection lost. Please try reopening the chat or reloading the page.', 'system', false);
-                chatInput.disabled = true;
-                document.getElementById('chat-send-btn').disabled = true;
+                appendMessage('Connection lost. Reconnecting...', 'system', false);
                 isLiveAgentConnected = false;
-                isHandoffRequested = false;
+                // Do not clear local storage immediately on disconnect (might be reload)
                 setChatHeaderStatus(false);
+                
+                if (statusInterval) clearInterval(statusInterval);
             };
             
             chatSocket.onerror = (error) => {
                 console.error('WebSocket Error:', error);
-                appendMessage('A connection error occurred. Check network.', 'system', false);
             };
         }
 
@@ -862,7 +879,6 @@
             chatOverlay.style.display = 'block';
             
             if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
-                // Logic handled by loadChatHistory and connectChatSocket
                 connectChatSocket();
                 setTimeout(() => { chatBody.scrollTop = chatBody.scrollHeight; }, 100);
             } else if (chatSocket.readyState === WebSocket.OPEN) {
@@ -888,24 +904,33 @@
 
             chatInput.value = ''; 
 
+            // Logic flow
             if (isLiveAgentConnected && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-                
+                // 1. Connected to Live Agent -> Send to Socket
                 const payload = JSON.stringify({ message: messageText });
                 chatSocket.send(payload); 
                 appendMessage(messageText, 'user'); 
 
-            } else if (!isLiveAgentConnected) {
+            } else if (isHandoffRequested) {
+                // 2. 🚨 Waiting for Agent -> Just show message (Bot is silent)
+                appendMessage(messageText, 'user'); 
                 
+                // Optional: send to socket so admin sees context even while waiting
+                if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                     const payload = JSON.stringify({ message: messageText });
+                     chatSocket.send(payload); 
+                }
+
+            } else {
+                // 3. Normal Bot Mode
                 appendMessage(messageText, 'user'); 
                 handleBotResponse(messageText);
-                
-            } else {
-                 appendMessage('Not connected. Please wait for the connection to open.', 'system', false);
             }
         });
 
         fetchUserProfile();
-        setChatHeaderStatus(false); 
+        // Initialize Header status based on persisted storage
+        setChatHeaderStatus(isLiveAgentConnected); 
     </script>
 
 </body>
