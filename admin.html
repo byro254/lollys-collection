@@ -2471,48 +2471,91 @@ function closeChatModal() {
 /**
  * Fetches all registered users (customers) and renders them as clickable chat sessions.
  */
- async function fetchAndRenderChatUsers() {
-        const list = document.getElementById('chat-sessions-list');
-        const loading = document.getElementById('chat-loading');
-        list.innerHTML = '';
-        loading.style.display = 'block';
-        
-        try {
-            // 🚨 CALLING NEW ENDPOINT
-            const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
-            const users = await response.json();
+ /**
+ * Fetches all registered users (customers) and renders them as clickable chat sessions, 
+ * showing a 'New' badge if they have an unread message.
+ */
+async function fetchAndRenderChatUsers() {
+    // Check auth status before running
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const list = document.getElementById('chat-sessions-list');
+    const loading = document.getElementById('chat-loading');
+    list.innerHTML = '';
+    loading.style.display = 'block';
+    
+    try {
+        // Fetch users/sessions (API Endpoint: /api/admin/chat/recent-sessions)
+        const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
+        const users = await response.json();
 
-            loading.style.display = 'none';
+        loading.style.display = 'none';
 
-            if (users.length === 0) {
-                list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
-                return;
-            }
-
-            users.forEach(user => {
-                const listItem = document.createElement('li');
-                listItem.className = 'chat-session-item';
-                listItem.dataset.customerId = user.id;
-                
-                const isUnread = unreadSessions.has(user.id);
-                const badge = isUnread ? `<span class="badge-waiting">New</span>` : '';
-
-                listItem.innerHTML = `
-                    <div>
-                        <strong>${user.full_name} ${badge}</strong>
-                        <p style="margin: 0; font-size: 0.8rem;">${user.email}</p>
-                    </div>
-                    <span><i class="fas fa-arrow-right"></i> Chat</span>
-                `;
-                listItem.onclick = () => openChatModal(user.id, user.full_name);
-                list.appendChild(listItem);
-            });
-
-        } catch (error) {
-            console.error('Error fetching chat users:', error);
-            loading.textContent = '❌ Failed to load chat users.';
+        if (users.length === 0) {
+            list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
+            return;
         }
+
+        // Sort users: Unread sessions first, then by last activity time (latest first)
+        users.sort((a, b) => {
+            // Note: customerId's are often stored as numbers in DB but may be handled as strings in JS Sets
+            const aIdString = a.id.toString(); 
+            const bIdString = b.id.toString();
+            
+            const aIsUnread = unreadSessions.has(aIdString);
+            const bIsUnread = unreadSessions.has(bIdString);
+
+            if (aIsUnread && !bIsUnread) return -1; // 'a' is unread, put first
+            if (!aIsUnread && bIsUnread) return 1;  // 'b' is unread, put first
+            
+            // If both same read status, sort by most recent activity (latest first)
+            const aTime = new Date(a.last_message_time || 0).getTime();
+            const bTime = new Date(b.last_message_time || 0).getTime();
+            return bTime - aTime;
+        });
+
+        users.forEach(user => {
+            const userId = user.id.toString(); // Ensure consistency (ID is used as string in Set)
+            const listItem = document.createElement('li');
+            listItem.className = 'chat-session-item';
+            listItem.dataset.customerId = userId;
+            
+            // Check if the user's ID is in the global unreadSessions Set
+            const isUnread = unreadSessions.has(userId); 
+            // Using a badge class for visual distinction (like 'pending' which is yellow/warning)
+            const badge = isUnread ? `<span class="status-badge pending" style="margin-left: 10px; padding: 2px 6px;">NEW</span>` : '';
+            
+            const lastMessageContent = user.last_message_content || '...';
+            
+            // Truncate message content for preview
+            const messagePreview = lastMessageContent.length > 50 
+                                 ? lastMessageContent.substring(0, 50).trim() + '...' 
+                                 : lastMessageContent;
+
+            // Format time for the list item
+            const lastMessageTime = user.last_message_time 
+                                    ? new Date(user.last_message_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                                    : 'N/A';
+
+            listItem.innerHTML = `
+                <div>
+                    <strong>${user.full_name} ${badge}</strong>
+                    <p style="margin: 0; font-size: 0.8rem; color: var(--color-text-dark);">${user.email}</p>
+                    <p style="margin: 0; margin-top: 5px; font-size: 0.75rem; color: var(--color-text-subtle);">
+                        <i class="fas fa-clock"></i> ${lastMessageTime} - ${messagePreview}
+                    </p>
+                </div>
+                <span><i class="fas fa-arrow-right"></i> Chat</span>
+            `;
+            listItem.onclick = () => openChatModal(parseInt(user.id), user.full_name);
+            list.appendChild(listItem);
+        });
+
+    } catch (error) {
+        console.error('Error fetching chat users:', error);
+        loading.textContent = '❌ Failed to load chat users.';
     }
+}
 
 /**
  * Handles sending a message via the WebSocket connection.

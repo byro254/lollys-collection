@@ -318,13 +318,13 @@ async function updateUserStatus(userId, newStatus) {
  * @param {string} message - The content of the message.
  * @returns {Promise<object>} The result of the database query.
  */
-async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
+async function saveChatMessage(customerId, senderRole, senderId, recipientId, message,messageText) {
     // 🚨 UPDATED QUERY: Inserting into the new ID columns
     const query = `
-        INSERT INTO chats (customer_id, sender_role, received_from_id, sent_to_id, message_content)
+        INSERT INTO chats_messages (customer_id, sender_role, received_from_id, sent_to_id, message_content)
         VALUES (?, ?, ?, ?, ?);
     `;
-    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
+    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message,messageText]);
     return result;
 }
 

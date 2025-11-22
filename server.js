@@ -402,40 +402,44 @@ app.post('/api/forgot-password', async (req, res) => {
 //                   NEW CHAT API ENDPOINTS (History & Sessions)
 // =========================================================
 
+
 /**
  * GET /api/admin/chat/recent-sessions
- * 🚨 NEW: Fetches only users who have chatted recently (last 24 hours) or have unread messages.
- * Used to populate the Admin Chat Sidebar without listing every single registered user.
+ * 🚨 FIX: Fetches chat sessions with the latest message content and time for the admin queue.
  */
 app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
     try {
-        // This complex query does the following:
-        // 1. Gets unique customer_ids from chat_messages
-        // 2. Orders them by the most recent message time
-        // 3. Joins with users table to get names (if registered)
-        // 4. Limits to top 20 recent conversations
-        
+        // Query to find the latest message and join with users
         const sql = `
             SELECT 
                 m.customer_id, 
-                MAX(m.created_at) as last_active,
+                m.message_content AS last_message_content, 
+                m.created_at AS last_message_time,
                 u.full_name, 
                 u.email
             FROM chat_messages m
+            INNER JOIN (
+                SELECT 
+                    customer_id, 
+                    MAX(created_at) AS max_created_at
+                FROM chat_messages
+                GROUP BY customer_id
+            ) AS latest_msg 
+                ON m.customer_id = latest_msg.customer_id AND m.created_at = latest_msg.max_created_at
             LEFT JOIN users u ON m.customer_id = u.id
-            GROUP BY m.customer_id
-            ORDER BY last_active DESC
+            ORDER BY last_message_time DESC
             LIMIT 20;
         `;
         
         const [rows] = await pool.query(sql);
         
-        // Format data for frontend
+        // Format data for frontend (Ensuring ID is a string for the Set on the client side)
         const sessions = rows.map(row => ({
-            id: row.customer_id, // Can be 'anon-...' or '123'
+            id: String(row.customer_id), // CRITICAL: Ensure ID is a string
             full_name: row.full_name || 'Guest User',
             email: row.email || 'N/A',
-            last_active: row.last_active
+            last_message_time: row.last_message_time, // NEW: Used for sorting
+            last_message_content: row.last_message_content // NEW: Used for preview
         }));
 
         res.json(sessions);
@@ -1534,7 +1538,7 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             }
             
             // Save the customer's initial message to history
-            await saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message);
+            await saveChatMessage(customerId, senderRole, senderId, recipientId,messageText, parsed.message);
             
             return;
             

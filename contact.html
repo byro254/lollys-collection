@@ -774,7 +774,10 @@
         }
 
         function initiateAgentHandoff(lastMessage) {
-            // 🚨 UPDATED LOGIC: Aggressively find the name to ensure prefilling works
+            // Check if handoff is already initiated to prevent spamming the admin notification socket
+            if (isHandoffRequested) return;
+
+            // Aggressively find the name to ensure prefilling works
             let verifiedName = 'Valued Customer';
             
             if (currentUserProfile && currentUserProfile.full_name) {
@@ -784,14 +787,16 @@
             }
 
             const handoffPayload = JSON.stringify({
-                message: lastMessage,
+                message: lastMessage, // Send the last message content
                 handoff: true,
                 customerName: verifiedName
             });
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                // IMPORTANT: The original user message has ALREADY been sent via the chatForm listener.
+                // We only send the HANDOFF SIGNAL here.
                 chatSocket.send(handoffPayload);
-                // 🚨 CHANGED: Input is NOT disabled while waiting
+                isHandoffRequested = true; // Set state to prevent duplicate handoffs
             } else {
                 appendMessage("Error initiating handoff: Chat connection is closed. Please try again.", 'admin', false);
                 isHandoffRequested = false;
