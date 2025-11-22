@@ -319,11 +319,12 @@ async function updateUserStatus(userId, newStatus) {
  * @returns {Promise<object>} The result of the database query.
  */
 async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
-    // 🚨 FIX: Using the confirmed table name 'chat_messages'
+    // 🚨 CRITICAL FIX: Change 'received_from_id' to the required database column 'sender_id'
     const query = `
-        INSERT INTO chat_messages (customer_id, sender_role, received_from_id, sent_to_id, message_content)
+        INSERT INTO chat_messages (customer_id, sender_role, sender_id, sent_to_id, message_content)
         VALUES (?, ?, ?, ?, ?);
     `;
+    // The values passed must still match the number of placeholders
     const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
     return result;
 }
