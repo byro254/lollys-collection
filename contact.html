@@ -954,27 +954,24 @@
 
         // --- EVENT LISTENERS ---
         
-        chatIcon.addEventListener('click', () => {
-            chatOverlay.style.display = 'block';
+        chatIcon.addEventListener('click', async () => { // Make async to await checkAuthentication
+            // 1. Check authentication status
+            const loggedIn = await checkAuthentication(); 
+
+            if (!loggedIn) {
+                // If not logged in, show the blocking modal and stop execution
+                authGateModal.style.display = 'flex';
+                return;
+            }
             
-            // Check auth again when opening chat, but don't block access yet
-            checkAuthentication();
+            // 2. If authenticated, proceed to open chat and connect
+            chatOverlay.style.display = 'block';
             
             if (!chatSocket || chatSocket.readyState === WebSocket.CLOSED) {
                 connectChatSocket();
                 setTimeout(() => { chatBody.scrollTop = chatBody.scrollHeight; }, 100);
             } else if (chatSocket.readyState === WebSocket.OPEN) {
                 chatBody.scrollTop = chatBody.scrollHeight;
-            }
-        });
-
-        chatCloseBtn.addEventListener('click', () => {
-            chatOverlay.style.display = 'none';
-        });
-
-        chatOverlay.addEventListener('click', function(e) {
-            if (e.target === chatOverlay) {
-                chatOverlay.style.display = 'none';
             }
         });
         

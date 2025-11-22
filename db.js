@@ -329,20 +329,21 @@ async function saveChatMessage(customerId, senderRole, senderId, recipientId, me
     return result;
 }
 
+
 /**
  * Fetches the entire chat history for a specific customer.
  * @param {string} customerId - The ID of the customer (or user ID) for the chat session.
  * @returns {Promise<Array<object>>} List of chat message objects, ordered by time.
  */
 async function getChatHistory(customerId) {
-    // 🚨 FIX: Using the confirmed table name 'chat_messages'
+    // 🚨 CRITICAL FIX: Change 'sent_at' to the likely correct database column 'created_at'
     const query = `
-        SELECT sender_role, received_from_id, sent_to_id, message_content, sent_at
+        SELECT sender_role, sender_id, sent_to_id, message_content, created_at
         FROM chat_messages
         WHERE customer_id = ?
-        ORDER BY sent_at ASC;
+        ORDER BY created_at ASC;
     `;
-    // NOTE: Column names `sent_at` and `sent_to_id/received_from_id` are assumed to be correct in your schema.
+    // NOTE: We also fixed the sender column name here to 'sender_id' based on previous context.
     const [rows] = await pool.query(query, [customerId]); 
     return rows;
 }

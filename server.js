@@ -1712,6 +1712,7 @@ server.on('upgrade', (req, socket, head) => {
         }
         // ------------------------------------
 
+        
         // 3. Security Check
         const isAdminRequest = role === 'admin';
         const isCustomerRequest = role === 'customer';
@@ -1724,10 +1725,17 @@ server.on('upgrade', (req, socket, head) => {
                 return;
             }
         } else if (isCustomerRequest) {
-            // Note: Customer chat doesn't strictly need login. The ID is for tracking history.
-            if (!finalCustomerId) { // Use finalCustomerId for validation
-                 console.log('Customer WebSocket Missing ID.');
-                 socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+            // 🚨 CRITICAL FIX: Enforce logged-in session for customer chat
+            if (!req.session.userId) { 
+                 console.log('Customer WebSocket Auth Failed: Not Logged In.');
+                 socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+                 socket.destroy();
+                 return;
+            }
+            // 🚨 NEW: Also ensure customerId matches the logged-in user ID
+            if (String(req.session.userId) !== finalCustomerId) {
+                 console.log(`Customer WebSocket Auth Failed: ID Mismatch (${req.session.userId} != ${finalCustomerId}).`);
+                 socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
                  socket.destroy();
                  return;
             }
@@ -1735,6 +1743,8 @@ server.on('upgrade', (req, socket, head) => {
              socket.destroy();
              return;
         }
+        
+       
         
         // 4. Attach params/session data for use in the wss.on('connection') handler
         // CRITICAL: Use the finalCustomerId (which is the DB ID if logged in)
