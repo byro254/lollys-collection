@@ -714,13 +714,15 @@
                             <label for="product-category">Category:</label>
                             <select id="product-category" name="category" required>
                                 <option value="" disabled selected>Select a Category</option>
-                                <option value="Cap">Cap</option>
-                                <option value="Topware">Topware</option>
-                                <option value="Footwear">Footwear</option>
-                                <option value="Dresses">Dresses</option>
-                                <option value="Electronics">Electronics</option>
-                                <option value="HomeDecor">Home Decor</option>
-                                <option value="Other">Other</option>
+                               <option value="Cap">Cap</option>
+                               <option value="Topwear">Topwear</option>
+                               <option value="Bottomwear">Bottomwear</option>
+                               <option value="Footwear">Footwear</option>
+                               <option value="Dresses">Dresses</option>
+                               <option value="Apparel">Apparel</option>
+                               <option value="Electronics">Electronics</option>
+                               <option value="HomeDecor">Home Decor</option>
+                               <option value="Phone Accessories">Phone Accessories</option>
                             </select>
                         </div>
                     </div>
@@ -984,7 +986,21 @@
             </form>
         </div>
     </div>
-   <script>
+  <div id="handoff-modal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 450px; text-align: center; padding: 40px;">
+            <i class="fas fa-handshake" style="font-size: 3rem; color: var(--color-warning); margin-bottom: 20px;"></i>
+            <h3 style="border-bottom: none; margin-bottom: 15px;">Live Chat Handoff Request!</h3>
+            <p>Customer <strong id="handoff-customer-name"></strong> is requesting a live agent.</p>
+            <p style="font-size: 0.9rem; color: var(--color-text-subtle);">Last Message: "<span id="handoff-customer-message">...</span>"</p>
+            <button class="submit-button" id="handoff-accept-btn" style="margin-top: 20px;">
+                <i class="fas fa-comments"></i> Accept Chat
+            </button>
+             <button class="action-button" id="handoff-reject-btn" style="background-color: var(--color-danger); margin-left: 10px;">
+                <i class="fas fa-times"></i> Dismiss
+            </button>
+        </div>
+    </div>
+  <script>
        // Ensure this URL matches your backend API
 const API_BASE_URL = '/api'; 
 
@@ -1334,6 +1350,45 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // NEW: Add event listener for the chat input form
     document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
+
+const handoffModal = document.getElementById('handoff-modal');
+    const handoffAcceptBtn = document.getElementById('handoff-accept-btn');
+    const handoffRejectBtn = document.getElementById('handoff-reject-btn');
+    
+    // Listener for accepting the chat
+    handoffAcceptBtn.addEventListener('click', function() {
+        const customerId = this.dataset.customerId;
+        const customerName = this.dataset.customerName;
+        
+        handoffModal.style.display = 'none';
+        
+        // 1. Open the Chat Modal and connect the *main* WebSocket
+        openChatModal(parseInt(customerId), customerName); 
+        
+        // 2. Send the HANDOFF_SUCCESS message to the customer via the new main WebSocket
+        // This is done automatically in the sendChatMessage function if we pass a special payload
+        
+        // We will send a system message to the customer's chat to confirm connection
+        if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            webSocket.send(JSON.stringify({ 
+                sender: 'system', 
+                message: 'HANDOFF_SUCCESS',
+                is_admin_handshake: true // Signal server to send system message to customer
+            }));
+        }
+
+        // 3. Remove from unread sessions
+        unreadSessions.delete(customerId);
+        updateNotificationIcon();
+    });
+    
+    // Listener for dismissing the chat
+    handoffRejectBtn.addEventListener('click', function() {
+        // Simply close the modal without taking action
+        handoffModal.style.display = 'none';
+    });
+    
+    initializeAdminNotificationSocket();
 });
 
 
@@ -2224,8 +2279,29 @@ function initializeAdminNotificationSocket() {
         try {
             const data = JSON.parse(event.data);
             
-            // We expect the server to send messages specifically addressed to the admin (role: 'customer' sender)
-            if (data.sender === 'customer') {
+            // 🚨 HANDOFF REQUEST ARRIVED
+            if (data.sender === 'customer' && data.handoff_request) {
+                const customerId = data.customerId;
+                const customerName = data.customerName || 'A Client';
+                
+                // 1. Show Toast Alert
+                showToast(`Live Agent Handoff: ${customerName} is waiting!`, 'warning', 10000);
+                
+                // 2. Show Modal Pop-up
+                document.getElementById('handoff-customer-name').textContent = customerName;
+                document.getElementById('handoff-customer-message').textContent = data.message;
+                
+                const acceptBtn = document.getElementById('handoff-accept-btn');
+                acceptBtn.dataset.customerId = customerId; // Store customer ID for acceptance
+                acceptBtn.dataset.customerName = customerName;
+                
+                document.getElementById('handoff-modal').style.display = 'flex';
+                
+                // 3. Add to unread set (if needed for the sidebar count)
+                unreadSessions.add(customerId);
+                updateNotificationIcon();
+            } else if (data.sender === 'customer') {
+                // We expect the server to send messages specifically addressed to the admin (role: 'customer' sender)
                 const customerId = data.customerId; // Server must include customerId in notification payload
                 const customerName = data.customerName || 'A Client'; // Server must include customer name
 

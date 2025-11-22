@@ -67,7 +67,8 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
 // Admin ID used for chat, using the session ID set during login
 const ADMIN_CHAT_ID = 'admin_env'; 
-
+const { OpenAI } = require('openai');
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // --- Multer and Nodemailer setup ---
 const UPLOAD_DIR = path.join(__dirname, 'public/images/products');
 const PROFILE_UPLOAD_DIR = path.join(__dirname, 'public/images/profiles');
@@ -1284,7 +1285,105 @@ app.post('/api/reset-password', async (req, res) => {
 // =========================================================
 //                   REAL-TIME CHAT SETUP
 // =========================================================
+// --- New function in server.js to handle AI interaction ---
 
+/**
+ * Executes a database query to get product details based on a user query.
+ * @param {string} query - Keyword for product search.
+ */
+async function getProductDetails({ query }) {
+     // 🚨 INTEGRATION POINT: Connects AI to MySQL DB
+     const [rows] = await pool.query(
+         `SELECT name, price, stock FROM products WHERE name LIKE ? OR description LIKE ? LIMIT 5`, 
+         [`%${query}%`, `%${query}%`]
+     );
+     if (rows.length === 0) return JSON.stringify({ status: 'not_found', query });
+     return JSON.stringify(rows);
+}
+
+/**
+ * Routes the customer message to the external AI service, handles product lookups,
+ * and generates a dynamic response.
+ * @param {string} userMessage - The customer's raw message.
+ * @returns {string} The AI-generated response text.
+ */
+async function getSmartBotResponse(userMessage) {
+    const systemPrompt = `You are Lolly Bot, a friendly, concise, and helpful customer service AI for Lolly's Collection, an e-commerce store specializing in clothing and accessories. Your tone must be warm, slightly casual, and professional. 
+    
+    Current Date: ${new Date().toLocaleDateString()}.
+    
+    Instructions:
+    1. If the user asks about products, use the provided getProductDetails tool.
+    2. If the user expresses frustration (emotionally charged words), respond with empathy and suggest connecting to a live agent.
+    3. DO NOT answer questions about returns, refunds, or complex order status—instead, gently suggest they ask for an agent.
+    4. Keep answers short, ideally 1-2 sentences.`;
+
+    const productTool = {
+        type: "function",
+        function: {
+            name: "getProductDetails",
+            description: "Gets the names, prices, and stock of products to answer shopping queries.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description: "A single keyword or phrase to search for specific products (e.g., 'cap', 'red dress')."
+                    },
+                },
+                required: ["query"],
+            },
+        },
+    };
+
+    const availableFunctions = { getProductDetails };
+    
+    const messages = [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+    ];
+
+    try {
+        // 1. Initial AI Call (Check for Tool Request)
+        let response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo', // Use a high-quality model for best results
+            messages: messages,
+            tools: [productTool], 
+            tool_choice: "auto",
+        });
+
+        // 2. Handle Tool Call (if the AI decides it needs product data)
+        if (response.choices[0].message.tool_calls) {
+            const toolCall = response.choices[0].message.tool_calls[0];
+            const functionName = toolCall.function.name;
+            const functionToCall = availableFunctions[functionName];
+            const functionArgs = JSON.parse(toolCall.function.arguments);
+            
+            // Execute the database function
+            const toolOutput = await functionToCall(functionArgs);
+
+            // Send the function result back to the AI
+            messages.push(response.choices[0].message);
+            messages.push({
+                tool_call_id: toolCall.id,
+                role: "tool",
+                content: toolOutput,
+            });
+            
+            // Second AI Call (Generate the final response based on DB data)
+            response = await openai.chat.completions.create({
+                model: 'gpt-3.5-turbo',
+                messages: messages,
+            });
+        }
+        
+        return response.choices[0].message.content;
+
+    } catch (error) {
+        console.error('External AI Service Error:', error);
+        return "I'm having trouble connecting to my brain (the AI service). Please try asking for a live agent by typing 'agent'.";
+    }
+}
 // Global Map to hold active WebSocket connections for Admin and Customer
 // Key: customerId (string) -> Value: { admin: WebSocket | null, customer: WebSocket | null }
 const chatSessions = new Map(); 
@@ -1292,7 +1391,8 @@ const chatSessions = new Map();
 // Create a WebSocket Server
 const wss = new WebSocket.Server({ noServer: true });
 
-// Function to handle message saving and relaying
+
+
 async function handleChatMessage(ws, message, senderRole, customerId) {
     if (!message || !customerId) return;
     
@@ -1300,33 +1400,74 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
     const sessionData = chatSessions.get(customerId);
     if (!sessionData) return console.log(`Session data missing for customer ${customerId}`);
 
-    // The user's ID is the session key (customerId). The admin ID is the constant.
     const senderId = (senderRole === 'admin') ? ADMIN_CHAT_ID : customerId;
     const recipientId = (senderRole === 'admin') ? customerId : ADMIN_CHAT_ID;
     
-    const payload = {
-        sender: senderRole,
-        message: message
-    };
-    
-    // 1. Save to Database (using the updated function signature)
     try {
-        await saveChatMessage(customerId, senderRole, senderId, recipientId, message);
-    } catch (dbError) {
-        console.error(`DB Save Error for ${customerId}:`, dbError);
-        // Optionally send a notification back to the sender that the message failed to save
-    }
+        const parsed = JSON.parse(message);
+        
+        // 1. AI Request Routing (Customer to Bot/AI)
+        if (senderRole === 'customer' && parsed.ai_request) {
+            
+            const userMessage = parsed.message;
+            const aiResponseText = await getSmartBotResponse(userMessage);
 
-    // 2. Relay the message to the other participant in the session
-    const target = (senderRole === 'admin' ? sessionData.customer : sessionData.admin);
-    
-    if (target && target.readyState === WebSocket.OPEN) {
-        target.send(JSON.stringify(payload));
-    } else {
-        console.log(`Relay failed: ${senderRole}'s target is not open or undefined.`);
+            // A. Send AI response back to the customer
+            const aiPayload = { sender: 'admin', message: aiResponseText };
+            ws.send(JSON.stringify(aiPayload));
+            
+            // B. Send System signal to re-enable customer input
+            const inputReadyPayload = { sender: 'system', message: 'INPUT_READY' };
+            ws.send(JSON.stringify(inputReadyPayload)); 
+            
+            return;
+
+        // 2. Handoff Request Routing (Customer to Admin Notification)
+        } else if (senderRole === 'customer' && parsed.handoff) {
+            
+            // Notify the admin via the Notification Socket
+            const notificationPayload = JSON.stringify({
+                sender: 'customer',
+                customerId: customerId,
+                customerName: parsed.customerName || 'Anonymous',
+                message: parsed.message, // The message that triggered the handoff
+                handoff_request: true
+            });
+            
+            // Send the notification to the dedicated admin notification socket
+            const adminWs = chatSessions.get(ADMIN_CHAT_ID)?.admin;
+            if (adminWs && adminWs.readyState === WebSocket.OPEN) {
+                adminWs.send(notificationPayload);
+            }
+            
+            // Save the customer's initial message to history
+            await saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message);
+            
+            return;
+            
+        // 3. Standard Live Chat Routing (Saves and Relays)
+        } else {
+            const messageText = parsed.message;
+            
+            // Save to DB
+            await saveChatMessage(customerId, senderRole, senderId, recipientId, messageText);
+            
+            // Relay the message to the other participant in the session
+            const target = (senderRole === 'admin' ? sessionData.customer : sessionData.admin);
+            const payload = { sender: senderRole, message: messageText };
+            
+            if (target && target.readyState === WebSocket.OPEN) {
+                target.send(JSON.stringify(payload));
+            } else {
+                console.log(`Relay failed: ${senderRole}'s target is not open or undefined.`);
+            }
+        }
+    } catch (error) {
+        console.error('WebSocket Routing/Message Error:', error);
+        // Fallback response for customer
+        ws.send(JSON.stringify({ sender: 'admin', message: 'Sorry, I encountered an internal error. Please try again.' }));
     }
 }
-
 // Function to clean up a session
 function cleanupSession(customerId, role) {
     const session = chatSessions.get(customerId);
