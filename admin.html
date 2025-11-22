@@ -1341,15 +1341,15 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('delete-confirm-modal').style.display = 'none'; 
             await deleteProduct(productId); 
         }
-    initializeAdminNotificationSocket();
-    
     });
     
-    // Add event listener for the new reply form
-    document.getElementById('reply-form').addEventListener('submit', sendReply);
+    initializeAdminNotificationSocket();
     
-    // NEW: Add event listener for the chat input form
-    document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
+// Add event listener for the new reply form
+document.getElementById('reply-form').addEventListener('submit', sendReply);
+
+// NEW: Add event listener for the chat input form
+document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
 
 const handoffModal = document.getElementById('handoff-modal');
     const handoffAcceptBtn = document.getElementById('handoff-accept-btn');
@@ -1387,6 +1387,33 @@ const handoffModal = document.getElementById('handoff-modal');
         // Simply close the modal without taking action
         handoffModal.style.display = 'none';
     });
+    
+    initializeAdminNotificationSocket();
+ window.showAdminSection = (targetId) => {
+            document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
+            document.getElementById(targetId).classList.add('active');
+            if (targetId === 'chat') fetchAndRenderChatUsers();
+        };
+
+        
+        handoffAcceptBtn.addEventListener('click', function() {
+            const customerId = this.dataset.customerId;
+            const customerName = this.dataset.customerName;
+            document.getElementById('handoff-modal').style.display = 'none';
+            openChatModal(customerId, customerName); 
+            
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                webSocket.send(JSON.stringify({ sender: 'system', message: 'HANDOFF_SUCCESS', is_admin_handshake: true }));
+            }
+            unreadSessions.delete(customerId);
+            updateNotificationIcon();
+        });
+
+        document.getElementById('handoff-reject-btn').addEventListener('click', () => {
+            document.getElementById('handoff-modal').style.display = 'none';
+        });
+
+    document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
     
     initializeAdminNotificationSocket();
 });
@@ -2279,56 +2306,74 @@ function initializeAdminNotificationSocket() {
         try {
             const data = JSON.parse(event.data);
             
-            // 🚨 HANDOFF REQUEST ARRIVED
-            if (data.sender === 'customer' && data.handoff_request) {
-                const customerId = data.customerId;
-                const customerName = data.customerName || 'A Client';
-                
-                // 1. Show Toast Alert
-                showToast(`Live Agent Handoff: ${customerName} is waiting!`, 'warning', 10000);
-                
-                // 2. Show Modal Pop-up
-                document.getElementById('handoff-customer-name').textContent = customerName;
-                document.getElementById('handoff-customer-message').textContent = data.message;
-                
-                const acceptBtn = document.getElementById('handoff-accept-btn');
-                acceptBtn.dataset.customerId = customerId; // Store customer ID for acceptance
-                acceptBtn.dataset.customerName = customerName;
-                
-                document.getElementById('handoff-modal').style.display = 'flex';
-                
-                // 3. Add to unread set (if needed for the sidebar count)
-                unreadSessions.add(customerId);
-                updateNotificationIcon();
-            } else if (data.sender === 'customer') {
-                // We expect the server to send messages specifically addressed to the admin (role: 'customer' sender)
-                const customerId = data.customerId; // Server must include customerId in notification payload
-                const customerName = data.customerName || 'A Client'; // Server must include customer name
+           if (data.sender === 'customer' && data.handoff_request) {
+                    const customerId = data.customerId;
+                    const customerName = data.customerName || 'A Client';
+                    
+                    // 1. Ensure user is in the sidebar list immediately
+                    fetchAndRenderChatUsers(); 
 
-                // 1. Alert the admin (Toast notification)
-                showToast(`New message from ${customerName}!`, 'info', 6000);
-                
-                // 2. Add to unread set if the chat modal isn't currently open for this user
-                const modalOpen = document.getElementById('chat-modal').style.display === 'flex';
-                const isCurrentChat = customerId === currentChatCustomerId;
-                
-                if (!modalOpen || !isCurrentChat) {
+                    // 2. BUSY CHECK: If admin is currently in a chat with SOMEONE ELSE
+                    if (currentChatCustomerId && currentChatCustomerId != customerId) {
+                        // Admin is busy. Do NOT open modal.
+                        console.log(`Blocking handoff modal for ${customerName} (Busy with ${currentChatCustomerId})`);
+                        
+                        // Send automated "Busy" message to that customer
+                        sendBusyNotification(customerId);
+                        
+                        // Show subtle toast to admin
+                        showToast(`New chat request from ${customerName} (Added to queue)`, 'warning');
+                        unreadSessions.add(customerId);
+                        updateNotificationIcon();
+                        return;
+                    }
+
+                    // 3. If Admin is FREE, show the modal
+                    document.getElementById('handoff-customer-name').textContent = customerName;
+                    document.getElementById('handoff-customer-message').textContent = data.message;
+                    const acceptBtn = document.getElementById('handoff-accept-btn');
+                    acceptBtn.dataset.customerId = customerId;
+                    acceptBtn.dataset.customerName = customerName;
+                    document.getElementById('handoff-modal').style.display = 'flex';
+                    
                     unreadSessions.add(customerId);
                     updateNotificationIcon();
-                }
-            }
-        } catch (e) {
-            console.error('Failed to parse incoming notification message:', e);
-        }
-    };
 
-    adminNotificationSocket.onclose = () => {
-        console.warn('Notification Socket closed. Attempting reconnect in 5s...');
-        setTimeout(initializeAdminNotificationSocket, 5000); // Attempt to reconnect
-    };
+                } else if (data.sender === 'customer') {
+                    const customerId = data.customerId;
+                    const customerName = data.customerName || 'A Client';
+                    
+                    // Refresh list to show new activity
+                    fetchAndRenderChatUsers();
+
+                    // Alert admin if not currently chatting with this user
+                    const modalOpen = document.getElementById('chat-modal').style.display === 'flex';
+                    if (!modalOpen || customerId != currentChatCustomerId) {
+                        showToast(`New message from ${customerName}!`, 'info');
+                        unreadSessions.add(customerId);
+                        updateNotificationIcon();
+                    }
+                }
+            } catch (e) {
+                console.error('Notification parsing error', e);
+            }
+        };
+
+        adminNotificationSocket.onclose = () => setTimeout(initializeAdminNotificationSocket, 5000);
+    }
     
-    // Note: The /ws/admin/notifications/:adminId endpoint needs to be secured on the server.
-}
+   async function sendBusyNotification(customerId) {
+        try {
+            await fetch(`${API_BASE_URL}/admin/chat/notify-busy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customerId })
+            });
+        } catch (error) {
+            console.error('Failed to send busy notification', error);
+        }
+    }
+
 /**
  * Establishes a WebSocket connection for the current session.
  * @param {number} customerId - The ID of the customer.
@@ -2426,50 +2471,48 @@ function closeChatModal() {
 /**
  * Fetches all registered users (customers) and renders them as clickable chat sessions.
  */
-async function fetchAndRenderChatUsers() {
-    const list = document.getElementById('chat-sessions-list');
-    const loading = document.getElementById('chat-loading');
-    list.innerHTML = '';
-    loading.style.display = 'block';
-    
-    try {
-        // Fetch all users (customers) from the /api/customers endpoint
-        const response = await fetch(`${API_BASE_URL}/customers`);
-        const users = await response.json();
+ async function fetchAndRenderChatUsers() {
+        const list = document.getElementById('chat-sessions-list');
+        const loading = document.getElementById('chat-loading');
+        list.innerHTML = '';
+        loading.style.display = 'block';
+        
+        try {
+            // 🚨 CALLING NEW ENDPOINT
+            const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
+            const users = await response.json();
 
-        if (!response.ok) {
-            throw new Error(users.message || 'Failed to fetch user list for chat.');
+            loading.style.display = 'none';
+
+            if (users.length === 0) {
+                list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
+                return;
+            }
+
+            users.forEach(user => {
+                const listItem = document.createElement('li');
+                listItem.className = 'chat-session-item';
+                listItem.dataset.customerId = user.id;
+                
+                const isUnread = unreadSessions.has(user.id);
+                const badge = isUnread ? `<span class="badge-waiting">New</span>` : '';
+
+                listItem.innerHTML = `
+                    <div>
+                        <strong>${user.full_name} ${badge}</strong>
+                        <p style="margin: 0; font-size: 0.8rem;">${user.email}</p>
+                    </div>
+                    <span><i class="fas fa-arrow-right"></i> Chat</span>
+                `;
+                listItem.onclick = () => openChatModal(user.id, user.full_name);
+                list.appendChild(listItem);
+            });
+
+        } catch (error) {
+            console.error('Error fetching chat users:', error);
+            loading.textContent = '❌ Failed to load chat users.';
         }
-
-        loading.style.display = 'none';
-
-        if (users.length === 0) {
-            list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No registered users found.</li>';
-            return;
-        }
-
-        users.filter(u => !u.is_admin).forEach(user => {
-            const listItem = document.createElement('li');
-            listItem.className = 'chat-session-item';
-            listItem.dataset.customerId = user.id;
-            // NOTE: Last message simulation or actual last message API would be better here
-            listItem.innerHTML = `
-                <div>
-                    <strong>${user.full_name}</strong>
-                    <p style="margin: 0; font-size: 0.8rem;">ID: ${user.id} | ${user.email}</p>
-                </div>
-                <span><i class="fas fa-arrow-right"></i> Chat</span>
-            `;
-            listItem.onclick = () => openChatModal(user.id, user.full_name);
-            list.appendChild(listItem);
-        });
-
-    } catch (error) {
-        console.error('Error fetching chat users:', error);
-        loading.textContent = '❌ Failed to load chat users. Check API.';
-        loading.style.color = 'var(--color-danger)';
     }
-}
 
 /**
  * Handles sending a message via the WebSocket connection.

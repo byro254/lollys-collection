@@ -398,7 +398,99 @@ app.post('/api/forgot-password', async (req, res) => {
         res.status(500).json({ message: 'Failed to send reset email.' });
     }
 });
+// =========================================================
+//                   NEW CHAT API ENDPOINTS (History & Sessions)
+// =========================================================
 
+/**
+ * GET /api/admin/chat/recent-sessions
+ * 🚨 NEW: Fetches only users who have chatted recently (last 24 hours) or have unread messages.
+ * Used to populate the Admin Chat Sidebar without listing every single registered user.
+ */
+app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
+    try {
+        // This complex query does the following:
+        // 1. Gets unique customer_ids from chat_messages
+        // 2. Orders them by the most recent message time
+        // 3. Joins with users table to get names (if registered)
+        // 4. Limits to top 20 recent conversations
+        
+        const sql = `
+            SELECT 
+                m.customer_id, 
+                MAX(m.created_at) as last_active,
+                u.full_name, 
+                u.email
+            FROM chat_messages m
+            LEFT JOIN users u ON m.customer_id = u.id
+            GROUP BY m.customer_id
+            ORDER BY last_active DESC
+            LIMIT 20;
+        `;
+        
+        const [rows] = await pool.query(sql);
+        
+        // Format data for frontend
+        const sessions = rows.map(row => ({
+            id: row.customer_id, // Can be 'anon-...' or '123'
+            full_name: row.full_name || 'Guest User',
+            email: row.email || 'N/A',
+            last_active: row.last_active
+        }));
+
+        res.json(sessions);
+    } catch (error) {
+        console.error('Error fetching recent chat sessions:', error);
+        res.status(500).json({ message: 'Failed to retrieve active chat sessions.' });
+    }
+});
+
+/**
+ * POST /api/admin/chat/notify-busy
+ * 🚨 NEW: Allows admin to send a system message to a user WITHOUT opening a websocket.
+ * Used when admin is busy with another client.
+ */
+app.post('/api/admin/chat/notify-busy', isAdmin, async (req, res) => {
+    const { customerId } = req.body;
+    
+    if (!customerId) return res.status(400).json({ message: 'Customer ID required' });
+
+    const busyMessage = "Our agents are currently assisting other customers. We have placed you in the priority queue and will be with you shortly. Thank you for your patience!";
+
+    try {
+        // 1. Save to database so user sees it in history if they reload
+        await saveChatMessage(customerId, 'system', ADMIN_CHAT_ID, customerId, busyMessage);
+
+        // 2. Send via WebSocket if user is currently online
+        const sessionData = chatSessions.get(String(customerId));
+        if (sessionData && sessionData.customer && sessionData.customer.readyState === WebSocket.OPEN) {
+            sessionData.customer.send(JSON.stringify({
+                sender: 'system',
+                message: busyMessage
+            }));
+        }
+
+        res.json({ message: 'Busy notification sent.' });
+    } catch (error) {
+        console.error('Error sending busy notification:', error);
+        res.status(500).json({ message: 'Failed to notify customer.' });
+    }
+});
+
+/**
+ * GET /api/admin/chat/history/:customerId
+ * Retrieves chat history for a specific customer.
+ */
+app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
+    const customerId = req.params.customerId;
+    try {
+        const history = await getChatHistory(customerId);
+        res.json(history);
+    } catch (error) {
+        console.error(`Error fetching admin chat history for ${customerId}:`, error);
+        res.status(500).json({ message: 'Failed to retrieve chat history.' });
+    }
+});
 // ------------------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
