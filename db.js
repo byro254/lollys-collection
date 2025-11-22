@@ -310,7 +310,7 @@ async function updateUserStatus(userId, newStatus) {
 // ---------------------------------------------------------------- //
 
 /**
- * Saves a new chat message to the database, including sender and recipient IDs.
+ 
  * @param {string} customerId - The ID of the primary chat session owner (key).
  * @param {('admin'|'customer')} senderRole - Role of the sender.
  * @param {string} senderId - The actual ID of the user who sent the message.
@@ -319,12 +319,12 @@ async function updateUserStatus(userId, newStatus) {
  * @returns {Promise<object>} The result of the database query.
  */
 async function saveChatMessage(customerId, senderRole, senderId, recipientId, message) {
-    // 🚨 CRITICAL FIX: Change 'sent_to_id' to the required database column 'recipient_id'
     const query = `
-        INSERT INTO chat_messages (customer_id, sender_role, sender_id, recipient_id, message_content)
-        VALUES (?, ?, ?, ?, ?);
+        INSERT INTO chat_messages (customer_id, sender_role, sender_id, received_from_id, recipient_id, message_content)
+        VALUES (?, ?, ?, ?, ?, ?);
     `;
-    const [result] = await pool.query(query, [customerId, senderRole, senderId, recipientId, message]);
+    // We pass senderId twice to fill both the sender_id and received_from_id columns
+    const [result] = await pool.query(query, [customerId, senderRole, senderId, senderId, recipientId, message]);
     return result;
 }
 
