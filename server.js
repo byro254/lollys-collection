@@ -666,7 +666,19 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
-
+app.get('/api/products/:id', async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const [rows] = await pool.query('SELECT * FROM products WHERE id = ?', [productId]);
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Product not found.' });
+        }
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Database query error:', error);
+        res.status(500).json({ message: 'Failed to retrieve product details.' });
+    }
+});
 
 app.post('/api/products', isAdmin, upload.single('productImage'), async (req, res) => {
     try {
@@ -705,7 +717,40 @@ app.post('/api/products', isAdmin, upload.single('productImage'), async (req, re
         res.status(500).json({ message: 'Failed to upload product, please try again later.' });
     }
 });
+app.put('/api/products/:id', isAdmin, upload.single('productImage'), async (req, res) => {
+    try {
+        const productId = req.params.id;
+        // NOTE: FormData is used, so use req.body
+        const { name, price, category, description, stock, existing_image_url } = req.body;
+        
+        if (!name || !price || !category || !stock) {
+            return res.status(400).json({ 
+                message: 'Missing required fields for update (Name, Price, Category, Stock).' 
+            });
+        }
+        
+        let imagePath = existing_image_url; // Keep old path by default
 
+        if (req.file) { // If a new image was uploaded
+            imagePath = `/images/products/${req.file.filename}`;
+        }
+
+        const [result] = await pool.query(
+            `UPDATE products SET name = ?, price = ?, category = ?, description = ?, stock = ?, image_url = ? WHERE id = ?`,
+            [name, parseFloat(price), category, description, parseInt(stock), imagePath, productId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Product not found or no changes made.' });
+        }
+
+        res.json({ message: 'Product updated successfully!', productId });
+
+    } catch (error) {
+        console.error('API Error updating product:', error);
+        res.status(500).json({ message: 'Failed to update product, please try again later.' });
+    }
+});
 app.get('/api/orders', isAdmin, async (req, res) => {
     const { status } = req.query; 
     let sql = 'SELECT id, customer_name, customer_email, delivery_location, total, status, created_at FROM orders';

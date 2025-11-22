@@ -1599,6 +1599,8 @@ window.viewOrderDetails = async function(orderId, event) {
 
         itemContainer.innerHTML = '';
         items.forEach(item => {
+           const li = document.createElement('li'); // <<< ADD THIS LINE
+           const itemTotal = (item.unit_price * item.quantity).toFixed(2);
             li.innerHTML = `
                 <span>${item.product_name}</span>
                 <span>${item.quantity} x $${parseFloat(item.unit_price).toFixed(2)} = <strong>$${itemTotal}</strong></span>
@@ -2210,7 +2212,7 @@ function initializeAdminNotificationSocket() {
     const host = window.location.host; 
     
     // Use a unique, persistent endpoint key like the admin's fixed ID
-    const wsUrl = `${protocol}://${host}/ws/admin/notifications/${ADMIN_CHAT_ID}`;
+   const wsUrl = `${protocol}://${host}/ws/admin/chat/${ADMIN_CHAT_ID}`;
     
     adminNotificationSocket = new WebSocket(wsUrl);
 
