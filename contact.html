@@ -333,6 +333,14 @@
     </style>
 </head>
 <body>
+    <style>
+        /* CSS for the Bot Typing Indicator animation */
+        @keyframes blink {
+            0% { opacity: 0.2; }
+            50% { opacity: 1; }
+            100% { opacity: 0.2; }
+        }
+    </style>
 
     <header class="header">
         <a href="/" class="logo">Lolly's Collection</a>
@@ -435,7 +443,7 @@
 
         // --- NEW CHAT STATE VARIABLES (Corrected Scope) ---
         let chatSocket = null;
-        var customerId = localStorage.getItem('chat_customer_id'); 
+        var customerId = localStorage.getItem('chat_customer_id'); // ⬅️ FIX 1: Use 'var' for global script scope
         let isLiveAgentConnected = false; // Is a human admin currently talking?
         let isHandoffRequested = false;    // Has the customer requested a human?
 
@@ -454,11 +462,40 @@
          */
         function setChatHeaderStatus(isLive) {
             if (isLive) {
+                // 🚨 NEW ICON: Customer Care/User Icon
                 chatStatusIcon.className = 'fas fa-user-circle'; 
                 chatHeaderTitle.textContent = 'Live Agent Connected';
             } else {
+                // 🚨 NEW ICON: Robot Icon
                 chatStatusIcon.className = 'fas fa-robot';
                 chatHeaderTitle.textContent = 'Lolly Bot Support';
+            }
+        }
+        
+        /**
+         * Shows a loading indicator (three dots) in the chat body.
+         * @returns {HTMLElement} The loading message element created.
+         */
+        function showBotLoadingIndicator() {
+            const loadingMessage = document.createElement('div');
+            loadingMessage.textContent = '...'; // Three dots
+            loadingMessage.id = 'bot-loading-indicator';
+            loadingMessage.classList.add('message', 'admin');
+            loadingMessage.style.fontStyle = 'italic';
+            loadingMessage.style.opacity = '0.7';
+            loadingMessage.style.animation = 'blink 1s infinite steps(1)'; 
+            chatBody.appendChild(loadingMessage);
+            chatBody.scrollTop = chatBody.scrollHeight;
+            return loadingMessage;
+        }
+
+        /**
+         * Removes the loading indicator from the chat body.
+         */
+        function hideBotLoadingIndicator() {
+            const indicator = document.getElementById('bot-loading-indicator');
+            if (indicator) {
+                indicator.remove();
             }
         }
 
@@ -469,6 +506,7 @@
                 if (response.ok) {
                     const user = await response.json();
                     
+                    // 🚨 FIX 2: Autofill and set name and email to read-only if logged in
                     if (user.full_name) {
                         nameInput.value = user.full_name;
                         nameInput.readOnly = true;
@@ -553,14 +591,19 @@
          * Routes the user's message to the server for AI processing (or local handoff check).
          */
         function processAIBotRequest(userMessage) {
+            // 1. Immediately disable input and show loading indicator
             chatInput.disabled = true;
             document.getElementById('chat-send-btn').disabled = true;
-            
+            const loadingIndicator = showBotLoadingIndicator(); // ⬅️ Show loading indicator
+
             // Check for explicit handoff first (Client-side optimization)
             const msg = userMessage.toLowerCase();
             
             if (msg.includes('agent') || msg.includes('human') || msg.includes('admin') || msg.includes('transfer')) {
                 isHandoffRequested = true;
+                
+                hideBotLoadingIndicator(); // Remove indicator right before displaying handoff text
+                
                 appendMessage("Hold on while I connect you to a live agent. This may take a moment...", 'admin');
                 initiateAgentHandoff(userMessage); 
                 return;
@@ -576,6 +619,8 @@
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(aiPayload);
             } else {
+                // Handle connection error locally
+                hideBotLoadingIndicator(); // Hide on local failure
                 appendMessage("Error: Chat connection is not open. Try refreshing.", 'admin');
                 chatInput.disabled = false;
                 document.getElementById('chat-send-btn').disabled = false;
@@ -586,13 +631,15 @@
          * Sends a special message to the server to signal a required human handoff.
          */
         function initiateAgentHandoff(lastMessage) {
+            // Use the autofilled name field, which is populated by fetchUserProfile, 
+            // ensuring the admin sees the real name if the user is logged in.
             const realCustomerName = nameInput.value.trim() || 'Anonymous Client';
     
-    const handoffPayload = JSON.stringify({
-        message: lastMessage,
-        handoff: true, // Special flag for the server
-        customerName: realCustomerName // ⬅️ Use the confirmed name
-    });
+            const handoffPayload = JSON.stringify({
+                message: lastMessage,
+                handoff: true, // Special flag for the server
+                customerName: realCustomerName // ⬅️ Use the confirmed name
+            });
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(handoffPayload);
@@ -653,7 +700,7 @@
                 chatBody.innerHTML = '';
                 
                 // Set to Bot mode initially
-                setChatHeaderStatus(false);
+                setChatHeaderStatus(false); // 🚨 Set Bot icon
                 
                 // Inputs are enabled only after history loads (or immediately if empty)
                 chatInput.disabled = false;
@@ -673,12 +720,14 @@
                         chatInput.disabled = false;
                         document.getElementById('chat-send-btn').disabled = false;
                         appendMessage('A live agent has joined the chat. How can they assist you?', 'admin');
-                        setChatHeaderStatus(true); // Switch to human icon
+                        setChatHeaderStatus(true); // 🚨 Switch to Agent icon
+                        hideBotLoadingIndicator(); // Ensure indicator is hidden
                         return;
                     }
                     
                     // 🚨 NEW: AI INPUT READY ACKNOWLEDGMENT
                     if (data.sender === 'system' && data.message === 'INPUT_READY') {
+                        hideBotLoadingIndicator(); // ⬅️ Remove the loading indicator
                         chatInput.disabled = false;
                         document.getElementById('chat-send-btn').disabled = false;
                         return;
