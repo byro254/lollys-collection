@@ -118,24 +118,24 @@ app.use(session({
 }));
 // Authentication Middleware
 function isAuthenticated(req, res, next) {
-    if (req.session.isAuthenticated) {
-        return next();
-    }
-    if (req.originalUrl.startsWith('/api/')) {
-        // If API call requires auth but not logged in, return 401
-        return res.status(401).json({ message: 'Authentication required.' });
-    }
-    res.redirect('/auth');
+    if (req.session.isAuthenticated) {
+        return next();
+    }
+    if (req.originalUrl.startsWith('/api/')) {
+        // If API call requires auth but not logged in, return 401
+        return res.status(401).json({ message: 'Authentication required.' });
+    }
+    res.redirect('/auth');
 }
 
 function isAdmin(req, res, next) {
-    if (req.session.isAuthenticated && req.session.isAdmin) {
-        return next();
-    }
-    if (req.originalUrl.startsWith('/api/')) {
-        return res.status(403).json({ message: 'Admin access required.' });
-    }
-    res.redirect('/auth');
+    if (req.session.isAuthenticated && req.session.isAdmin) {
+        return next();
+    }
+    if (req.originalUrl.startsWith('/api/')) {
+        return res.status(403).json({ message: 'Admin access required.' });
+    }
+    res.redirect('/auth');
 }
 
 /**
@@ -184,35 +184,35 @@ const requireAuth = (req, res, next) => {
     }
 };
 // =========================================================
-//                   FRONTEND ROUTES (Protected)
+//                   FRONTEND ROUTES (Protected)
 // =========================================================
 
 /**
- * 🚨 ROUTING LOGIC: Landing Page (/)
- */
+ * 🚨 ROUTING LOGIC: Landing Page (/)
+ */
 app.get('/', (req, res) => { 
-    if (!req.session.isAuthenticated) {
-        return res.redirect('/auth'); 
-    }
-    if (req.session.isAdmin) {
-        return res.redirect('/admin.html');
-    }
-    res.sendFile(path.join(__dirname, 'index.html')); 
+    if (!req.session.isAuthenticated) {
+        return res.redirect('/auth'); 
+    }
+    if (req.session.isAdmin) {
+        return res.redirect('/admin.html');
+    }
+    res.sendFile(path.join(__dirname, 'index.html')); 
 });
 
 /**
- * 🚨 ROUTING LOGIC: Authentication Page (/auth)
- */
+ * 🚨 ROUTING LOGIC: Authentication Page (/auth)
+ */
 app.get('/auth', (req, res) => {
-    if (req.session.isAuthenticated) {
-        return res.redirect('/'); 
-    }
-    res.sendFile(path.join(__dirname, 'auth.html'));
+    if (req.session.isAuthenticated) {
+        return res.redirect('/'); 
+    }
+    res.sendFile(path.join(__dirname, 'auth.html'));
 });
 
 // Admin dashboard is protected
 app.get('/admin.html', isAdmin, (req, res) => { 
-    res.sendFile(path.join(__dirname, 'admin.html')); 
+    res.sendFile(path.join(__dirname, 'admin.html')); 
 });
 
 // Client routes: Cart page now publicly accessible
@@ -225,34 +225,34 @@ app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.h
 
 
 // =========================================================
-//                   AUTHENTICATION API ROUTES (MODIFIED)
+//                   AUTHENTICATION API ROUTES (MODIFIED)
 // =========================================================
 
 app.post('/api/signup', async (req, res) => {
-    const { full_name, email, password } = req.body;
-    if (!full_name || !email || !password) {
-        return res.status(400).json({ message: 'All fields are required.' });
-    }
+    const { full_name, email, password } = req.body;
+    if (!full_name || !email || !password) {
+        return res.status(400).json({ message: 'All fields are required.' });
+    }
 
-    try {
-        const password_hash = await bcrypt.hash(password, saltRounds);
+    try {
+        const password_hash = await bcrypt.hash(password, saltRounds);
         // NOTE: is_active column defaults to TRUE in the DB schema, no need to specify here
-        await pool.execute(
-            'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
-            [full_name, email, password_hash]
-        );
-        res.status(201).json({ message: 'User registered successfully.' });
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            return res.status(409).json({ message: 'Email already registered.' });
-        }
-        console.error('Signup error:', error);
-        res.status(500).json({ message: 'Server error during registration.' });
-    }
+        await pool.execute(
+            'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
+            [full_name, email, password_hash]
+        );
+        res.status(201).json({ message: 'User registered successfully.' });
+    } catch (error) {
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ message: 'Email already registered.' });
+        }
+        console.error('Signup error:', error);
+        res.status(500).json({ message: 'Server error during registration.' });
+    }
 });
 
 app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password } = req.body;
     const attemptKey = email.toLowerCase();
     const now = Date.now();
     
@@ -269,23 +269,23 @@ app.post('/api/login', async (req, res) => {
     }
 
 
-    try {
-        const [users] = await pool.execute(
-            'SELECT id, full_name, password_hash, is_admin, is_active FROM users WHERE email = ?',
-            [email]
-        );
+    try {
+        const [users] = await pool.execute(
+            'SELECT id, full_name, password_hash, is_admin, is_active FROM users WHERE email = ?',
+            [email]
+        );
 
-        const user = users[0];
-        if (!user) {
+        const user = users[0];
+        if (!user) {
             // Use a slight delay to mitigate timing attacks
             await new Promise(resolve => setTimeout(resolve, 500)); 
             return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
-        }
+        }
 
-        const match = await bcrypt.compare(password, user.password_hash);
-        if (!match) {
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) {
             return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
-        }
+        }
         
         // 3. Check Account Status (NEW REQUIREMENT)
         if (!user.is_active) {
@@ -296,20 +296,20 @@ app.post('/api/login', async (req, res) => {
         
         // 4. Successful Login: Clear attempts and set session
         delete loginAttempts[attemptKey];
-        req.session.isAuthenticated = true;
-        req.session.isAdmin = user.is_admin;
-        req.session.userId = user.id;
-        req.session.fullName = user.full_name;
-        
-        res.json({ 
-            message: 'Login successful.', 
-            user: { id: user.id, full_name: user.full_name, is_admin: user.is_admin } 
-        });
+        req.session.isAuthenticated = true;
+        req.session.isAdmin = user.is_admin;
+        req.session.userId = user.id;
+        req.session.fullName = user.full_name;
+        
+        res.json({ 
+            message: 'Login successful.', 
+            user: { id: user.id, full_name: user.full_name, is_admin: user.is_admin } 
+        });
 
-    } catch (error) {
-        console.error('Login error:', error);
-        res.status(500).json({ message: 'Server error during login.' });
-    }
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ message: 'Server error during login.' });
+    }
 });
 
 /**
@@ -332,114 +332,110 @@ function handleFailedLogin(res, attemptKey, message) {
     });
 }
 app.post('/api/admin/login', async (req, res) => {
-    const { email, password } = req.body;
+    const { email, password } = req.body;
 
-    // 1. Check against hardcoded .env admin first
-    if (email === ADMIN_EMAIL) {
-        try {
-            const match = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
-            if (match) {
-                req.session.isAuthenticated = true;
-                req.session.isAdmin = true;
-                req.session.userId = ADMIN_CHAT_ID; // Use global const
-                req.session.fullName = ADMIN_FULL_NAME;
-                return res.json({ 
-                    message: 'Admin login successful.', 
-                    user: { full_name: ADMIN_FULL_NAME, is_admin: true } 
-                });
-            }
-        } catch (error) {
-            console.error('Admin ENV Login hash check error:', error);
-        }
-    }
-    
-    // 2. Check for DB user with admin flag
-    try {
-        const [users] = await pool.execute('SELECT id, full_name, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
-        const user = users[0];
+    // 1. Check against hardcoded .env admin first
+    if (email === ADMIN_EMAIL) {
+        try {
+            const match = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
+            if (match) {
+                req.session.isAuthenticated = true;
+                req.session.isAdmin = true;
+                req.session.userId = ADMIN_CHAT_ID; // Use global const
+                req.session.fullName = ADMIN_FULL_NAME;
+                return res.json({ 
+                    message: 'Admin login successful.', 
+                    user: { full_name: ADMIN_FULL_NAME, is_admin: true } 
+                });
+            }
+        } catch (error) {
+            console.error('Admin ENV Login hash check error:', error);
+        }
+    }
+    
+    // 2. Check for DB user with admin flag
+    try {
+        const [users] = await pool.execute('SELECT id, full_name, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
+        const user = users[0];
 
-        if (user) {
-            const match = await bcrypt.compare(password, user.password_hash);
-            if (match) {
-                req.session.isAuthenticated = true;
-                req.session.isAdmin = true;
-                req.session.userId = user.id;
-                req.session.fullName = user.full_name;
-                return res.json({ 
-                    message: 'Admin login successful.', 
-                    user: { full_name: user.full_name, is_admin: true } 
-                });
-            }
-        }
-    } catch (error) {
-        console.error('Admin DB Login error:', error);
-    }
-    
-    return res.status(401).json({ message: 'Invalid Admin Credentials.' });
+        if (user) {
+            const match = await bcrypt.compare(password, user.password_hash);
+            if (match) {
+                req.session.isAuthenticated = true;
+                req.session.isAdmin = true;
+                req.session.userId = user.id;
+                req.session.fullName = user.full_name;
+                return res.json({ 
+                    message: 'Admin login successful.', 
+                    user: { full_name: user.full_name, is_admin: true } 
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Admin DB Login error:', error);
+    }
+    
+    return res.status(401).json({ message: 'Invalid Admin Credentials.' });
 });
 
 
 app.post('/api/logout', (req, res) => {
-    req.session.destroy(err => {
-        if (err) {
-            return res.status(500).json({ message: 'Could not log out.' });
-        }
-        res.json({ message: 'Logged out successfully.' });
-    });
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).json({ message: 'Could not log out.' });
+        }
+        res.json({ message: 'Logged out successfully.' });
+    });
 });
 
 app.post('/api/forgot-password', async (req, res) => {
-    const { email } = req.body;
-    console.log(`Password reset requested for: ${email}`);
-    
-    try {
-        res.json({ message: 'If that email is in our system, a password reset link has been sent.' });
-    } catch (error) {
-        res.status(500).json({ message: 'Failed to send reset email.' });
-    }
+    const { email } = req.body;
+    console.log(`Password reset requested for: ${email}`);
+    
+    try {
+        res.json({ message: 'If that email is in our system, a password reset link has been sent.' });
+    } catch (error) {
+        res.status(500).json({ message: 'Failed to send reset email.' });
+    }
 });
 // =========================================================
-//                   NEW CHAT API ENDPOINTS (History & Sessions)
+//                   NEW CHAT API ENDPOINTS (History & Sessions)
 // =========================================================
-
 
 /**
  * GET /api/admin/chat/recent-sessions
- * 🚨 FIX: Fetches chat sessions with the latest message content and time for the admin queue.
+ * 🚨 NEW: Fetches only users who have chatted recently (last 24 hours) or have unread messages.
+ * Used to populate the Admin Chat Sidebar without listing every single registered user.
  */
 app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
     try {
-        // Query to find the latest message and join with users
+        // This complex query does the following:
+        // 1. Gets unique customer_ids from chat_messages
+        // 2. Orders them by the most recent message time
+        // 3. Joins with users table to get names (if registered)
+        // 4. Limits to top 20 recent conversations
+        
         const sql = `
             SELECT 
                 m.customer_id, 
-                m.message_content AS last_message_content, 
-                m.created_at AS last_message_time,
+                MAX(m.created_at) as last_active,
                 u.full_name, 
                 u.email
             FROM chat_messages m
-            INNER JOIN (
-                SELECT 
-                    customer_id, 
-                    MAX(created_at) AS max_created_at
-                FROM chat_messages
-                GROUP BY customer_id
-            ) AS latest_msg 
-                ON m.customer_id = latest_msg.customer_id AND m.created_at = latest_msg.max_created_at
             LEFT JOIN users u ON m.customer_id = u.id
-            ORDER BY last_message_time DESC
+            GROUP BY m.customer_id
+            ORDER BY last_active DESC
             LIMIT 20;
         `;
         
         const [rows] = await pool.query(sql);
         
-        // Format data for frontend (Ensuring ID is a string for the Set on the client side)
+        // Format data for frontend
         const sessions = rows.map(row => ({
-            id: String(row.customer_id), // CRITICAL: Ensure ID is a string
+            id: row.customer_id, // Can be 'anon-...' or '123'
             full_name: row.full_name || 'Guest User',
             email: row.email || 'N/A',
-            last_message_time: row.last_message_time, // NEW: Used for sorting
-            last_message_content: row.last_message_content // NEW: Used for preview
+            last_active: row.last_active
         }));
 
         res.json(sessions);
@@ -559,30 +555,30 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
 // ------------------------------------------------------------------
 
 /**
- * Retrieves the full_name and email of the logged-in user for autofilling the checkout form.
- */
+ * Retrieves the full_name and email of the logged-in user for autofilling the checkout form.
+ */
 app.get('/api/user/profile', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId; 
+    const userId = req.session.userId; 
 
-    try {
-        // Use the new function from db.js
-        const userProfile = await findUserById(userId); 
+    try {
+        // Use the new function from db.js
+        const userProfile = await findUserById(userId); 
 
-        if (userProfile) {
-            // Returns { name, email }
-            return res.json(userProfile);
-        } else {
-            // Safety check: User is logged in but profile not found in DB (unlikely)
-            return res.status(404).json({ 
-                message: 'User profile not found in database. Cannot autofill.' 
-            });
-        }
-    } catch (error) {
-        console.error('Error fetching user profile for autofill:', error);
-        return res.status(500).json({ 
-            message: 'Server error fetching user data for autofill.' 
-        });
-    }
+        if (userProfile) {
+            // Returns { name, email }
+            return res.json(userProfile);
+        } else {
+            // Safety check: User is logged in but profile not found in DB (unlikely)
+            return res.status(404).json({ 
+                message: 'User profile not found in database. Cannot autofill.' 
+            });
+        }
+    } catch (error) {
+        console.error('Error fetching user profile for autofill:', error);
+        return res.status(500).json({ 
+            message: 'Server error fetching user data for autofill.' 
+        });
+    }
 });
 
 // ------------------------------------------------------------------
@@ -590,28 +586,28 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
 // ------------------------------------------------------------------
 
 /**
- * Retrieves a list of all registered users (customers).
- * Requires Admin privileges.
- */
+ * Retrieves a list of all registered users (customers).
+ * Requires Admin privileges.
+ */
 app.get('/api/customers', isAdmin, async (req, res) => {
-    try {
-        const users = await findAllUsers();
-        // Note: The password_hash is not included in the SELECT query in db.js
-        res.json(users);
-    } catch (error) {
-        console.error('API Error fetching all users/customers:', error);
-        res.status(500).json({ message: 'Failed to retrieve customer list.' });
-    }
+    try {
+        const users = await findAllUsers();
+        // Note: The password_hash is not included in the SELECT query in db.js
+        res.json(users);
+    } catch (error) {
+        console.error('API Error fetching all users/customers:', error);
+        res.status(500).json({ message: 'Failed to retrieve customer list.' });
+    }
 });
 
 /**
- * 🆕 Retrieves core dashboard statistics (e.g., total products, total users, revenue).
- * Requires Admin privileges.
- */
+ * 🆕 Retrieves core dashboard statistics (e.g., total products, total users, revenue).
+ * Requires Admin privileges.
+ */
 // server.js
 
 // =========================================================
-//                   USER PROFILE API ROUTES (NEW/MODIFIED)
+//                   USER PROFILE API ROUTES (NEW/MODIFIED)
 // =========================================================
 
 /**
@@ -722,9 +718,9 @@ app.get('/api/dashboard/stats', isAdmin, async (req, res) => {
 });
 
 /**
- * 🆕 Retrieves monthly sales data for charting.
- * Requires Admin privileges.
- */
+ * 🆕 Retrieves monthly sales data for charting.
+ * Requires Admin privileges.
+ */
 
 
 // New Route: GET /api/dashboard/monthly-sales
@@ -754,13 +750,13 @@ app.get('/api/dashboard/monthly-sales', isAdmin, async (req, res) => {
 // ------------------------------------------------------------------
 
 app.get('/api/products', async (req, res) => { 
-    try {
-        const [rows] = await pool.query('SELECT * FROM products');
-        res.json(rows); 
-    } catch (error) {
-        console.error('Database query error:', error);
-        res.status(500).json({ message: 'Failed to retrieve products from database.' });
-    }
+    try {
+        const [rows] = await pool.query('SELECT * FROM products');
+        res.json(rows); 
+    } catch (error) {
+        console.error('Database query error:', error);
+        res.status(500).json({ message: 'Failed to retrieve products from database.' });
+    }
 });
 
 app.get('/api/products/:id', async (req, res) => {
@@ -849,26 +845,26 @@ app.put('/api/products/:id', isAdmin, upload.single('productImage'), async (req,
     }
 });
 app.get('/api/orders', isAdmin, async (req, res) => {
-    const { status } = req.query; 
-    let sql = 'SELECT id, customer_name, customer_email, delivery_location, total, status, created_at FROM orders';
-    const params = [];
+    const { status } = req.query; 
+    let sql = 'SELECT id, customer_name, customer_email, delivery_location, total, status, created_at FROM orders';
+    const params = [];
 
-    if (status) {
-        const statusArray = status.split(',').map(s => s.trim());
-        const placeholders = statusArray.map(() => '?').join(', '); 
-        sql += ` WHERE status IN (${placeholders})`;
-        params.push(...statusArray);
-    }
-    
-    sql += ' ORDER BY created_at DESC';
+    if (status) {
+        const statusArray = status.split(',').map(s => s.trim());
+        const placeholders = statusArray.map(() => '?').join(', '); 
+        sql += ` WHERE status IN (${placeholders})`;
+        params.push(...statusArray);
+    }
+    
+    sql += ' ORDER BY created_at DESC';
 
-    try {
-        const [rows] = await pool.query(sql, params);
-        res.json(rows);
-    } catch (error) {
-        console.error('Error fetching orders:', error);
-        res.status(500).json({ message: 'Failed to retrieve orders.' });
-    }
+    try {
+        const [rows] = await pool.query(sql, params);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching orders:', error);
+        res.status(500).json({ message: 'Failed to retrieve orders.' });
+    }
 });
 
 
@@ -907,86 +903,86 @@ app.put('/api/orders/:orderId', isAdmin, async (req, res) => {
 
 // 🚨 CHANGE: Cart APIs require authentication to retrieve/modify items for a specific user
 app.get('/api/cart', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
-    
-    try {
-        const sql = `
+    const userId = req.session.userId;
+    
+    try {
+        const sql = `
     SELECT c.product_id AS id, p.name, c.unit_price AS price, 
              c.quantity, p.image_url, p.stock 
     FROM cart c
     JOIN products p ON c.product_id = p.id
     WHERE c.user_id = ?`;
-        const [rows] = await pool.query(sql, [userId]);
-        res.json(rows);
-    } catch (error) {
-        console.error('Error fetching cart:', error);
-        res.status(500).json({ message: 'Failed to load cart items.' });
-    }
+        const [rows] = await pool.query(sql, [userId]);
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching cart:', error);
+        res.status(500).json({ message: 'Failed to load cart items.' });
+    }
 });
 
 app.post('/api/cart', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
-    const { productId, quantity } = req.body;
-    
-    if (!productId || !quantity || quantity < 1) {
-        return res.status(400).json({ message: 'Invalid product ID or quantity.' });
-    }
+    const userId = req.session.userId;
+    const { productId, quantity } = req.body;
+    
+    if (!productId || !quantity || quantity < 1) {
+        return res.status(400).json({ message: 'Invalid product ID or quantity.' });
+    }
 
-    const connection = await pool.getConnection();
+    const connection = await pool.getConnection();
 
-    try {
-        await connection.beginTransaction();
-        
-        const [productRows] = await connection.execute('SELECT name, price, stock FROM products WHERE id = ?', [productId]);
-        if (productRows.length === 0) {
-            return res.status(404).json({ message: 'Product not found.' });
-        }
-        const product = productRows[0];
-        
-        const [cartRows] = await connection.execute('SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
-        
-        const currentQuantity = cartRows.length > 0 ? cartRows[0].quantity : 0;
-        const newQuantity = currentQuantity + quantity;
+    try {
+        await connection.beginTransaction();
+        
+        const [productRows] = await connection.execute('SELECT name, price, stock FROM products WHERE id = ?', [productId]);
+        if (productRows.length === 0) {
+            return res.status(404).json({ message: 'Product not found.' });
+        }
+        const product = productRows[0];
+        
+        const [cartRows] = await connection.execute('SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
+        
+        const currentQuantity = cartRows.length > 0 ? cartRows[0].quantity : 0;
+        const newQuantity = currentQuantity + quantity;
 
-        if (newQuantity > product.stock) {
-            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
-        }
+        if (newQuantity > product.stock) {
+            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
+        }
 
-        if (cartRows.length > 0) {
-            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?', [newQuantity, userId, productId]);
-        } else {
-            await connection.execute(
-                'INSERT INTO cart (user_id, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?)',
-                [userId, productId, product.name, product.price, newQuantity]
-            );
-        }
+        if (cartRows.length > 0) {
+            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?', [newQuantity, userId, productId]);
+        } else {
+            await connection.execute(
+                'INSERT INTO cart (user_id, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?)',
+                [userId, productId, product.name, product.price, newQuantity]
+            );
+        }
 
-        await connection.commit();
-        res.status(200).json({ message: `${product.name} quantity updated to ${newQuantity}.` });
+        await connection.commit();
+        res.status(200).json({ message: `${product.name} quantity updated to ${newQuantity}.` });
 
-    } catch (error) {
-        await connection.rollback();
-        console.error('Error adding item to cart:', error);
-        res.status(500).json({ message: 'Failed to update cart.' });
-    } finally {
-        connection.release();
-    }
+    } catch (error) {
+        await connection.rollback();
+        console.error('Error adding item to cart:', error);
+        res.status(500).json({ message: 'Failed to update cart.' });
+    } finally {
+        connection.release();
+    }
 });
 
 app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
-    const productId = req.params.productId;
-    
-    try {
-        const [result] = await pool.execute('DELETE FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Cart item not found.' });
-        }
-        res.status(200).json({ message: 'Item removed from cart.' });
-    } catch (error) {
-        console.error('Error deleting item from cart:', error);
-        res.status(500).json({ message: 'Failed to remove item.' });
-    }
+    const userId = req.session.userId;
+    const productId = req.params.productId;
+    
+    try {
+        const [result] = await pool.execute('DELETE FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Cart item not found.' });
+        }
+        res.status(200).json({ message: 'Item removed from cart.' });
+    } catch (error) {
+        console.error('Error deleting item from cart:', error);
+        res.status(500).json({ message: 'Failed to remove item.' });
+    }
 });
 
 app.post('/api/order', isAuthenticated, async (req, res) => {
@@ -1231,7 +1227,7 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
 
 
 app.post("/api/request-otp", async (req, res) => {
-    const { phone } = req.body; // Primary lookup field
+    const { phone } = req.body; // Primary lookup field
     
     if (!phone) {
         return res.status(400).json({ message: 'Phone number is required to send OTP.' });
@@ -1249,12 +1245,12 @@ app.post("/api/request-otp", async (req, res) => {
     const normalizedKey = phone.toLowerCase().trim();
 
     try {
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 5 * 60 * 1000;
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiry = Date.now() + 5 * 60 * 1000;
 
-        // 3. Save OTP in memory using the global otpCache
-        // Store userId and email for the final reset step lookup, keyed by phone number
-        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
+        // 3. Save OTP in memory using the global otpCache
+        // Store userId and email for the final reset step lookup, keyed by phone number
+        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
 
         // 4. Send Email (Proxy for SMS)
         
@@ -1277,17 +1273,17 @@ app.post("/api/request-otp", async (req, res) => {
             console.error('Resend OTP Error:', error);
         }
 
-        res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
-    } catch (error) {
-        console.error('OTP Request Error:', error);
-        res.status(500).json({ message: 'Error processing OTP request.' });
-    }
+        res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
+    } catch (error) {
+        console.error('OTP Request Error:', error);
+        res.status(500).json({ message: 'Error processing OTP request.' });
+    }
 });
 
 
 // 🚨 VERIFY OTP - Debugging & Normalization
 app.post("/api/verify-otp", (req, res) => {
-    const { phone, otp } = req.body; // Uses phone for lookup
+    const { phone, otp } = req.body; // Uses phone for lookup
     
     if (!phone || !otp) {
         return res.status(400).json({ message: 'Phone and OTP are required.' });
@@ -1296,17 +1292,17 @@ app.post("/api/verify-otp", (req, res) => {
     // Keying by phone number
     const verificationKey = phone.toLowerCase().trim();
 
-    const entry = otpCache[verificationKey]; 
+    const entry = otpCache[verificationKey]; 
     
-    if (!entry) return res.status(400).json({ message: "No OTP found or session expired." });
+    if (!entry) return res.status(400).json({ message: "No OTP found or session expired." });
 
-    if (Date.now() > entry.expiry) {
+    if (Date.now() > entry.expiry) {
         delete otpCache[verificationKey];
-        return res.status(400).json({ message: "OTP expired." });
+        return res.status(400).json({ message: "OTP expired." });
     }
 
-    if (String(entry.otp) !== String(otp)) {
-        return res.status(400).json({ message: "Invalid OTP." });
+    if (String(entry.otp) !== String(otp)) {
+        return res.status(400).json({ message: "Invalid OTP." });
     }
     
     // 4. Success: Generate verification token for the next step (password reset)
@@ -1317,7 +1313,7 @@ app.post("/api/verify-otp", (req, res) => {
     verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
     delete otpCache[verificationKey];
 
-    res.json({ 
+    res.json({ 
         message: "OTP verified!", 
         verified: true, 
         verificationToken: verificationToken,
@@ -1327,59 +1323,59 @@ app.post("/api/verify-otp", (req, res) => {
 
 // Route to handle password reset submission (Step 2: Update Password)
 app.post('/api/reset-password', async (req, res) => {
-    // Client must send verificationToken, resetKey (now phone number), and newPassword
-    const { verificationToken, resetKey, newPassword } = req.body; 
+    // Client must send verificationToken, resetKey (now phone number), and newPassword
+    const { verificationToken, resetKey, newPassword } = req.body; 
     
-    // 2. Validate input and password strength
-    if (!verificationToken || !resetKey || !newPassword) {
-        return res.status(400).json({ message: 'Missing required reset information (token, key, or password).' });
-    }
-    
-    if (newPassword.length < 8) {
-        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
-    }
+    // 2. Validate input and password strength
+    if (!verificationToken || !resetKey || !newPassword) {
+        return res.status(400).json({ message: 'Missing required reset information (token, key, or password).' });
+    }
+    
+    if (newPassword.length < 8) {
+        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
+    }
 
-    // 3. Check the verification cache for the token
-    const verificationEntry = verificationCache[verificationToken];
+    // 3. Check the verification cache for the token
+    const verificationEntry = verificationCache[verificationToken];
 
-    if (!verificationEntry) {
-        return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
-    }
+    if (!verificationEntry) {
+        return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
+    }
     
     // 4. Validate Token Expiration and Reset Key Match
-    if (Date.now() > verificationEntry.expiry || verificationEntry.resetKey !== resetKey) {
-        delete verificationCache[verificationToken];
-        return res.status(400).json({ message: 'Password reset session has expired or the key provided does not match.' });
-    }
+    if (Date.now() > verificationEntry.expiry || verificationEntry.resetKey !== resetKey) {
+        delete verificationCache[verificationToken];
+        return res.status(400).json({ message: 'Password reset session has expired or the key provided does not match.' });
+    }
 
-    try {
+    try {
         // Use the userId saved during the OTP request step
         const userIdToUpdate = verificationEntry.userId;
-        
-        // 5. Hash the new password securely
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-        
-        // 6. Update password using the stored user ID
-        const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
+        
+        // 5. Hash the new password securely
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        
+        // 6. Update password using the stored user ID
+        const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
 
-        // 7. CRUCIAL: Clear the verification token immediately after successful use
-        delete verificationCache[verificationToken]; 
+        // 7. CRUCIAL: Clear the verification token immediately after successful use
+        delete verificationCache[verificationToken]; 
 
-        if (updated) {
-            res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
-        } else {
-            throw new Error("Database update failed (0 rows affected).");
-        }
-    } catch (error) {
-        console.error('Password Reset Error:', error);
-        // Clear the token even on hash/DB update failure for security
-        delete verificationCache[verificationToken]; 
-        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
-    }
+        if (updated) {
+            res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
+        } else {
+            throw new Error("Database update failed (0 rows affected).");
+        }
+    } catch (error) {
+        console.error('Password Reset Error:', error);
+        // Clear the token even on hash/DB update failure for security
+        delete verificationCache[verificationToken]; 
+        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
+    }
 });
 // =========================================================
-//                   REAL-TIME CHAT SETUP
+//                   REAL-TIME CHAT SETUP
 // =========================================================
 // --- New function in server.js to handle AI interaction ---
 
@@ -1538,7 +1534,7 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             }
             
             // Save the customer's initial message to history
-            await saveChatMessage(customerId, senderRole, senderId, recipientId,messageText, parsed.message);
+            await saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message);
             
             return;
             
@@ -1752,7 +1748,7 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 // =========================================================
-//                   NEW CHAT API ENDPOINTS (History)
+//                   NEW CHAT API ENDPOINTS (History)
 // =========================================================
 
 /**
@@ -1799,7 +1795,7 @@ app.get('/api/chat/history/:customerId', async (req, res) => {
 
 
 // =========================================================
-//                   START SERVER (MODIFIED)
+//                   START SERVER (MODIFIED)
 // =========================================================
 
 // Change app.listen to server.listen
