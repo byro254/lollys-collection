@@ -586,11 +586,13 @@
          * Sends a special message to the server to signal a required human handoff.
          */
         function initiateAgentHandoff(lastMessage) {
-            const handoffPayload = JSON.stringify({
-                message: lastMessage,
-                handoff: true, // Special flag for the server
-                customerName: nameInput.value || 'Anonymous Client' // Send name for the admin popup
-            });
+            const realCustomerName = nameInput.value.trim() || 'Anonymous Client';
+    
+    const handoffPayload = JSON.stringify({
+        message: lastMessage,
+        handoff: true, // Special flag for the server
+        customerName: realCustomerName // ⬅️ Use the confirmed name
+    });
             
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 chatSocket.send(handoffPayload);

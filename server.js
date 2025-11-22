@@ -67,8 +67,8 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
 // Admin ID used for chat, using the session ID set during login
 const ADMIN_CHAT_ID = 'admin_env'; 
-const { OpenAI } = require('openai');
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const { GoogleGenAI } = require("@google/genai");
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // --- Multer and Nodemailer setup ---
 const UPLOAD_DIR = path.join(__dirname, 'public/images/products');
 const PROFILE_UPLOAD_DIR = path.join(__dirname, 'public/images/profiles');
@@ -1302,13 +1302,13 @@ async function getProductDetails({ query }) {
 }
 
 /**
- * Routes the customer message to the external AI service, handles product lookups,
+ * Routes the customer message to the Gemini Bot, handles product lookups,
  * and generates a dynamic response.
  * @param {string} userMessage - The customer's raw message.
  * @returns {string} The AI-generated response text.
  */
 async function getSmartBotResponse(userMessage) {
-    const systemPrompt = `You are Lolly Bot, a friendly, concise, and helpful customer service AI for Lolly's Collection, an e-commerce store specializing in clothing and accessories. Your tone must be warm, slightly casual, and professional. 
+    const systemInstruction = `You are Lolly Bot, a friendly, concise, and helpful customer service AI for Lolly's Collection, an e-commerce store specializing in clothing and accessories. Your tone must be warm, slightly casual, and professional. 
     
     Current Date: ${new Date().toLocaleDateString()}.
     
@@ -1318,69 +1318,68 @@ async function getSmartBotResponse(userMessage) {
     3. DO NOT answer questions about returns, refunds, or complex order status—instead, gently suggest they ask for an agent.
     4. Keep answers short, ideally 1-2 sentences.`;
 
-    const productTool = {
-        type: "function",
-        function: {
-            name: "getProductDetails",
-            description: "Gets the names, prices, and stock of products to answer shopping queries.",
-            parameters: {
-                type: "object",
-                properties: {
-                    query: {
-                        type: "string",
-                        description: "A single keyword or phrase to search for specific products (e.g., 'cap', 'red dress')."
-                    },
+    const productToolDefinition = {
+        name: "getProductDetails",
+        description: "Gets the names, prices, and stock of products to answer shopping queries.",
+        parameters: {
+            type: "object",
+            properties: {
+                query: {
+                    type: "string",
+                    description: "A single keyword or phrase to search for specific products (e.g., 'cap', 'red dress')."
                 },
-                required: ["query"],
             },
+            required: ["query"],
         },
     };
 
     const availableFunctions = { getProductDetails };
-    
-    const messages = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
-    ];
 
     try {
-        // 1. Initial AI Call (Check for Tool Request)
-        let response = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo', // Use a high-quality model for best results
-            messages: messages,
-            tools: [productTool], 
-            tool_choice: "auto",
+        let response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash', // A great model for tool use
+            contents: userMessage,
+            config: {
+                systemInstruction: systemInstruction,
+                tools: [{ functionDeclarations: [productToolDefinition] }],
+            },
         });
 
-        // 2. Handle Tool Call (if the AI decides it needs product data)
-        if (response.choices[0].message.tool_calls) {
-            const toolCall = response.choices[0].message.tool_calls[0];
-            const functionName = toolCall.function.name;
+        // 1. Check if the model requested a tool call
+        if (response.functionCalls && response.functionCalls.length > 0) {
+            const functionCall = response.functionCalls[0];
+            const functionName = functionCall.name;
             const functionToCall = availableFunctions[functionName];
-            const functionArgs = JSON.parse(toolCall.function.arguments);
+            const functionArgs = functionCall.args;
             
             // Execute the database function
             const toolOutput = await functionToCall(functionArgs);
 
-            // Send the function result back to the AI
-            messages.push(response.choices[0].message);
-            messages.push({
-                tool_call_id: toolCall.id,
-                role: "tool",
-                content: toolOutput,
+            // 2. Send the tool result back to the model for the final response
+            const secondResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: [
+                    userMessage,
+                    {
+                        functionResponse: {
+                            name: functionName,
+                            response: toolOutput, // The tool output (DB data)
+                        },
+                    },
+                ],
+                config: {
+                    systemInstruction: systemInstruction,
+                },
             });
             
-            // Second AI Call (Generate the final response based on DB data)
-            response = await openai.chat.completions.create({
-                model: 'gpt-3.5-turbo',
-                messages: messages,
-            });
+            return secondResponse.text;
         }
         
-        return response.choices[0].message.content;
+        // Return the initial response if no tool was called
+        return response.text;
 
     } catch (error) {
-        console.error('External AI Service Error:', error);
+        console.error('External AI Service Error (Gemini):', error);
         return "I'm having trouble connecting to my brain (the AI service). Please try asking for a live agent by typing 'agent'.";
     }
 }
@@ -1392,6 +1391,8 @@ const chatSessions = new Map();
 const wss = new WebSocket.Server({ noServer: true });
 
 
+
+// server.js (handleChatMessage function)
 
 async function handleChatMessage(ws, message, senderRole, customerId) {
     if (!message || !customerId) return;
@@ -1409,27 +1410,28 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
         // 1. AI Request Routing (Customer to Bot/AI)
         if (senderRole === 'customer' && parsed.ai_request) {
             
-            const userMessage = parsed.message;
-            const aiResponseText = await getSmartBotResponse(userMessage);
-
-            // A. Send AI response back to the customer
-            const aiPayload = { sender: 'admin', message: aiResponseText };
-            ws.send(JSON.stringify(aiPayload));
-            
-            // B. Send System signal to re-enable customer input
-            const inputReadyPayload = { sender: 'system', message: 'INPUT_READY' };
-            ws.send(JSON.stringify(inputReadyPayload)); 
+            // ... (AI request logic is correct)
             
             return;
 
         // 2. Handoff Request Routing (Customer to Admin Notification)
         } else if (senderRole === 'customer' && parsed.handoff) {
             
+            // 🚨 FIX: Fetch real customer name if they are logged in (numeric ID)
+            const isAnon = customerId.startsWith('anon-');
+            let customerName = parsed.customerName || 'Anonymous';
+            
+            if (!isAnon) { 
+                const user = await findUserById(customerId); 
+                if (user) customerName = user.full_name;
+            }
+            // END FIX
+            
             // Notify the admin via the Notification Socket
             const notificationPayload = JSON.stringify({
                 sender: 'customer',
                 customerId: customerId,
-                customerName: parsed.customerName || 'Anonymous',
+                customerName: customerName, // Use the verified name
                 message: parsed.message, // The message that triggered the handoff
                 handoff_request: true
             });
@@ -1445,7 +1447,19 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             
             return;
             
-        // 3. Standard Live Chat Routing (Saves and Relays)
+        // 3. Admin Handshake Signal (Admin to Customer)
+        } else if (senderRole === 'admin' && parsed.is_admin_handshake) {
+            
+             // Send HANDOFF_SUCCESS to the customer socket
+             const customerWs = sessionData.customer;
+             if (customerWs && customerWs.readyState === WebSocket.OPEN) {
+                 const successPayload = { sender: 'system', message: 'HANDOFF_SUCCESS' };
+                 customerWs.send(JSON.stringify(successPayload));
+             }
+             // Do NOT save the handshake message to history
+             return; 
+
+        // 4. Standard Live Chat Routing (Saves and Relays)
         } else {
             const messageText = parsed.message;
             
@@ -1454,7 +1468,11 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             
             // Relay the message to the other participant in the session
             const target = (senderRole === 'admin' ? sessionData.customer : sessionData.admin);
-            const payload = { sender: senderRole, message: messageText };
+            const payload = { 
+                sender: senderRole, 
+                message: messageText,
+                customerId: customerId // Include customerId for admin side message identification
+            };
             
             if (target && target.readyState === WebSocket.OPEN) {
                 target.send(JSON.stringify(payload));
@@ -1463,7 +1481,8 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             }
         }
     } catch (error) {
-        console.error('WebSocket Routing/Message Error:', error);
+        // This is the fallback for non-JSON messages (though fixed in handler)
+        console.error('WebSocket Routing/Message Error:', error); 
         // Fallback response for customer
         ws.send(JSON.stringify({ sender: 'admin', message: 'Sorry, I encountered an internal error. Please try again.' }));
     }
