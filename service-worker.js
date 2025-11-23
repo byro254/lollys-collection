@@ -12,8 +12,8 @@ const urlsToCache = [
     // --- CSS & Fonts ---
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
     // --- Icons (Ensure these paths exist) ---
-    '/images/icons/favucon.png',
-    '/images/icons/favicon.png',
+    '/images/icons/favicon.ico',
+    '/images/icons/logo.png',
     '/images/icons/icon-192x192.png',
     '/images/icons/logo.png',
     '/images/icons/maskable_icon.png'
