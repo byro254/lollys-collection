@@ -1233,18 +1233,21 @@ await connection.execute(
             [orderTotal, wallet_id]
         );
 
-        // -------------------------------
-        // 7. CLEAR CART
-        // -------------------------------
-        await connection.execute(
-            'DELETE FROM cart WHERE user_id = ?',
-            [userId]
-        );
+       if (userId === undefined || userId === null) {
+     // If userId is gone, we cannot clear the cart or commit safely.
+     // This usually indicates a critical session loss.
+     throw new Error("CRITICAL: Session User ID lost before cart clearance.");
+}
 
-        // -------------------------------
-        // 8. COMMIT TRANSACTION
-        // -------------------------------
-        await connection.commit();
+await connection.execute(
+    'DELETE FROM cart WHERE user_id = ?',
+    [userId] // userId is now guaranteed to be a string or number
+);
+
+// -------------------------------
+// 8. COMMIT TRANSACTION
+// -------------------------------
+await connection.commit();
 
         // -------------------------------
         // 9. SEND EMAILS (Non-critical)
