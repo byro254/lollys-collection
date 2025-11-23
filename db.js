@@ -466,7 +466,7 @@ module.exports = {
     getWalletByUserId,
     logDepositTransaction,
     findPaymentHistory,
-    
+    performWalletTransaction, 
     // Chat functions
     saveChatMessage, 
     getChatHistory,
