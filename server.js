@@ -1193,7 +1193,16 @@ for (const item of items) {
     if (!productRows.length) throw new Error(`Product ID ${item.id} not found`);
     
     const product = productRows[0];
-
+     // =========================================================
+    // 🚨 ADD CONSOLE.LOGS HERE 🚨
+    // =========================================================
+    console.log(`--- Debugging Order Item ID: ${item.id} ---`);
+    console.log(`Product data retrieved:`, product);
+    console.log(`item.quantity value:`, item.quantity);
+    console.log(`product.name value:`, product ? product.name : 'Product Not Found');
+    console.log(`product.price value:`, product ? product.price : 'Product Not Found');
+    console.log('-------------------------------------------');
+    // =========================================================
     if (product.stock < item.quantity) {
         throw new Error(`Not enough stock for product ID ${item.id}`);
     }
@@ -1205,13 +1214,13 @@ for (const item of items) {
     );
 
     // Insert order item
-    await connection.execute(itemSql, [
-        orderId,
-        item.id,
-        product.name,    // ensure valid name
-        product.price,   // ensure valid price
-        item.quantity
-    ]);
+   await connection.execute(itemSql, [ 
+    orderId, 
+    item.id, 
+    product.name ?? null,   // <-- FIX
+    product.price ?? null,  // <-- FIX
+    item.quantity 
+]);
 }
 
 
