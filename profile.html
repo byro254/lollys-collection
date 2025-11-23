@@ -43,7 +43,7 @@
             color: var(--color-pink-dark);
         }
         
-        /* --- GATING CSS --- */
+        /* --- GATING CSS (Causes blur and unresponsiveness) --- */
         .gated-content {
             transition: filter 0.3s, opacity 0.3s;
         }
@@ -497,7 +497,7 @@
     </div>
     <!-- END MODALS -->
 
-    <!-- 🚨 HEADER -->
+    <!-- 🚨 HEADER (GATED) -->
     <header class="site-header gated-content disabled">
         <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
             <i class="fas fa-bars"></i>
@@ -514,7 +514,7 @@
         </nav>
     </header>
 
-    <!-- 🚨 SIDEBAR -->
+    <!-- 🚨 SIDEBAR (GATED) -->
     <aside class="sidebar gated-content disabled" id="sidebar">
         <div class="sidebar-header">
             <span>My Account</span>
@@ -675,12 +675,13 @@
         const PROFILE_API_URL = '/api/user/profile';
         const ORDERS_API_URL = '/api/user/orders'; // New orders API endpoint
         const LOGOUT_API_URL = '/api/logout';
-        const REFRESH_INTERVAL_MS = 5000; // 🚨 FIX: Increased interval to 5 seconds
+        const REFRESH_INTERVAL_MS = 5000; 
         
         let isUserAuthenticated = false; 
         let currentUserData = {}; // Store all fetched user data
 
         // --- DOM Elements ---
+        // Note: sidebar and mainContent are defined here and used in checkAuthenticationStatus
         const sidebar = document.getElementById('sidebar');
         const hamburgerIcon = document.getElementById('hamburger-icon');
         const sidebarCloseIcon = document.getElementById('sidebar-close-icon');
@@ -735,6 +736,7 @@
 
         /**
          * Checks base authentication status and gates the page.
+         * 🚨 FIX: Now correctly removes the 'disabled' class from sidebar and main content.
          */
         async function checkAuthenticationStatus() {
             const header = document.querySelector('.site-header');
@@ -746,18 +748,24 @@
                 
                 if (response.ok) {
                     isUserAuthenticated = true;
-                    // Enable content
+                    // Enable content - REMOVE 'disabled' CLASS FROM ALL GATED ELEMENTS
                     header.classList.remove('disabled');
-                    wrapper.classList.remove('disabled');
-                    accessModal.style.display = 'none'; // 🚨 FIX: Use style.display
+                    sidebar.classList.remove('disabled');
+                    mainContent.classList.remove('disabled');
+                    // wrapper.classList.remove('disabled'); // Removed as wrapper has no 'disabled' class in HTML
+                    
+                    accessModal.style.display = 'none'; 
                     document.body.style.overflow = 'auto'; 
                     return true;
                 } else {
                     // Unauthenticated initially: Gate the page.
                     isUserAuthenticated = false;
                     header.classList.add('disabled');
-                    wrapper.classList.add('disabled');
-                    accessModal.style.display = 'flex'; // 🚨 FIX: Use style.display
+                    sidebar.classList.add('disabled');
+                    mainContent.classList.add('disabled');
+                    // wrapper.classList.add('disabled'); // Removed as wrapper is not gated in HTML
+                    
+                    accessModal.style.display = 'flex'; 
                     document.body.style.overflow = 'hidden';
                     return false;
                 }
@@ -766,8 +774,10 @@
                 isUserAuthenticated = false;
                 // Default to gated on network error
                 header.classList.add('disabled');
-                wrapper.classList.add('disabled');
-                accessModal.style.display = 'flex'; // 🚨 FIX: Use style.display
+                sidebar.classList.add('disabled');
+                mainContent.classList.add('disabled');
+                
+                accessModal.style.display = 'flex'; 
                 document.body.style.overflow = 'hidden';
                 return false;
             }
@@ -815,7 +825,7 @@
             const modal = document.getElementById('deactivated-alert-modal');
             const alertOkButton = document.getElementById('alert-ok-button'); 
             
-            // 🚨 FIX 1: Ensure modal elements exist and use correct display type
+            // Ensure modal elements exist and use correct display type
             if (modal) {
                 document.getElementById('deactivated-message-content').innerHTML = message;
                 modal.style.display = 'flex'; // Use flex to display modal
