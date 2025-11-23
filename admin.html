@@ -581,6 +581,27 @@
             padding: 10px;
             width: 100px;
         }
+        
+
+        .scrollable-table-container {
+            max-height: 500px; 
+            overflow-y: auto; 
+            border: 1px solid var(--color-border-medium); 
+            border-radius: 8px;
+        }
+
+
+        .scrollable-table-container table {
+          width: 100%;
+          margin: 0;
+          border: none; 
+        }
+
+        .scrollable-table-container th {
+           position: sticky;
+           top: 0;
+           z-index: 2; 
+        }
     </style>
 </head>
 <body>
@@ -807,21 +828,23 @@
     <div id="product-list-container">
         <p id="loading-message">Loading existing products...</p> 
 
-        <table class="product-table">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Name</th>
-                    <th>Category</th>
-                    <th>Price</th>
-                    <th>Stock</th>
-                    <th>Image</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="products-table-body"> 
+        <div class="scrollable-table-container"> 
+            <table class="product-table data-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Image</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="products-table-body"> 
                 </tbody>
-        </table>
+            </table>
+        </div>
     </div>
 </div>
         </section>
