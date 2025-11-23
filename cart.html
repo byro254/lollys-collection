@@ -527,7 +527,7 @@
                 
                 <select id="notification-method" class="form-select" required>
                     <option value="email">Admin Email (Default)</option>
-                    <option value="whatsapp">Admin WhatsApp (0742041208)</option>
+                    <option value="whatsapp">Admin WhatsApp </option>
                 </select>
 
                 <button type="submit" class="order-button">
@@ -559,7 +559,7 @@
             <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; color: var(--color-danger); margin-bottom: 15px;"></i>
             <h3>Account Access Revoked</h3>
             <p id="deactivated-message-content" style="margin-bottom: 20px;">
-                Your account status was detected as **DEACTIVATED** by the administrator. Your current session must now end.
+                Your account status was detected as <b style="color: var(--color-danger);">DEACTIVATED</b> by the administrator. Your current session must now end.
             </p>
             <button id="alert-ok-button" class="order-button" style="width: auto; padding: 10px 30px;">
                 OK
@@ -577,7 +577,7 @@
         const USER_PROFILE_API_URL = '/api/user/profile'; 
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const LOGOUT_API_URL = '/api/logout';
-        const SHIPPING_COST = 5.00; 
+        const SHIPPING_COST = 300.00; 
         const ADMIN_WHATSAPP = '254742041208'; 
         const REFRESH_INTERVAL_MS = 1000; 
 
@@ -755,8 +755,8 @@
             } catch (error) {
                 console.error('Error fetching cart:', error);
                 itemsContainer.innerHTML = '<p style="text-align: center; color: red;">Failed to load cart. Please ensure your backend is running correctly.</p>';
-                subtotalEl.textContent = '$0.00';
-                totalEl.textContent = '$' + SHIPPING_COST.toFixed(2);
+                subtotalEl.textContent = 'KES 0.00';
+                totalEl.textContent = 'KES' + SHIPPING_COST.toFixed(2);
                 document.getElementById('checkout-form').style.display = 'none';
                 return;
             }
@@ -767,8 +767,8 @@
 
             if (cart.length === 0) {
                 itemsContainer.innerHTML = '<p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Your cart is empty. <a href="/products">Start shopping now!</a></p>';
-                subtotalEl.textContent = '$0.00';
-                totalEl.textContent = '$' + SHIPPING_COST.toFixed(2);
+                subtotalEl.textContent = 'KES 0.00';
+                totalEl.textContent = 'KES' + SHIPPING_COST.toFixed(2);
                 document.getElementById('checkout-form').style.display = 'none';
                 window.currentCart = { items: [], total: SHIPPING_COST };
                 return;
@@ -799,18 +799,18 @@
                     <div class="item-details">
                         <strong>${item.name || 'Unknown Product'}</strong>
                         <p class="item-meta">
-                            Unit Price: $${price.toFixed(2)} | Qty: ${quantity}
+                            Unit Price: KES${price.toFixed(2)} | Qty: ${quantity}
                         </p>
                     </div>
-                    <span class="item-total-price">$${itemTotal.toFixed(2)}</span>
+                    <span class="item-total-price">KES${itemTotal.toFixed(2)}</span>
                 `;
                 itemsContainer.appendChild(itemDiv);
             });
 
             // --- Update Summary Totals ---
             const total = subtotal + SHIPPING_COST;
-            subtotalEl.textContent = '$' + subtotal.toFixed(2);
-            totalEl.textContent = '$' + total.toFixed(2);
+            subtotalEl.textContent = 'KES ' + subtotal.toFixed(2);
+            totalEl.textContent = 'KES ' + total.toFixed(2);
             
             // Store cart data globally for submission
             window.currentCart = { items: cart, total: total }; 
@@ -917,7 +917,7 @@
 
                     if (orderData.notificationMethod === 'whatsapp') {
                         const whatsappMessage = encodeURIComponent(
-                            `NEW ORDER #${result.orderId || 'CONFIRMED'} received from ${orderData.name} at ${orderData.location}. Total: $${orderData.total}.\n\nPlease check your admin system for full details.`
+                            `NEW ORDER #${result.orderId || 'CONFIRMED'} received from ${orderData.name} at ${orderData.location}. Total: KES${orderData.total}.\n\nPlease check your admin system for full details.`
                         );
                         window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${whatsappMessage}`, '_blank');
                     }

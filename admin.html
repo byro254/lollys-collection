@@ -1256,7 +1256,7 @@ function renderSalesChart(labels, data) {
                     beginAtZero: true,
                     title: {
                         display: true,
-                        text: 'Sales Amount ($)'
+                        text: 'Sales Amount KES'
                     }
                 },
                 x: {
@@ -1278,7 +1278,7 @@ function renderSalesChart(labels, data) {
                                 label += ': ';
                             }
                             if (context.parsed.y !== null) {
-                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(context.parsed.y);
+                                label += new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES' }).format(context.parsed.y);
                             }
                             return label;
                         }
@@ -1979,7 +1979,7 @@ function renderProductRow(product) {
     const tableBody = document.getElementById('products-table-body');
     const row = document.createElement('tr');
     
-    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(product.price);
+    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES' }).format(product.price);
     
     row.innerHTML = `
         <td>${product.id}</td>

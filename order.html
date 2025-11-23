@@ -529,7 +529,7 @@
                     <td data-label="Order ID">#${order.orderId}</td>
                     <td data-label="Date">${date}</td>
                     <td data-label="Status"><span class="status-badge status-${order.status}">${order.status}</span></td>
-                    <td data-label="Total">$${parseFloat(order.total).toFixed(2)}</td>
+                    <td data-label="Total">KES${parseFloat(order.total).toFixed(2)}</td>
                     <td data-label="Location">${order.location || order.delivery_location}</td>
                     <td data-label="Details"><i class="fas fa-chevron-down" style="font-size: 0.7em;"></i> ${order.items.length} items</td>
                 `;
@@ -587,19 +587,19 @@
                             <tr>
                                 <td>${item.name}</td>
                                 <td>${item.quantity}</td>
-                                <td>$${parseFloat(item.price).toFixed(2)}</td>
-                                <td>$${(item.quantity * item.price).toFixed(2)}</td>
+                                <td>KES${parseFloat(item.price).toFixed(2)}</td>
+                                <td>KES${(item.quantity * item.price).toFixed(2)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                     <tfoot>
                         <tr>
                             <td colspan="3" style="text-align: right; font-weight: 600;">Shipping:</td>
-                            <td>$${parseFloat(order.shipping || 5.00).toFixed(2)}</td>
+                            <td>KES${parseFloat(order.shipping || 5.00).toFixed(2)}</td>
                         </tr>
                         <tr>
                             <td colspan="3" style="text-align: right; font-weight: 700; color: var(--color-pink-dark);">ORDER TOTAL:</td>
-                            <td style="font-weight: 700; color: var(--color-pink-dark);">$${parseFloat(order.total).toFixed(2)}</td>
+                            <td style="font-weight: 700; color: var(--color-pink-dark);">KES${parseFloat(order.total).toFixed(2)}</td>
                         </tr>
                     </tfoot>
                 </table>

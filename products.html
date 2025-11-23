@@ -649,7 +649,7 @@
                 grid.classList.add('product-grid');
                 
                 groupedProducts[category].forEach(product => {
-                    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', }).format(product.price);
+                    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES', }).format(product.price);
                     
                     const card = document.createElement('div');
                     card.classList.add('product-card');
@@ -689,7 +689,7 @@
 
             lastFocusedElement = document.activeElement; 
             
-            const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(product.price);
+            const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES' }).format(product.price);
             
             const stock = parseInt(product.stock, 10);
             
