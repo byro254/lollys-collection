@@ -394,6 +394,8 @@ async function getChatHistory(customerId) {
     return rows;
 }
 
+// db.js (Wallet & Transaction Functions section)
+
 /**
  * Executes an atomic wallet transaction (Deposit or Deduction).
  * @param {number} userId - The user ID.
@@ -410,17 +412,35 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
     try {
         await connection.beginTransaction();
         
+        let wallet_id;
+        let currentBalance = 0;
+        
         // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
-        const [walletRows] = await connection.execute(
+        let [walletRows] = await connection.execute(
             'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
             [userId]
         );
-        if (walletRows.length === 0) throw new Error('Wallet not found.');
         
-        const { wallet_id, balance: currentBalance } = walletRows[0];
-        
-        // 2. Validate balance for deductions
-        if (type === 'Deduction' && currentBalance + amount < 0) { // 'amount' is expected to be negative for deduction
+        if (walletRows.length === 0) {
+            // 🚨 FIX: Wallet not found, create it now.
+            // Generate a simple account number (e.g., U + userId)
+            const accountNumber = `U${userId}`; 
+            
+            const [createResult] = await connection.execute(
+                'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+                [userId, accountNumber]
+            );
+            
+            wallet_id = createResult.insertId;
+            // currentBalance remains 0, which is correct for a new wallet
+            
+        } else {
+            wallet_id = walletRows[0].wallet_id;
+            currentBalance = walletRows[0].balance;
+        }
+
+        // 2. Validate balance for deductions (only if the transaction is a deduction)
+        if (type === 'Deduction' && currentBalance + amount < 0) { 
              throw new Error('INSUFFICIENT_FUNDS');
         }
 
@@ -431,7 +451,6 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         `;
-        // amount is the actual change: positive for deposit, negative for deduction
         await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus]);
 
         // 4. Update Wallet Balance (Only if status is Completed)
