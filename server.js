@@ -1174,25 +1174,41 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // 5. INSERT ORDER ITEMS + UPDATE STOCK
         // -------------------------------
         const itemSql = `
-            INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity)
-            VALUES (?, ?, ?, ?, ?)
-        `;
+    INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity)
+    VALUES (?, ?, ?, ?, ?)
+`;
 
-        for (const item of items) {
-            await connection.execute(
-                `UPDATE products SET stock = stock - ?
-                 WHERE id = ? AND stock >= ?`,
-                [item.quantity, item.id, item.quantity]
-            );
+for (const item of items) {
+    // Get product info from DB
+    const [productRows] = await connection.execute(
+        'SELECT name, price, stock FROM products WHERE id = ?',
+        [item.id]
+    );
 
-            await connection.execute(itemSql, [
-                orderId,
-                item.id,
-                item.name,
-                item.price,
-                item.quantity
-            ]);
-        }
+    if (!productRows.length) throw new Error(`Product ID ${item.id} not found`);
+    
+    const product = productRows[0];
+
+    if (product.stock < item.quantity) {
+        throw new Error(`Not enough stock for product ID ${item.id}`);
+    }
+
+    // Deduct stock
+    await connection.execute(
+        'UPDATE products SET stock = stock - ? WHERE id = ?',
+        [item.quantity, item.id]
+    );
+
+    // Insert order item
+    await connection.execute(itemSql, [
+        orderId,
+        item.id,
+        product.name,    // ensure valid name
+        product.price,   // ensure valid price
+        item.quantity
+    ]);
+}
+
 
         // -------------------------------
         // 6. WALLET DEDUCTION
