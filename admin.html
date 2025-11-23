@@ -759,11 +759,10 @@
                         <div>
                             <label for="product-image-file">Product Image (File Upload):</label>
                            <input type="file" name="productImage" id="image-upload" accept="image/*" required>
-                            <p style="font-size: 0.8rem; color: var(--color-text-subtle); margin-top: 5px;">*This file will be sent as **`productImage`** to your API.</p>
                         </div>
                         <div>
-                            <label for="product-guaranty">Warranty/Guaranty:</label>
-                            <input type="text" id="product-guaranty" name="guaranty" placeholder="e.g., 1 Year Limited, 90 Days" required>
+                            <label for="product-guaranty">Warranty/Guaranty (Months):</label>
+                            <input type="number" id="product-guaranty" name="guaranty" min="0" value="0" required>
                         </div>
                     <div class="form-group">
                   <label for="product-stock">Stock Quantity</label>
@@ -906,8 +905,8 @@
                 <h3>General Configurations</h3>
                 <p>This section is for site-wide settings like shipping fees, VAT rates, and payment gateway configuration.</p>
                 <form>
-                    <label for="shipping-fee">Default Shipping Fee ($):</label>
-                    <input type="number" id="shipping-fee" value="5.00" step="0.01">
+                    <label for="shipping-fee">Default Shipping Fee KES:</label>
+                    <input type="number" id="shipping-fee" value="300" step="0.01">
                     <label for="admin-email">Admin Contact Email:</label>
                     <input type="email" id="admin-email" value="support@lollyscollection.com">
                     <button type="submit" class="submit-button">Save Settings</button>
