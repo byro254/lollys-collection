@@ -1213,12 +1213,15 @@ for (const item of items) {
         // -------------------------------
         // 6. WALLET DEDUCTION
         // -------------------------------
-        await connection.execute(
-            `INSERT INTO transactions
-            (user_id, wallet_id, order_id, type, method, amount, transaction_status)
-            VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
-            [userId, wallet_id, orderId, -orderTotal]
-        );
+        const transactionOrderId = orderId || null; 
+
+await connection.execute(
+    `INSERT INTO transactions
+    (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+    VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+    // Use the coerced variable here
+    [userId, wallet_id, transactionOrderId, -orderTotal] 
+);
 
         await connection.execute(
             `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
