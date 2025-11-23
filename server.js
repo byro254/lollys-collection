@@ -1124,33 +1124,38 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // -------------------------------
         // 3. FETCH USER WALLET
         // -------------------------------
-        const walletData = await db.getWalletByUserId(userId);
+       const walletData = await db.getWalletByUserId(userId);
 
-        let wallet_id;
-        let currentBalance = 0;
+        let wallet_id;
+        let currentBalance = 0;
 
-        if (walletData) {
-            wallet_id = walletData.wallet_id;
-            currentBalance = walletData.balance;
-        } else {
-            const [createResult] = await connection.execute(
-                `INSERT INTO wallets (user_id, account_number, balance)
-                 VALUES (?, ?, 0.00)`,
-                [userId, `U${userId}`]
-            );
+        if (walletData) {
+            wallet_id = walletData.wallet_id;
+            currentBalance = walletData.balance;
+        } else {
+            const [createResult] = await connection.execute(
+                `INSERT INTO wallets (user_id, account_number, balance)
+                 VALUES (?, ?, 0.00)`,
+                [userId, `U${userId}`]
+            );
 
-            wallet_id = createResult.insertId;
-        }
+            // 🚨 FIX APPLIED HERE: Validate insertId before assignment
+            if (createResult.insertId === undefined || createResult.insertId === null) {
+                 // Throw a custom error to trigger the rollback and catch block
+                 throw new Error("CRITICAL: Failed to create user wallet and retrieve ID.");
+            }
+            
+            wallet_id = createResult.insertId;
+        }
 
-        // Wallet balance check
-        if (currentBalance < orderTotal) {
-            await connection.rollback();
-            connection.release();
-            return res.status(400).json({
-                message: `Insufficient funds (KES ${currentBalance.toFixed(2)}). Required: KES ${orderTotal.toFixed(2)}.`
-            });
-        }
-
+        // Wallet balance check
+        if (currentBalance < orderTotal) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({
+                message: `Insufficient funds (KES ${currentBalance.toFixed(2)}). Required: KES ${orderTotal.toFixed(2)}.`
+            });
+        }
         // -------------------------------
         // 4. INSERT ORDER HEADER
         // -------------------------------
