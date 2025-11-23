@@ -1174,7 +1174,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // 5. INSERT ORDER ITEMS + UPDATE STOCK
         // -------------------------------
         const itemSql = `
-            INSERT INTO order_items (order_id, product_id, name, price, quantity)
+            INSERT INTO order_items (id, order_id, product_id, product_name, unit_price, quantity)
             VALUES (?, ?, ?, ?, ?)
         `;
 
