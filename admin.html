@@ -608,6 +608,10 @@
         <section id="dashboard" class="content-section">
             <h2>
                 <i class="fas fa-chart-line"></i> Dashboard Overview
+                <!-- 🚨 FIX 1: Agent Name Display -->
+                <small id="agent-welcome-message" style="font-size: 0.8em; font-family: var(--font-body); font-weight: 400; color: var(--color-text-subtle); display: block; margin-top: 5px;">
+                    Welcome, Agent!
+                </small>
             </h2>
             
             <div class="stats-grid">
@@ -995,8 +999,9 @@
             <button class="submit-button" id="handoff-accept-btn" style="margin-top: 20px;">
                 <i class="fas fa-comments"></i> Accept Chat
             </button>
+             <!-- 🚨 FIX 2: Rename 'Dismiss' button to 'Ignore' -->
              <button class="action-button" id="handoff-reject-btn" style="background-color: var(--color-danger); margin-left: 10px;">
-                <i class="fas fa-times"></i> Dismiss
+                <i class="fas fa-eye-slash"></i> Ignore
             </button>
         </div>
     </div>
@@ -1018,6 +1023,7 @@ const REFRESH_INTERVAL = 30000; // 30 seconds
 // --- NEW CHAT GLOBALS ---
 let webSocket = null;
 let currentChatCustomerId = null;
+let agentName = 'Agent'; // Default agent name
 // --- END NEW CHAT GLOBALS ---
 
 // --- Authentication Gate Logic (NEW) ---
@@ -1033,28 +1039,34 @@ function redirectToAuthPage() {
 }
 
 /**
- * Checks the authentication status of the user via API.
+ * Checks the authentication status of the user via API and retrieves the agent's name.
  */
 async function checkAdminAuthentication() {
     try {
-        // Simulated API call to a dedicated authentication check endpoint
+        // Assume /api/auth/check also returns user details if authenticated
         const response = await fetch(`${API_BASE_URL}/auth/check`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
         });
 
         if (response.ok) {
-            // User is authenticated. Hide modal and proceed.
+            const result = await response.json();
+            
+            // 🚨 FIX 3: Capture the agent's full name from the session response
+            // We rely on the server.js returning fullName or name in the check response
+            agentName = result.full_name || result.name || 'Admin';
+            
+            // Update the dashboard greeting immediately
+            document.getElementById('agent-welcome-message').textContent = `Welcome, ${agentName}!`;
+
             document.getElementById('auth-gate-modal').style.display = 'none';
             document.body.style.overflow = 'auto'; // Re-enable scrolling
             
-            // Re-enable interaction with the main content area
             document.querySelector('.main-content').style.pointerEvents = 'auto';
             document.querySelector('.sidebar-nav').style.pointerEvents = 'auto';
             
             return true;
         } else {
-            // User is NOT authenticated (e.g., 401 Unauthorized or 403 Forbidden)
             const result = await response.json().catch(() => ({ message: 'Unauthenticated' }));
             console.warn('Authentication required:', result.message || 'Not logged in.');
             displayAuthGate();
@@ -1063,7 +1075,6 @@ async function checkAdminAuthentication() {
 
     } catch (error) {
         console.error('Network error during auth check:', error);
-        // Treat any network error as unauthenticated access for security
         displayAuthGate();
         return false;
     }
@@ -1368,12 +1379,13 @@ const handoffModal = document.getElementById('handoff-modal');
         // 2. Send the HANDOFF_SUCCESS message to the customer via the new main WebSocket
         // This is done automatically in the sendChatMessage function if we pass a special payload
         
-        // We will send a system message to the customer's chat to confirm connection
+        // 🚨 FIX 4: Pass agentName to the handshake message
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
             webSocket.send(JSON.stringify({ 
                 sender: 'system', 
                 message: 'HANDOFF_SUCCESS',
-                is_admin_handshake: true // Signal server to send system message to customer
+                is_admin_handshake: true,
+                agent_name: agentName // <-- Pass the name here
             }));
         }
 
@@ -1382,7 +1394,7 @@ const handoffModal = document.getElementById('handoff-modal');
         updateNotificationIcon();
     });
     
-    // Listener for dismissing the chat
+    // Listener for ignoring the chat (was dismiss)
     handoffRejectBtn.addEventListener('click', function() {
         // Simply close the modal without taking action
         handoffModal.style.display = 'none';
@@ -1402,8 +1414,14 @@ const handoffModal = document.getElementById('handoff-modal');
             document.getElementById('handoff-modal').style.display = 'none';
             openChatModal(customerId, customerName); 
             
+            // 🚨 FIX 4: Pass agentName to the handshake message
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
-                webSocket.send(JSON.stringify({ sender: 'system', message: 'HANDOFF_SUCCESS', is_admin_handshake: true }));
+                webSocket.send(JSON.stringify({ 
+                    sender: 'system', 
+                    message: 'HANDOFF_SUCCESS', 
+                    is_admin_handshake: true,
+                    agent_name: agentName // <-- Pass the name here
+                }));
             }
             unreadSessions.delete(customerId);
             updateNotificationIcon();
@@ -1911,7 +1929,7 @@ async function showDeleteConfirmation(productId) {
     const product = allProducts.find(p => p.id === productId);
 
     if (!product) {
-        showToast('Error: Product data not found for confirmation.', 'error');
+        showToast('Product data not found for confirmation.', 'error');
         return;
     }
 
@@ -2437,6 +2455,14 @@ async function openChatModal(customerId, customerName) {
     
     // 2. Close any existing connection
     if (webSocket) {
+        // Send AGENT_LEFT message to customer before closing the WS
+        if (webSocket.readyState === WebSocket.OPEN) {
+             webSocket.send(JSON.stringify({ 
+                 sender: 'system', 
+                 message: 'The admin has disconnected from the chat.',
+                 is_admin_handshake: true // Re-use the handshake flag for disconnection signal
+             }));
+        }
         webSocket.close();
         webSocket = null;
     }
@@ -2462,6 +2488,14 @@ async function openChatModal(customerId, customerName) {
 function closeChatModal() {
     document.getElementById('chat-modal').style.display = 'none';
     if (webSocket) {
+         // Send AGENT_LEFT message to customer before closing the WS
+        if (webSocket.readyState === WebSocket.OPEN) {
+             webSocket.send(JSON.stringify({ 
+                 sender: 'system', 
+                 message: 'AGENT_LEFT', // Use a specific code for clean client handling
+                 is_admin_handshake: true // Re-use the handshake flag for disconnection signal
+             }));
+        }
         webSocket.close();
         webSocket = null;
     }
