@@ -6,16 +6,16 @@ const urlsToCache = [
     '/cart',
     '/about',
     '/contact',
-    '/auth',
+    '/auth.html',
     '/profile.html',
     '/manifest.json',
     // --- CSS & Fonts ---
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css',
     // --- Icons (Ensure these paths exist) ---
-    '/images/icons/favicon-32x32.png',
-    '/images/icons/apple-touch-icon.png',
+    '/images/icons/favucon.png',
+    '/images/icons/favicon.png',
     '/images/icons/icon-192x192.png',
-    '/images/icons/icon-512x512.png',
+    '/images/icons/logo.png',
     '/images/icons/maskable_icon.png'
 ];
 

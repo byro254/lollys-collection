@@ -2,6 +2,7 @@
     "name": "Lolly's Collection",
     "short_name": "Lolly's Shop",
     "description": "The Power of a Fresh Start. E-commerce clothing and accessories store.",
+    "id": "/index.html",
     "start_url": "/index.html",
     "display": "standalone",
     "background_color": "#F4F4F9",
@@ -18,10 +19,10 @@
             "type": "image/png"
         },
         {
-            "src": "/images/icons/maskable_icon.png",
-            "sizes": "192x192",
+            "src": "/images/icons/logo.png",
+            "sizes": "512x388",
             "type": "image/png",
-            "purpose": "maskable"
+            "purpose": "logo"
         }
     ]
 }
