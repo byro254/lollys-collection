@@ -326,56 +326,6 @@ async function getWalletByUserId(userId) {
     }
 }
 
-/**
- * Logs a new deposit transaction and updates the wallet balance.
- * (This is a simplified example; real M-Pesa/Card deposits require multi-step services/transactions.)
- * @param {number} userId - The user ID.
- * @param {string} method - Payment method ('M-Pesa', 'Card').
- * @param {number} amount - The deposit amount.
- * @param {string} externalRef - Transaction ID/Reference.
- * @param {string} transactionStatus - 'Completed' or 'Pending'.
- * @returns {Promise<boolean>} True if transaction and balance update succeeded.
- */
-async function logDepositTransaction(userId, method, amount, externalRef, transactionStatus = 'Completed') {
-    const connection = await pool.getConnection();
-    try {
-        await connection.beginTransaction();
-        
-        // 1. Get Wallet ID and current balance
-        const [walletRows] = await connection.execute(
-            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [userId]
-        );
-        if (walletRows.length === 0) throw new Error('Wallet not found.');
-        
-        const { wallet_id, balance: currentBalance } = walletRows[0];
-        const newBalance = currentBalance + amount;
-
-        // 2. Log Transaction
-        const transactionSql = `
-            INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status)
-            VALUES (?, ?, 'Deposit', ?, ?, ?, ?);
-        `;
-        await connection.execute(transactionSql, [userId, wallet_id, method, amount, externalRef, transactionStatus]);
-
-        // 3. Update Wallet Balance (Only if status is Completed)
-        if (transactionStatus === 'Completed') {
-             await connection.execute(
-                'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
-                [newBalance, wallet_id]
-            );
-        }
-
-        await connection.commit();
-        return true;
-    } catch (error) {
-        await connection.rollback();
-        console.error(`Database error during ${method} deposit:`, error);
-        throw error;
-    } finally {
-        connection.release();
-    }
-}
 
 /**
  * Fetches a user's payment history from the transactions table.
@@ -444,6 +394,64 @@ async function getChatHistory(customerId) {
     return rows;
 }
 
+/**
+ * Executes an atomic wallet transaction (Deposit or Deduction).
+ * @param {number} userId - The user ID.
+ * @param {number} amount - The amount to transact (positive for Deposit, negative for Deduction/Withdrawal).
+ * @param {string} method - Payment method ('M-Pesa', 'Card', 'Wallet Deduction').
+ * @param {string} type - Transaction type ('Deposit', 'Deduction').
+ * @param {string} externalRef - Transaction ID/Reference (for deposits).
+ * @param {number | null} orderId - The ID of the order if this is a deduction for an order.
+ * @param {string} transactionStatus - 'Completed' or 'Pending'.
+ * @returns {Promise<boolean>} True if transaction and balance update succeeded.
+ */
+async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed') {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
+        const [walletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+            [userId]
+        );
+        if (walletRows.length === 0) throw new Error('Wallet not found.');
+        
+        const { wallet_id, balance: currentBalance } = walletRows[0];
+        
+        // 2. Validate balance for deductions
+        if (type === 'Deduction' && currentBalance + amount < 0) { // 'amount' is expected to be negative for deduction
+             throw new Error('INSUFFICIENT_FUNDS');
+        }
+
+        const newBalance = currentBalance + amount;
+
+        // 3. Log Transaction
+        const transactionSql = `
+            INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        `;
+        // amount is the actual change: positive for deposit, negative for deduction
+        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus]);
+
+        // 4. Update Wallet Balance (Only if status is Completed)
+        if (transactionStatus === 'Completed') {
+             await connection.execute(
+                'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
+                [newBalance, wallet_id]
+            );
+        }
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Database error during ${type} transaction:`, error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
@@ -464,7 +472,6 @@ module.exports = {
     
     // 🚨 NEW Wallet & Transaction functions
     getWalletByUserId,
-    logDepositTransaction,
     findPaymentHistory,
     performWalletTransaction, 
     // Chat functions
