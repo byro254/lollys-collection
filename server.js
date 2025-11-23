@@ -1220,12 +1220,12 @@ for (const item of items) {
     );
 
     // Insert order item
-   await connection.execute(itemSql, [ 
-    orderId, 
-    item.id, 
-    product.name ?? null,   // <-- FIX
-    product.price ?? null,  // <-- FIX
-    item.quantity 
+   await connection.execute(itemSql, [
+    orderId,         // Parameter 1
+    item.id,         // Parameter 2 (product_id)
+    product.name,    // Parameter 3 (product_name)
+    product.price,   // Parameter 4 (unit_price)
+    item.quantity    // Parameter 5
 ]);
 }
 
