@@ -1080,204 +1080,202 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
 
 app.post('/api/order', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
-    const { name, phone, email, location, items, notificationMethod, total } = req.body;
-    
-    // --- 1. Safe Variable Assignment and Validation ---
-    
-    // 1a. Validate mandatory fields (total and items)
-    if (!total || !items || items.length === 0) {
-        return res.status(400).json({ message: 'Missing required item list or order total.' });
-    }
-    
-    const numericTotal = parseFloat(total);
-    if (isNaN(numericTotal) || numericTotal <= 0) {
-         return res.status(400).json({ message: 'Invalid or missing order total amount.' });
-    }
-    
-    const orderTotal = numericTotal;
-    
-    // ----------------------------------------------------
-    // 🚨 FIX: Server-Side Mandatory Delivery Field Validation
-    // This blocks submission if any required field is missing (undefined) or empty ("").
-    // ----------------------------------------------------
-    if (!name || name.trim() === '') {
-        return res.status(400).json({ message: 'Missing required field: Customer Name.' });
-    }
-    if (!location || location.trim() === '') { // <-- CRITICAL: Catches the empty/missing location!
-        return res.status(400).json({ message: 'Missing required field: Delivery Location.' });
-    }
-    if (!email || email.trim() === '') {
-        return res.status(400).json({ message: 'Missing required field: Customer Email.' });
-    }
-    if (!phone || phone.trim() === '') {
-        return res.status(400).json({ message: 'Missing required field: Phone Number.' });
-    }
-    // ----------------------------------------------------
-    
-    // 1b. Now that all fields are guaranteed to be non-empty strings, 
-    // assign them directly for insertion, eliminating the risk of 'undefined'.
-    const customerName = name; 
-    const customerPhone = phone;
-    const customerEmail = email;
-    const deliveryLocation = location; // This value is now guaranteed to be a non-empty string!
-    
-    // --- End Validation ---
 
+    // Extract fields safely
+    const {
+        name = "",
+        phone = "",
+        email = "",
+        location = "",
+        items = [],
+        notificationMethod = "email",
+        total
+    } = req.body;
+
+    // -------------------------------
+    // 1. VALIDATION
+    // -------------------------------
+
+    // Mandatory: cart items
+    if (!items || !Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'Cart is empty or invalid.' });
+    }
+
+    // Mandatory: total
+    const orderTotal = parseFloat(total);
+    if (isNaN(orderTotal) || orderTotal <= 0) {
+        return res.status(400).json({ message: 'Invalid or missing total.' });
+    }
+
+    // Mandatory delivery fields
+    if (!name.trim())       return res.status(400).json({ message: 'Missing Customer Name.' });
+    if (!phone.trim())      return res.status(400).json({ message: 'Missing Phone Number.' });
+    if (!email.trim())      return res.status(400).json({ message: 'Missing Email Address.' });
+    if (!location.trim())   return res.status(400).json({ message: 'Missing Delivery Location.' });
+
+    // -------------------------------
+    // 2. GET DB CONNECTION
+    // -------------------------------
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
-        
-        // 2. Get Wallet Data (wallet_id and currentBalance)
+
+        // -------------------------------
+        // 3. FETCH USER WALLET
+        // -------------------------------
         const walletData = await db.getWalletByUserId(userId);
-        
+
         let wallet_id;
         let currentBalance = 0;
-        
+
         if (walletData) {
-            wallet_id = walletData.wallet_id; // Guaranteed to be a number since the wallet exists
+            wallet_id = walletData.wallet_id;
             currentBalance = walletData.balance;
         } else {
-             // Wallet does not exist (should be rare if previous fix was applied, but safe)
-             const [createResult] = await connection.execute(
-                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
-                 [userId, `U${userId}`]
-             );
-             
-             if (!createResult.insertId) {
-                 throw new Error("Failed to create user wallet and retrieve ID.");
-             }
-             
-             wallet_id = createResult.insertId;
+            const [createResult] = await connection.execute(
+                `INSERT INTO wallets (user_id, account_number, balance)
+                 VALUES (?, ?, 0.00)`,
+                [userId, `U${userId}`]
+            );
+
+            wallet_id = createResult.insertId;
         }
-        
-        // 2b. Perform fund check based on the balance
+
+        // Wallet balance check
         if (currentBalance < orderTotal) {
             await connection.rollback();
             connection.release();
-            return res.status(400).json({ 
-                message: `Insufficient funds in your wallet (KES ${currentBalance.toFixed(2)}). Required: KES ${orderTotal.toFixed(2)}.` 
+            return res.status(400).json({
+                message: `Insufficient funds (KES ${currentBalance.toFixed(2)}). Required: KES ${orderTotal.toFixed(2)}.`
             });
         }
 
-        // 3. Insert Order Header
-        const orderInsertParams = [
-            userId, 
-            customerName, 
-            customerPhone, 
-            customerEmail, 
-            deliveryLocation, 
-            orderTotal
-        ];
-        
+        // -------------------------------
+        // 4. INSERT ORDER HEADER
+        // -------------------------------
         const [orderResult] = await connection.execute(
-            `INSERT INTO orders (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status) 
-             VALUES (?, ?, ?, ?, ?, ?, 'Pending')`,
-            orderInsertParams
+            `INSERT INTO orders
+            (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
+            [
+                userId,
+                name,
+                phone,
+                email,
+                location,
+                orderTotal
+            ]
         );
+
         const orderId = orderResult.insertId;
 
-        // 4. Process Items and Stock Deduction
-        const itemSql = `INSERT INTO order_items (order_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?)`;
-        
+        // -------------------------------
+        // 5. INSERT ORDER ITEMS + UPDATE STOCK
+        // -------------------------------
+        const itemSql = `
+            INSERT INTO order_items (order_id, product_id, name, price, quantity)
+            VALUES (?, ?, ?, ?, ?)
+        `;
+
         for (const item of items) {
-            // Stock Update
-            await connection.execute('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?', [item.quantity, item.id, item.quantity]);
-            // Insert Order Item
-            await connection.execute(itemSql, [orderId, item.name, item.price, item.quantity]);
+            await connection.execute(
+                `UPDATE products SET stock = stock - ?
+                 WHERE id = ? AND stock >= ?`,
+                [item.quantity, item.id, item.quantity]
+            );
+
+            await connection.execute(itemSql, [
+                orderId,
+                item.id,
+                item.name,
+                item.price,
+                item.quantity
+            ]);
         }
-        
-        // 5. Deduct Funds from Wallet and Log Transaction
-        const deductionAmount = -orderTotal; 
-        
-        const deductionSql = `
-            INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, transaction_status)
-            VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed');
-        `;
-        
-        // Line 1157 (guaranteed no 'undefined' in the array)
-        await connection.execute(deductionSql, [userId, wallet_id, orderId, deductionAmount]); 
 
-        // Update the actual wallet balance
+        // -------------------------------
+        // 6. WALLET DEDUCTION
+        // -------------------------------
         await connection.execute(
-            'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?', 
-            [deductionAmount, wallet_id] 
+            `INSERT INTO transactions
+            (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+            VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+            [userId, wallet_id, orderId, -orderTotal]
         );
-        
-        // 6. Clear Cart
-        await connection.execute('DELETE FROM cart WHERE user_id = ?', [userId]);
-        
-        // 7. Commit Transaction
-        await connection.commit();
-        
-        // 8. Send Emails (Outside critical transaction block)
 
-        const orderDetailsHtml = items.map(item => 
-            `<li>${item.name} (x${item.quantity}) - KES${(item.price * item.quantity).toFixed(2)}</li>`
+        await connection.execute(
+            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
+            [orderTotal, wallet_id]
+        );
+
+        // -------------------------------
+        // 7. CLEAR CART
+        // -------------------------------
+        await connection.execute(
+            'DELETE FROM cart WHERE user_id = ?',
+            [userId]
+        );
+
+        // -------------------------------
+        // 8. COMMIT TRANSACTION
+        // -------------------------------
+        await connection.commit();
+
+        // -------------------------------
+        // 9. SEND EMAILS (Non-critical)
+        // -------------------------------
+
+        const orderDetailsHtml = items.map(item =>
+            `<li>${item.name} x${item.quantity} – KES ${(item.price * item.quantity).toFixed(2)}</li>`
         ).join('');
-        
-        const adminEmailBody = `
-            <h2>🚨 NEW ORDER #${orderId} Received (PAID VIA WALLET)!</h2>
-            <p><strong>Customer:</strong> ${customerName || 'N/A'}</p>
-            <p><strong>Phone:</strong> ${customerPhone || 'N/A'}</p>
-            <p><strong>Email:</strong> ${customerEmail || 'N/A'}</p>
-            <p><strong>Location:</strong> ${deliveryLocation || 'N/A'}</p>
-           <p><strong>Total:</strong> KES${orderTotal.toFixed(2)}</p>
-            <h3>Items Ordered:</h3>
-            <ul>${orderDetailsHtml}</ul>
-            <p>Preferred Contact: ${notificationMethod}</p>
-        `;
-        
-        const userConfirmationBody = `
-            <h2>🛍️ Order #${orderId} Confirmation - Lolly's Collection</h2>
-            <p>Hello ${customerName || 'Customer'},</p>
-            <p>Thank you for your order! Your wallet balance has been successfully charged KES ${orderTotal.toFixed(2)}.</p>
-            <p>We will contact you shortly on ${customerPhone || 'your registered phone'} or ${customerEmail || 'email'} to confirm delivery.</p>
-            <p><strong>Total:</strong> KES${orderTotal.toFixed(2)}</p>
-            <h3>Your Items:</h3>
-            <ul>${orderDetailsHtml}</ul>
-        `;
 
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
         await Promise.all([
             resend.emails.send({
                 from: `Lolly's Collection <${senderEmail}>`,
-                to: customerEmail,
-                subject: `Order #${orderId} Received and Paid`,
-                html: userConfirmationBody
+                to: email,
+                subject: `Order #${orderId} Confirmation`,
+                html: `
+                    <h2>Order #${orderId} Confirmed</h2>
+                    <p>Thank you ${name}, your wallet was charged KES ${orderTotal.toFixed(2)}.</p>
+                    <ul>${orderDetailsHtml}</ul>
+                `
             }),
             resend.emails.send({
                 from: `Lolly's Collection Admin <${senderEmail}>`,
                 to: process.env.ADMIN_EMAIL,
-                subject: `NEW WALLET PAID ORDER: #${orderId}`,
-                html: adminEmailBody
+                subject: `New Wallet Order #${orderId}`,
+                html: `
+                    <h2>New Order #${orderId}</h2>
+                    <p><strong>Name:</strong> ${name}</p>
+                    <p><strong>Phone:</strong> ${phone}</p>
+                    <p><strong>Total:</strong> KES ${orderTotal.toFixed(2)}</p>
+                    <ul>${orderDetailsHtml}</ul>
+                `
             })
         ]);
 
-        console.log(`Order #${orderId} processed, paid via wallet, cart cleared, stock updated, emails sent via Resend.`);
-        res.status(201).json({ 
-            message: 'Order placed and paid successfully using your wallet.', 
-            orderId: orderId 
+        // SUCCESS RESPONSE
+        return res.status(201).json({
+            message: 'Order placed successfully.',
+            orderId
         });
 
     } catch (error) {
+        console.error("ORDER ERROR:", error);
         await connection.rollback();
-        connection.release();
-        
-        console.error('Order processing failed:', error);
-        
-        // Check for specific error message set during balance check
-        if (error.message === 'INSUFFICIENT_FUNDS') {
-             return res.status(400).json({ message: `Insufficient funds in your wallet. Required: KES ${orderTotal.toFixed(2)}.` });
-        }
-        
-        const errorMessage = error.sqlMessage || 'Order failed to process, possibly due to a system error or lack of stock. Please try again later.';
-        res.status(500).json({ message: errorMessage });
+
+        return res.status(500).json({
+            message: error.sqlMessage || 'Order failed. Try again later.'
+        });
+
     } finally {
-        if (connection) connection.release();
+        connection.release();
     }
 });
+
 app.get('/api/orders/:orderId', isAdmin, async (req, res) => {
     try {
         const orderId = req.params.orderId;
