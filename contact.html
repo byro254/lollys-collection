@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lolly's Collection: Contact Us</title>
-
+     <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/x-icon" href="images/icons/favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -471,6 +472,11 @@
         const chatBody = document.getElementById('chat-body');
         const chatStatusIcon = document.getElementById('chat-status-icon');
         const chatHeaderTitle = document.getElementById('chat-header-title');
+        
+        // 🚨 NEW: Handoff/Ignore button elements
+        const chatSendBtn = document.getElementById('chat-send-btn');
+        const chatSendIcon = chatSendBtn.querySelector('i');
+
 
         // --- NEW CHAT STATE VARIABLES ---
         let chatSocket = null;
@@ -514,13 +520,36 @@
 
         // --- UTILITY FUNCTIONS ---
         
-        function setChatHeaderStatus(isLive) {
+        /**
+         * 🚨 UPDATED to include agentName for clarity.
+         */
+        function setChatHeaderStatus(isLive, agentName = null) {
             if (isLive) {
                 chatStatusIcon.className = 'fas fa-user-circle'; 
-                chatHeaderTitle.textContent = 'Live Agent Connected';
+                chatHeaderTitle.textContent = agentName ? `Chatting with ${agentName}` : 'Live Agent Connected';
             } else {
                 chatStatusIcon.className = 'fas fa-robot';
                 chatHeaderTitle.textContent = 'Lolly Bot Support';
+            }
+        }
+        
+        /**
+         * Manages the UI button state for handoff/live chat.
+         * 🚨 NEW FUNCTION
+         */
+        function updateChatButtonState(isHandoff, isLive) {
+            if (isLive) {
+                chatSendIcon.className = 'fas fa-paper-plane';
+                chatSendBtn.title = 'Send Message';
+                isHandoffRequested = false;
+            } else if (isHandoff) {
+                chatSendIcon.className = 'fas fa-times'; // Change to 'x' icon
+                chatSendBtn.title = 'Ignore Handoff Request'; // New text
+                isHandoffRequested = true;
+            } else {
+                chatSendIcon.className = 'fas fa-paper-plane';
+                chatSendBtn.title = 'Send Message';
+                isHandoffRequested = false;
             }
         }
         
@@ -754,7 +783,7 @@
                 const intents = [
                     {
                         keywords: ['agent', 'human', 'admin', 'transfer', 'support', 'person'],
-                        response: "Hold on while I connect you to a live agent. This may take a moment...",
+                        response: "", // 🚨 FIX: Empty response to avoid mismatch with server busy message
                         isHandoff: true
                     },
                     {
@@ -823,12 +852,20 @@
                     response = "I didn't quite catch that. You can ask me about 'orders', 'sizing', 'returns', 'payment', or type 'agent' to request a human.";
                 }
                 
-                appendMessage(response, 'admin', false);
+                // Only append message if not empty (handles the agent handoff case)
+                if (response) {
+                    appendMessage(response, 'admin', false);
+                }
+
 
                 if (isHandoff) {
                     isHandoffRequested = true;
+                    // 🚨 FIX: Update button state to 'Ignore'
+                    updateChatButtonState(true, false); 
                     initiateAgentHandoff(userMessage); 
                 } else {
+                    // 🚨 FIX: Update button state back to 'Send'
+                    updateChatButtonState(false, isLiveAgentConnected);
                     chatInput.focus();
                 }
             }, 400); 
@@ -841,6 +878,7 @@
                 appendMessage("To connect to a live agent, please log in first. Type 'login' or click the login button.", 'system', false);
                 authGateModal.style.display = 'flex';
                 isHandoffRequested = false;
+                updateChatButtonState(false, false);
                 return;
             }
             
@@ -861,6 +899,7 @@
             } else {
                 appendMessage("Error initiating handoff: Chat connection is closed. Please try again.", 'admin', false);
                 isHandoffRequested = false;
+                updateChatButtonState(false, false);
             }
         }
         
@@ -892,68 +931,76 @@
             };
 
             chatSocket.onmessage = (event) => {
-    try {
-        const data = JSON.parse(event.data);
-        
-        // 1. Handle CONNECTION_STATUS and control messages (Handled correctly above)
-        if (data.type === 'CONNECTION_STATUS') {
-            if (data.connected && !isLiveAgentConnected) {
-                isLiveAgentConnected = true;
-                isHandoffRequested = false;
-                localStorage.setItem('chat_live_agent_active', 'true');
-                setChatHeaderStatus(true);
-            }
-            return;
-        }
-        
-        if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
-            isLiveAgentConnected = true;
-            isHandoffRequested = false;
-            localStorage.setItem('chat_live_agent_active', 'true');
-            appendMessage('A live agent has joined the chat. How can they assist you?', 'system', false); 
-            setChatHeaderStatus(true); 
-            return;
-        }
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // 1. Handle CONNECTION_STATUS and control messages
+                    if (data.type === 'CONNECTION_STATUS') {
+                        if (data.connected && !isLiveAgentConnected) {
+                            isLiveAgentConnected = true;
+                            isHandoffRequested = false;
+                            localStorage.setItem('chat_live_agent_active', 'true');
+                            setChatHeaderStatus(true);
+                        }
+                        return;
+                    }
+                    
+                    // 🚨 FIX: Check for agentName in HANDOFF_SUCCESS
+                    if (data.sender === 'system' && data.message === 'HANDOFF_SUCCESS') {
+                        isLiveAgentConnected = true;
+                        isHandoffRequested = false;
+                        localStorage.setItem('chat_live_agent_active', 'true');
+                        
+                        // Use agentName if provided by server payload
+                        const agentName = data.agentName || 'a live agent'; 
+                        
+                        appendMessage(`👋 ${agentName} has joined the chat. How can they assist you?`, 'system', false); 
+                        setChatHeaderStatus(true, data.agentName); // Pass agent name to header
+                        updateChatButtonState(false, true); // Reset button to send
+                        return;
+                    }
 
-        if (data.sender === 'system' && (data.message.includes('admin has disconnected') || data.message === 'AGENT_LEFT')) {
-            isLiveAgentConnected = false;
-            isHandoffRequested = false;
-            localStorage.removeItem('chat_live_agent_active');
-            setChatHeaderStatus(false); 
-            
-            appendMessage('The admin has disconnected from the chat.', 'system', false);
-            
-            setTimeout(() => {
-                appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
-                awaitingRating = true; 
-            }, 1000);
-            
-            chatInput.disabled = false;
-            document.getElementById('chat-send-btn').disabled = false;
-            return;
-        }
-        
-        // 🚨 CRITICAL FIX: Explicitly determine the sender role for general messages
-        let senderRole;
-        if (data.sender === 'system') {
-            senderRole = 'system'; // This catches the "busy" message
-        } else if (data.sender === 'admin') {
-            senderRole = 'admin';
-        } else {
-            senderRole = 'user'; 
-        }
+                    if (data.sender === 'system' && (data.message.includes('admin has disconnected') || data.message === 'AGENT_LEFT')) {
+                        isLiveAgentConnected = false;
+                        isHandoffRequested = false;
+                        localStorage.removeItem('chat_live_agent_active');
+                        setChatHeaderStatus(false); 
+                        
+                        appendMessage('The admin has disconnected from the chat.', 'system', false);
+                        
+                        setTimeout(() => {
+                            appendMessage('How would you rate your experience with our agent today? (1 - 5 stars)', 'admin', false);
+                            awaitingRating = true; 
+                        }, 1000);
+                        
+                        chatInput.disabled = false;
+                        document.getElementById('chat-send-btn').disabled = false;
+                        updateChatButtonState(false, false); // Reset button to send/bot state
+                        return;
+                    }
+                    
+                    // 🚨 CRITICAL FIX: Explicitly determine the sender role for general messages
+                    let senderRole;
+                    if (data.sender === 'system') {
+                        senderRole = 'system'; // This catches the "busy" message
+                    } else if (data.sender === 'admin') {
+                        senderRole = 'admin';
+                    } else {
+                        senderRole = 'user'; 
+                    }
 
-        appendMessage(data.message, senderRole, isLiveAgentConnected);
-        
-    } catch (e) {
-        console.error('Failed to parse chat message:', e);
-    }
-};
+                    appendMessage(data.message, senderRole, isLiveAgentConnected);
+                    
+                } catch (e) {
+                    console.error('Failed to parse chat message:', e);
+                }
+            };
 
             chatSocket.onclose = () => {
                 appendMessage('Connection lost. Reconnecting...', 'system', false);
                 isLiveAgentConnected = false;
                 setChatHeaderStatus(false);
+                updateChatButtonState(false, false);
                 
                 if (statusInterval) clearInterval(statusInterval);
             };
@@ -996,6 +1043,7 @@
                 chatOverlay.style.display = 'none';
             }
         });  
+        
         chatForm.addEventListener('submit', function(e) {
             e.preventDefault();
             const messageText = chatInput.value.trim();
@@ -1004,12 +1052,28 @@
 
             chatInput.value = ''; 
 
-            if (isLiveAgentConnected && chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            if (isLiveAgentConnected) {
+                // LIVE AGENT CHAT (Send message)
                 const payload = JSON.stringify({ message: messageText });
                 chatSocket.send(payload); 
                 appendMessage(messageText, 'user'); 
 
             } else if (isHandoffRequested) {
+                // WAITING FOR AGENT (Ignore button pressed or send message if not ignore action)
+                
+                // If the user clicks the 'Ignore' button instead of sending text
+                if (e.submitter && e.submitter.id === 'chat-send-btn' && chatSendIcon.className.includes('fa-times')) {
+                    
+                    // User clicked IGNORE
+                    isHandoffRequested = false;
+                    updateChatButtonState(false, false);
+                    appendMessage("Handoff request ignored. You can now chat with the bot again.", 'system', false);
+                    
+                    // Optionally notify server to cancel the request (future enhancement)
+                    return;
+                }
+
+                // If user sends a text message while waiting (still waiting)
                 appendMessage(messageText, 'user'); 
                 if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                      const payload = JSON.stringify({ message: messageText });
@@ -1017,6 +1081,7 @@
                 }
 
             } else {
+                // BOT CHAT (Default state)
                 appendMessage(messageText, 'user'); 
                 handleBotResponse(messageText);
             }
@@ -1025,6 +1090,7 @@
         // Initialize: Fetch profile first, then initialize header status
         fetchUserProfile(); 
         setChatHeaderStatus(isLiveAgentConnected); 
+        updateChatButtonState(isHandoffRequested, isLiveAgentConnected); // Initialize button state
     </script>
 </body>
 </html>

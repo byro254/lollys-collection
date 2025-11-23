@@ -19,8 +19,8 @@
             "type": "image/png"
         },
         {
-            "src": "/images/icons/logo.png",
-            "sizes": "512x388",
+            "src": "/images/icons/logo.ico",
+            "sizes": "256x194",
             "type": "image/png",
             "purpose": "logo"
         }
