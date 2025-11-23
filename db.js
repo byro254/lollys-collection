@@ -20,8 +20,6 @@ const pool = mysql.createPool({
 });
 
 
-
-
 // ---------------------------------------------------------------- //
 
 /**
@@ -225,17 +223,16 @@ async function findUserByPhone(phone) {
     }
 }
 // ---------------------------------------------------------------- //
-// REMOVED OBSOLETE FUNCTIONS: savePasswordResetToken, findUserByResetToken
+// --- Profile Management Functions (Used by profile.html) ---
 // ---------------------------------------------------------------- //
 /**
- * Retrieves the name and email of a user by their ID.
+ * Retrieves a user object by their ID.
  * @param {number} userId - The ID of the user.
- * @returns {Promise<{name: string, email: string} | null>} - User profile or null.
+ * @returns {Promise<{id: number, name: string, email: string, ...} | null>} - User profile or null.
  */
 async function findUserById(userId) {
     try {
         const [rows] = await pool.execute(
-            // CRITICAL: SELECT the id field itself!
             'SELECT id, full_name, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
             [userId]
         );
@@ -245,7 +242,6 @@ async function findUserById(userId) {
         }
 
         return {
-            // 🚨 FIX 1: Include the user ID in the returned object
             id: rows[0].id, 
             name: rows[0].full_name,
             email: rows[0].email,
@@ -309,7 +305,105 @@ async function updateUserStatus(userId, newStatus) {
 }
 
 // ---------------------------------------------------------------- //
-// --- UPDATED CHAT FUNCTIONS ---
+// --- Wallet & Transaction Functions (NEW) ---
+// ---------------------------------------------------------------- //
+
+/**
+ * Fetches the current wallet balance and account number for a user.
+ * @param {number} userId - The ID of the user.
+ * @returns {Promise<{balance: number, account_number: string} | null>}
+ */
+async function getWalletByUserId(userId) {
+    try {
+        const [rows] = await pool.execute(
+            'SELECT balance, account_number FROM wallets WHERE user_id = ?',
+            [userId]
+        );
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('Database error fetching wallet:', error);
+        throw error;
+    }
+}
+
+/**
+ * Logs a new deposit transaction and updates the wallet balance.
+ * (This is a simplified example; real M-Pesa/Card deposits require multi-step services/transactions.)
+ * @param {number} userId - The user ID.
+ * @param {string} method - Payment method ('M-Pesa', 'Card').
+ * @param {number} amount - The deposit amount.
+ * @param {string} externalRef - Transaction ID/Reference.
+ * @param {string} transactionStatus - 'Completed' or 'Pending'.
+ * @returns {Promise<boolean>} True if transaction and balance update succeeded.
+ */
+async function logDepositTransaction(userId, method, amount, externalRef, transactionStatus = 'Completed') {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        // 1. Get Wallet ID and current balance
+        const [walletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+            [userId]
+        );
+        if (walletRows.length === 0) throw new Error('Wallet not found.');
+        
+        const { wallet_id, balance: currentBalance } = walletRows[0];
+        const newBalance = currentBalance + amount;
+
+        // 2. Log Transaction
+        const transactionSql = `
+            INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status)
+            VALUES (?, ?, 'Deposit', ?, ?, ?, ?);
+        `;
+        await connection.execute(transactionSql, [userId, wallet_id, method, amount, externalRef, transactionStatus]);
+
+        // 3. Update Wallet Balance (Only if status is Completed)
+        if (transactionStatus === 'Completed') {
+             await connection.execute(
+                'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
+                [newBalance, wallet_id]
+            );
+        }
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Database error during ${method} deposit:`, error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+/**
+ * Fetches a user's payment history from the transactions table.
+ * @param {number} userId - The ID of the user.
+ * @returns {Promise<Array<object>>} List of transaction objects.
+ */
+async function findPaymentHistory(userId) {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT 
+                transaction_date as date, 
+                type, 
+                amount, 
+                transaction_status as status
+            FROM transactions 
+            WHERE user_id = ?
+            ORDER BY transaction_date DESC`,
+            [userId]
+        );
+        return rows;
+    } catch (error) {
+        console.error('Database error fetching payment history:', error);
+        throw error;
+    }
+}
+
+// ---------------------------------------------------------------- //
+// --- CHAT FUNCTIONS ---
 // ---------------------------------------------------------------- //
 
 /**
@@ -338,7 +432,6 @@ async function saveChatMessage(customerId, senderRole, senderId, recipientId, me
  * @returns {Promise<Array<object>>} List of chat message objects, ordered by time.
  */
 async function getChatHistory(customerId) {
-    // 🚨 FIX: Change 'sent_to_id' to 'recipient_id' for consistency
     // Note: We are selecting 'recipient_id' here, but the server.js might expect 'sent_to_id'
     // It's safest to match the database's column name here for successful query execution.
     const query = `
@@ -352,7 +445,7 @@ async function getChatHistory(customerId) {
 }
 
 // ---------------------------------------------------------------- //
-// --- MODULE EXPORTS (Updated to include new chat functions) ---
+// --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
 module.exports = {
     pool,
@@ -363,14 +456,18 @@ module.exports = {
     getAllContactMessages,
     updateProduct,
     updatePassword,
-    findUserByEmail, // Now returns more fields for login/reset
-    findUserOrders, // New function to fetch all orders with items for a user
-    updateUserProfile, // New function to update user profile fields
-    updateUserStatus, // New function to update user active status
+    findUserByEmail, 
+    findUserOrders, 
+    updateUserProfile, 
+    updateUserStatus, 
+    findUserByPhone, 
     
-    // 🚨 NEW CHAT FUNCTIONS (Signature changed for saveChatMessage)
+    // 🚨 NEW Wallet & Transaction functions
+    getWalletByUserId,
+    logDepositTransaction,
+    findPaymentHistory,
+    
+    // Chat functions
     saveChatMessage, 
     getChatHistory,
-
-    findUserByPhone, // New function to find user by phone for OTP reset
-    };
+};

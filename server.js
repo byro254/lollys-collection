@@ -26,8 +26,8 @@ const africastalking = require('africastalking')({
 const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
-// NOTE: saveChatMessage signature must now match the updated function in db.js
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory } = require('./db'); 
+// 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -551,64 +551,8 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
     });
 });
 // ------------------------------------------------------------------
-// --- NEW USER PROFILE API ENDPOINT (For Autofill) ---
+// --- USER PROFILE API ENDPOINTS (For profile.html) ---
 // ------------------------------------------------------------------
-
-/**
- * Retrieves the full_name and email of the logged-in user for autofilling the checkout form.
- */
-app.get('/api/user/profile', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId; 
-
-    try {
-        // Use the new function from db.js
-        const userProfile = await findUserById(userId); 
-
-        if (userProfile) {
-            // Returns { name, email }
-            return res.json(userProfile);
-        } else {
-            // Safety check: User is logged in but profile not found in DB (unlikely)
-            return res.status(404).json({ 
-                message: 'User profile not found in database. Cannot autofill.' 
-            });
-        }
-    } catch (error) {
-        console.error('Error fetching user profile for autofill:', error);
-        return res.status(500).json({ 
-            message: 'Server error fetching user data for autofill.' 
-        });
-    }
-});
-
-// ------------------------------------------------------------------
-// --- ADMIN API ENDPOINTS (Customer Listing and Dashboard) ---
-// ------------------------------------------------------------------
-
-/**
- * Retrieves a list of all registered users (customers).
- * Requires Admin privileges.
- */
-app.get('/api/customers', isAdmin, async (req, res) => {
-    try {
-        const users = await findAllUsers();
-        // Note: The password_hash is not included in the SELECT query in db.js
-        res.json(users);
-    } catch (error) {
-        console.error('API Error fetching all users/customers:', error);
-        res.status(500).json({ message: 'Failed to retrieve customer list.' });
-    }
-});
-
-/**
- * 🆕 Retrieves core dashboard statistics (e.g., total products, total users, revenue).
- * Requires Admin privileges.
- */
-// server.js
-
-// =========================================================
-//                   USER PROFILE API ROUTES (NEW/MODIFIED)
-// =========================================================
 
 /**
  * GET /api/user/profile
@@ -674,6 +618,155 @@ app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), 
         return res.status(500).json({ message: 'Server error during profile update.' });
     }
 });
+
+/**
+ * GET /api/user/orders
+ * Retrieves all orders for the currently logged-in user.
+ */
+app.get('/api/user/orders', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.session.userId;
+        const orders = await findUserOrders(userId); 
+        res.status(200).json(orders);
+    } catch (error) {
+        console.error('Error fetching user orders:', error);
+        res.status(500).json({ message: 'Failed to retrieve user orders, please try again later.' });
+    }
+});
+
+
+// =========================================================
+//                   WALLET & PAYMENT API ROUTES (NEW)
+// =========================================================
+
+/**
+ * GET /api/wallet/balance
+ * Fetches the user's current wallet balance and account number.
+ */
+app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    try {
+        const walletData = await db.getWalletByUserId(userId);
+        
+        if (walletData) {
+            return res.json({
+                balance: walletData.balance,
+                account_number: walletData.account_number,
+            });
+        }
+        // If wallet doesn't exist, return 0 balance (or 404 if creation is required)
+        return res.json({ balance: 0.00, account_number: 'N/A' });
+        
+    } catch (error) {
+        console.error('Error fetching wallet balance:', error);
+        res.status(500).json({ message: 'Failed to retrieve wallet data.' });
+    }
+});
+
+/**
+ * POST /api/wallet/deposit/mpesa
+ * Handles the simulated M-Pesa deposit request.
+ */
+app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { phone, amount, accountNo } = req.body;
+    const numericAmount = parseFloat(amount);
+
+    if (!phone || isNaN(numericAmount) || numericAmount < 10) {
+        return res.status(400).json({ message: 'Invalid phone or amount. Minimum deposit is 10 KES.' });
+    }
+    
+    // Simulate M-Pesa push confirmation reference
+    const externalRef = `MPESA-${Date.now()}`; 
+
+    try {
+        // 🚨 UPDATE: Use performWalletTransaction
+        await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', externalRef, null, 'Completed');
+        
+        // In a real app, this is where AfricasTalking or similar API would be called 
+        // to send the STK Push to the phone number.
+        
+        res.json({ 
+            message: 'Deposit initiated. Please approve the prompt on your phone.',
+            transactionRef: externalRef 
+        });
+
+    } catch (error) {
+        console.error('M-Pesa Deposit API error:', error);
+        res.status(500).json({ message: 'Failed to process deposit request.' });
+    }
+});
+
+/**
+ * POST /api/wallet/deposit/card
+ * Handles the simulated Card/Visa deposit request.
+ * NOTE: This is for simulation only. Real card details should NEVER hit your server.
+ */
+app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { cardNumber, amount } = req.body; // Card details are truncated on the client
+    const numericAmount = parseFloat(amount);
+
+    if (isNaN(numericAmount) || numericAmount < 10) {
+        return res.status(400).json({ message: 'Invalid amount. Minimum deposit is 10 KES.' });
+    }
+
+    // Simulate Card transaction reference
+    const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
+
+    try {
+        // 🚨 UPDATE: Use performWalletTransaction
+        await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
+        
+        res.json({ 
+            message: 'Card payment processed successfully.',
+            transactionRef: externalRef 
+        });
+
+    } catch (error) {
+        console.error('Card Deposit API error:', error);
+        res.status(500).json({ message: 'Failed to process card payment.' });
+    }
+});
+
+/**
+ * GET /api/user/payment-history
+ * Fetches the transaction history for the user's wallet.
+ */
+app.get('/api/user/payment-history', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    try {
+        const history = await db.findPaymentHistory(userId);
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching payment history:', error);
+        res.status(500).json({ message: 'Failed to retrieve payment history.' });
+    }
+});
+
+// ------------------------------------------------------------------
+// --- ADMIN API ENDPOINTS (Customer Listing and Dashboard) ---
+// ------------------------------------------------------------------
+
+/**
+ * Retrieves a list of all registered users (customers).
+ * Requires Admin privileges.
+ */
+app.get('/api/customers', isAdmin, async (req, res) => {
+    try {
+        const users = await findAllUsers();
+        // Note: The password_hash is not included in the SELECT query in db.js
+        res.json(users);
+    } catch (error) {
+        console.error('API Error fetching all users/customers:', error);
+        res.status(500).json({ message: 'Failed to retrieve customer list.' });
+    }
+});
+
+/**
+ * 🆕 Retrieves core dashboard statistics (e.g., total products, total users, revenue).
+ * Requires Admin privileges.
+ */
 app.get('/api/dashboard/stats', isAdmin, async (req, res) => {
     try {
         // 1. Total Products & Stock
@@ -999,12 +1092,24 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
     if (!name || !phone || !email || !location || !items || items.length === 0) {
         return res.status(400).json({ message: 'Missing required delivery or item information.' });
     }
-
+    
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
+        
+        // 1. Get Wallet Balance and Check Funds
+        const walletData = await db.getWalletByUserId(userId);
+        
+        if (!walletData || walletData.balance < numericTotal) {
+            // Rollback is automatic on throw/release if we haven't committed yet
+            // If the user doesn't have a wallet, or balance is less than total
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({ message: `Insufficient funds in your wallet (KES ${walletData ? walletData.balance.toFixed(2) : '0.00'}). Required: KES ${numericTotal.toFixed(2)}.` });
+        }
 
+        // 2. Insert Order Header
         const [orderResult] = await connection.execute(
             `INSERT INTO orders (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status) 
              VALUES (?, ?, ?, ?, ?, ?, 'Pending')`,
@@ -1012,28 +1117,62 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         );
         const orderId = orderResult.insertId;
 
+        // 3. Process Items and Stock Deduction
         const itemSql = `INSERT INTO order_items (order_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?)`;
         
         for (const item of items) {
+            // Stock Update
             await connection.execute('UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?', [item.quantity, item.id, item.quantity]);
+            // Insert Order Item
             await connection.execute(itemSql, [orderId, item.name, item.price, item.quantity]);
         }
         
-        await connection.execute('DELETE FROM cart WHERE user_id = ?', [userId]);
+        // 4. Deduct Funds from Wallet (Using the new atomic function logic)
+        const deductionAmount = -numericTotal; // Negative for deduction
+        const transactionRef = `ORDER-${orderId}`;
+        
+        // We use the new database function directly inside this transaction flow, 
+        // passing the existing connection to keep it atomic.
+        // NOTE: Since the connection is explicitly passed, the internal transaction 
+        // logic of performWalletTransaction is overridden by this external transaction.
+        
+        // We replicate the core deduction logic here for transaction safety:
+        
+        // 4a. Log the deduction transaction
+        const deductionSql = `
+            INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+            VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed');
+        `;
+        // We need the wallet_id from the initial check (step 1)
+        const wallet_id = walletData.wallet_id;
+        
+        await connection.execute(deductionSql, [userId, wallet_id, orderId, deductionAmount]);
 
+        // 4b. Update the actual wallet balance
+        await connection.execute(
+            'UPDATE wallets SET balance = balance + ? WHERE user_id = ?', // Using user_id here is safer within transaction
+            [deductionAmount, userId] // deductionAmount is negative
+        );
+        
+        // 5. Clear Cart
+        await connection.execute('DELETE FROM cart WHERE user_id = ?', [userId]);
+        
+        // 6. Commit Transaction
         await connection.commit();
+        
+        // 7. Send Emails (Outside critical transaction block)
 
         const orderDetailsHtml = items.map(item => 
-            `<li>${item.name} (x${item.quantity}) - $${(item.price * item.quantity).toFixed(2)}</li>`
+            `<li>${item.name} (x${item.quantity}) - KES${(item.price * item.quantity).toFixed(2)}</li>`
         ).join('');
         
         const adminEmailBody = `
-            <h2>🚨 NEW ORDER #${orderId} Received!</h2>
+            <h2>🚨 NEW ORDER #${orderId} Received (PAID VIA WALLET)!</h2>
             <p><strong>Customer:</strong> ${name}</p>
             <p><strong>Phone:</strong> ${phone}</p>
             <p><strong>Email:</strong> ${email}</p>
             <p><strong>Location:</strong> ${location}</p>
-           <p><strong>Total:</strong> $${numericTotal.toFixed(2)}</p>
+           <p><strong>Total:</strong> KES${numericTotal.toFixed(2)}</p>
             <h3>Items Ordered:</h3>
             <ul>${orderDetailsHtml}</ul>
             <p>Preferred Contact: ${notificationMethod}</p>
@@ -1042,8 +1181,9 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         const userConfirmationBody = `
             <h2>🛍️ Order #${orderId} Confirmation - Lolly's Collection</h2>
             <p>Hello ${name},</p>
-            <p>Thank V you for your order! We have successfully received it. You will be contacted shortly on ${phone} or ${email} to confirm delivery.</p>
-            <p><strong>Total:</strong> $${numericTotal.toFixed(2)}</p>
+            <p>Thank you for your order! Your wallet balance has been successfully charged KES ${numericTotal.toFixed(2)}.</p>
+            <p>We will contact you shortly on ${phone} or ${email} to confirm delivery.</p>
+            <p><strong>Total:</strong> KES${numericTotal.toFixed(2)}</p>
             <h3>Your Items:</h3>
             <ul>${orderDetailsHtml}</ul>
         `;
@@ -1055,30 +1195,39 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             resend.emails.send({
                 from: `Lolly's Collection <${senderEmail}>`,
                 to: email,
-                subject: `Order #${orderId} Received`,
+                subject: `Order #${orderId} Received and Paid`,
                 html: userConfirmationBody
             }),
             resend.emails.send({
                 from: `Lolly's Collection Admin <${senderEmail}>`,
                 to: process.env.ADMIN_EMAIL,
-                subject: `NEW ORDER ALERT: #${orderId}`,
+                subject: `NEW WALLET PAID ORDER: #${orderId}`,
                 html: adminEmailBody
             })
         ]);
 
-        console.log(`Order #${orderId} processed, cart cleared, stock updated, emails sent via Resend.`);
+        console.log(`Order #${orderId} processed, paid via wallet, cart cleared, stock updated, emails sent via Resend.`);
         res.status(201).json({ 
-            message: 'Order placed successfully. Confirmation email sent.', 
+            message: 'Order placed and paid successfully using your wallet.', 
             orderId: orderId 
         });
 
     } catch (error) {
         await connection.rollback();
+        connection.release();
+        
         console.error('Order processing failed:', error);
-        const errorMessage = error.sqlMessage || 'Order failed to process , please try again later.';
+        
+        // Check for specific error message set during balance check
+        if (error.message === 'INSUFFICIENT_FUNDS') {
+             return res.status(400).json({ message: `Insufficient funds in your wallet. Required: KES ${numericTotal.toFixed(2)}.` });
+        }
+        
+        const errorMessage = error.sqlMessage || 'Order failed to process, possibly due to a system error or lack of stock. Please try again later.';
         res.status(500).json({ message: errorMessage });
     } finally {
-        connection.release();
+        // NOTE: Connection is released above in the catch block or below in the commit block
+        if (connection) connection.release();
     }
 });
 
@@ -1121,16 +1270,6 @@ app.get('/api/orders/:orderId/items', isAdmin, async (req, res) => {
     }
 });
 
-app.get('/api/user/orders', isAuthenticated, async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        const orders = await findUserOrders(userId); 
-        res.status(200).json(orders);
-    } catch (error) {
-        console.error('Error fetching user orders:', error);
-        res.status(500).json({ message: 'Failed to retrieve user orders, please try again later.' });
-    }
-});
 app.post('/api/admin/messages/reply', isAdmin, async (req, res) => {
     const { to, from, subject, content } = req.body;
     

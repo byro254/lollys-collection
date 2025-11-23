@@ -21,6 +21,7 @@
             --color-shadow: rgba(0,0,0,0.08); /* Soft shadow */
             --color-danger: #dc3545; /* Added danger color for modal/error */
             --color-success: #28a745; /* Success color */
+            --color-warning: #ffc107; /* Warning color */
 
             /* Typography */
             --font-heading: 'Playfair Display', serif;
@@ -233,6 +234,17 @@
         .summary-line span:first-child {
             font-weight: 500;
         }
+        /* --- New Wallet Display --- */
+        .wallet-balance-line {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--color-success);
+            border-bottom: 1px dashed var(--color-border-medium);
+            margin-bottom: 10px;
+        }
         .summary-total { 
             font-size: 1.5rem;
             font-weight: 700; 
@@ -342,11 +354,18 @@
             align-items: center;
             gap: 10px;
         }
-        .order-button:hover { 
+        /* Style for insufficient funds button state */
+        .order-button[disabled] {
+            background-color: var(--color-warning);
+            color: var(--color-text-dark);
+            cursor: not-allowed;
+            transform: none;
+        }
+        .order-button:hover:not([disabled]) { 
             background-color: var(--color-pink-accent);
             transform: translateY(-2px);
         }
-        .order-button:active {
+        .order-button:active:not([disabled]) {
             transform: translateY(0);
         }
 
@@ -472,7 +491,7 @@
             <a href="/products.html" class="nav-icon" title="Products">
                 <i class="fa-solid fa-tags"></i>
             </a>
-            <a href="/order.html" class="nav-icon" title="My Orders">
+            <a href="/profile.html#orders" class="nav-icon" title="My Orders">
                 <i class="fa-solid fa-list-alt"></i>
             </a>
             <a href="/cart.html" class="nav-icon cart-icon-with-count" title="Shopping Cart">
@@ -492,9 +511,20 @@
 
         <section class="cart-summary-section">
             <h2>Order Total</h2>
+            <!-- Wallet Balance Display -->
+            <div class="wallet-balance-line">
+                <span><i class="fas fa-wallet"></i> My Wallet Balance:</span> 
+                <span id="wallet-balance-amount">KES 0.00</span>
+            </div>
+            
             <div class="summary-line"><span>Subtotal:</span> <span id="subtotal-amount">KES 0.00</span></div>
-            <div class="summary-line"><span>Shipping (Fixed):</span> <span id=" shipping-fee"> KES 300.00</span></div>
+            <div class="summary-line"><span>Shipping (Fixed):</span> <span id="shipping-fee"> KES 300.00</span></div>
             <div class="summary-total"><span>Grand Total:</span> <span id="total-amount">KES 0.00</span></div>
+            
+            <div id="balance-warning" class="order-message error" style="display: none; margin-top: 15px;">
+                Insufficient funds. Please deposit KES <span id="needed-amount">0.00</span> to proceed.
+                <p style="font-size: 0.9em; margin-top: 5px;"><a href="/profile.html#wallet">Go to Wallet & Payments</a></p>
+            </div>
         </section>
 
         <section class="checkout-form-section">
@@ -530,8 +560,8 @@
                     <option value="whatsapp">Admin WhatsApp </option>
                 </select>
 
-                <button type="submit" class="order-button">
-                    <i class="fas fa-paper-plane"></i> Place Final Order
+                <button type="submit" class="order-button" id="place-order-btn">
+                    <i class="fas fa-wallet"></i> Pay KES 0.00 via Wallet
                 </button>
                 
                 <div id="order-message" class="order-message" style="display: none;"></div>
@@ -575,14 +605,15 @@
         const CART_API_URL = '/api/cart';
         const ORDER_API_URL = '/api/order';
         const USER_PROFILE_API_URL = '/api/user/profile'; 
+        const WALLET_BALANCE_API_URL = '/api/wallet/balance'; // NEW API
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const LOGOUT_API_URL = '/api/logout';
         const SHIPPING_COST = 300.00; 
         const ADMIN_WHATSAPP = '254742041208'; 
-        const REFRESH_INTERVAL_MS = 1000; 
+        const REFRESH_INTERVAL_MS = 5000; // Increased interval for background refresh
 
-        // Global variable to hold the current cart items for checkout submission
-        window.currentCart = { items: [], total: SHIPPING_COST }; 
+        // Global variable to hold the current cart items, total, and balance
+        window.currentCart = { items: [], total: SHIPPING_COST, balance: 0.00 }; 
         
         let isUserAuthenticated = false; 
 
@@ -661,11 +692,14 @@
         }
 
         /**
-         * Checks profile status every second. Logs out user if deactivated.
+         * Checks profile status and refreshes balance in the background.
          */
         async function checkProfileStatusAndLogout() {
             if (!isUserAuthenticated) return;
             
+            // Refresh wallet balance
+            await fetchWalletBalance();
+
             try {
                 // Use the profile API to get user details including isActive status
                 const response = await fetch(USER_PROFILE_API_URL);
@@ -698,6 +732,68 @@
             if(cartNavEl) cartNavEl.textContent = cartCount;
         }
 
+        // --- NEW: Balance and Payment Check UI Updater ---
+        function updatePaymentUI() {
+            const total = window.currentCart.total;
+            const balance = window.currentCart.balance;
+            const orderBtn = document.getElementById('place-order-btn');
+            const warningEl = document.getElementById('balance-warning');
+            const neededEl = document.getElementById('needed-amount');
+
+            orderBtn.innerHTML = `<i class="fas fa-wallet"></i> Pay KES ${total.toFixed(2)} via Wallet`;
+            
+            // Check if cart is empty or logged out
+            if (window.currentCart.items.length === 0 || !isUserAuthenticated) {
+                 orderBtn.disabled = true;
+                 orderBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> Cart Empty`;
+                 warningEl.style.display = 'none';
+                 return;
+            }
+
+            // Check for insufficient funds
+            if (balance < total) {
+                const needed = total - balance;
+                neededEl.textContent = needed.toFixed(2);
+                warningEl.style.display = 'block';
+                orderBtn.disabled = true;
+                orderBtn.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Insufficient Funds`;
+            } else {
+                warningEl.style.display = 'none';
+                orderBtn.disabled = false;
+            }
+        }
+        
+        // --- NEW: Fetch Wallet Balance ---
+        async function fetchWalletBalance() {
+            if (!isUserAuthenticated) return;
+            
+            const balanceEl = document.getElementById('wallet-balance-amount');
+            balanceEl.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(WALLET_BALANCE_API_URL);
+                if (response.ok) {
+                    const data = await response.json();
+                    const balance = parseFloat(data.balance) || 0.00;
+                    
+                    window.currentCart.balance = balance;
+                    balanceEl.textContent = 'KES ' + balance.toFixed(2);
+                    
+                    // Update the UI immediately after fetching the balance
+                    updatePaymentUI();
+                } else {
+                    window.currentCart.balance = 0.00;
+                    balanceEl.textContent = 'KES 0.00 (Error)';
+                    updatePaymentUI();
+                }
+            } catch (error) {
+                console.error('Error fetching wallet balance:', error);
+                window.currentCart.balance = 0.00;
+                balanceEl.textContent = 'KES 0.00 (Net Err)';
+                updatePaymentUI();
+            }
+        }
+
         // --- 2. DELETE Functionality (The real DELETE API call) ---
         async function deleteItem(productId) {
             if (!isUserAuthenticated) {
@@ -705,9 +801,9 @@
                  return;
             }
 
-            if (!confirm("Are you sure you want to remove this item?")) {
-                return;
-            }
+            // Replacing confirm() with console warning as per guidelines
+            console.log("Item deletion initiated. Proceeding with removal.");
+            
             try {
                 const response = await fetch(`${CART_API_URL}/${productId}`, { method: 'DELETE' });
                 
@@ -717,11 +813,11 @@
                     checkAuthenticationStatus(); 
                 } else {
                     const result = await response.json();
-                    alert(result.message || "Failed to remove item.");
+                    console.error("Failed to remove item:", result.message);
                 }
             } catch (error) {
                 console.error('API Error:', error);
-                alert("An error occurred connecting to the server. Check console for details.");
+                console.error("An error occurred connecting to the server. Check console for details.");
             }
         }
 
@@ -756,8 +852,9 @@
                 console.error('Error fetching cart:', error);
                 itemsContainer.innerHTML = '<p style="text-align: center; color: red;">Failed to load cart. Please ensure your backend is running correctly.</p>';
                 subtotalEl.textContent = 'KES 0.00';
-                totalEl.textContent = 'KES' + SHIPPING_COST.toFixed(2);
+                totalEl.textContent = 'KES ' + SHIPPING_COST.toFixed(2);
                 document.getElementById('checkout-form').style.display = 'none';
+                window.currentCart = { items: [], total: SHIPPING_COST, balance: window.currentCart.balance };
                 return;
             }
 
@@ -768,9 +865,10 @@
             if (cart.length === 0) {
                 itemsContainer.innerHTML = '<p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Your cart is empty. <a href="/products">Start shopping now!</a></p>';
                 subtotalEl.textContent = 'KES 0.00';
-                totalEl.textContent = 'KES' + SHIPPING_COST.toFixed(2);
+                totalEl.textContent = 'KES ' + SHIPPING_COST.toFixed(2);
                 document.getElementById('checkout-form').style.display = 'none';
-                window.currentCart = { items: [], total: SHIPPING_COST };
+                window.currentCart = { items: [], total: SHIPPING_COST, balance: window.currentCart.balance };
+                updatePaymentUI();
                 return;
             }
             
@@ -812,8 +910,10 @@
             subtotalEl.textContent = 'KES ' + subtotal.toFixed(2);
             totalEl.textContent = 'KES ' + total.toFixed(2);
             
-            // Store cart data globally for submission
-            window.currentCart = { items: cart, total: total }; 
+            // Store cart data globally for submission AND update payment UI
+            window.currentCart.items = cart;
+            window.currentCart.total = total;
+            updatePaymentUI(); // Crucial call to update button state
         }
         
         // --- New Function: Fetch User Details and Pre-fill Form ---
@@ -871,7 +971,8 @@
                  document.getElementById('access-required-modal').classList.add('is-open');
                  return;
             }
-
+            
+            const orderBtn = document.getElementById('place-order-btn');
             const messageEl = document.getElementById('order-message');
             const cartData = window.currentCart;
 
@@ -879,6 +980,15 @@
                 messageEl.textContent = 'Your cart is empty. Cannot place order.';
                 messageEl.className = 'order-message error';
                 messageEl.style.display = 'block';
+                return;
+            }
+            
+            // Client-side final balance check
+            if (cartData.balance < cartData.total) {
+                messageEl.textContent = `Order failed: Insufficient funds in your wallet (KES ${cartData.balance.toFixed(2)}).`;
+                messageEl.className = 'order-message error';
+                messageEl.style.display = 'block';
+                updatePaymentUI();
                 return;
             }
 
@@ -892,13 +1002,14 @@
                 items: cartData.items, 
                 subtotal: (cartData.total - SHIPPING_COST).toFixed(2), // Calculate subtotal
                 shipping: SHIPPING_COST.toFixed(2),
-                total: cartData.total.toFixed(2), 
+                total: cartData.total.toFixed(2), // Final amount to be deducted
                 notificationMethod: document.getElementById('notification-method').value
             };
             
             messageEl.textContent = 'Processing your order...';
             messageEl.className = 'order-message';
             messageEl.style.display = 'block';
+            orderBtn.disabled = true;
 
             try {
                 const response = await fetch(ORDER_API_URL, {
@@ -923,9 +1034,14 @@
                     }
                     
                     this.reset();
+                    initFormFields(); // Re-fetch user data to quickly repopulate form
 
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
+                } else if (response.status === 400 && result.message.includes('Insufficient funds')) {
+                    // Specific handling for Insufficient funds error from backend
+                    messageEl.textContent = `Order Failed: ${result.message}`;
+                    messageEl.className = 'order-message error';
                 } else {
                     messageEl.textContent = `Order failed: ${result.message || 'Server error. Please try again.'}`;
                     messageEl.className = 'order-message error';
@@ -935,6 +1051,9 @@
                 console.error('Network Error:', error);
                 messageEl.textContent = 'An error occurred connecting to the server.';
                 messageEl.className = 'order-message error';
+            } finally {
+                orderBtn.disabled = false;
+                updatePaymentUI();
             }
         });
 // --- 5. Initialization ---
@@ -944,9 +1063,12 @@
             
             // 2. Only run data fetching/form initialization if authenticated
             if (loggedIn) {
+                // Must fetch balance first, then render cart to update total, then update payment UI
+                await fetchWalletBalance(); 
                 renderCart();
                 initFormFields();
-                // 3. Start 1-second background security check loop
+                
+                // 3. Start 5-second background security check loop (refreshes balance)
                 window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS);
             } else {
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
