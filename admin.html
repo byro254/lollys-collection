@@ -713,7 +713,7 @@
 
                     <div class="form-row">
                         <div>
-                            <label for="product-price">Price ($):</label>
+                            <label for="product-price">Price (KES):</label>
                             <input type="number" id="product-price" name="price" step="0.01" min="0.01" required>
                         </div>
                         <div>
@@ -848,7 +848,7 @@
                         </ul>
                 </div>
             </div>
-            <p style="margin-top: 15px; color: var(--color-text-subtle); font-size: 0.9rem;">(Note: This list is populated by fetching all registered users and simulating sessions for demonstration.)</p>
+           
         </section>
         <section id="customers" class="content-section">
             <h2><i class="fas fa-users"></i> Customer Management</h2>
@@ -873,7 +873,7 @@
                         </tbody>
                     </table>
                 </div>
-                <p style="margin-top: 15px; color: var(--color-text-subtle); font-size: 0.9rem;">(Note: Passwords are securely kept and are NOT fetched or displayed. Status is managed here.)</p>
+               
             </div>
         </section>
         
@@ -1240,7 +1240,7 @@ function renderSalesChart(labels, data) {
         data: {
             labels: labels,
             datasets: [{
-                label: 'Monthly Sales ($)',
+                label: 'Monthly Sales (KES)',
                 data: data,
                 borderColor: 'rgb(194, 24, 91)', 
                 backgroundColor: 'rgba(233, 30, 99, 0.2)', 
@@ -1262,7 +1262,7 @@ function renderSalesChart(labels, data) {
                 x: {
                     title: {
                         display: true,
-                        text: 'Month'
+                        text: 'Day'
                     }
                 }
             },
@@ -1582,7 +1582,7 @@ async function fetchAndRenderOrders() {
                 <td>#${o.id}</td>
                 <td>${o.customer_name || o.customerName}</td>
                 <td>${o.delivery_location}</td>
-                <td>$${parseFloat(o.total).toFixed(2)}</td>
+                <td>KES ${parseFloat(o.total).toFixed(2)}</td>
                 <td>${new Date(o.order_date || o.created_at).toLocaleDateString()}</td>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>
@@ -1705,7 +1705,7 @@ window.viewOrderDetails = async function(orderId, event) {
            const itemTotal = (item.unit_price * item.quantity).toFixed(2);
             li.innerHTML = `
                 <span>${item.product_name}</span>
-                <span>${item.quantity} x $${parseFloat(item.unit_price).toFixed(2)} = <strong>$${itemTotal}</strong></span>
+                <span>${item.quantity} x KES ${parseFloat(item.unit_price).toFixed(2)} = <strong>KES ${itemTotal}</strong></span>
             `;
             itemContainer.appendChild(li);
         });
