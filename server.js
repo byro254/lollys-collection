@@ -1096,11 +1096,30 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
     
     const orderTotal = numericTotal;
     
-    // 1b. Ensure all optional string fields explicitly default to null if missing (preventing 'undefined')
-    const customerName = name || null; 
-    const customerPhone = phone || null;
-    const customerEmail = email || null;
-    const deliveryLocation = location || null;
+    // ----------------------------------------------------
+    // 🚨 FIX: Server-Side Mandatory Delivery Field Validation
+    // This blocks submission if any required field is missing (undefined) or empty ("").
+    // ----------------------------------------------------
+    if (!name || name.trim() === '') {
+        return res.status(400).json({ message: 'Missing required field: Customer Name.' });
+    }
+    if (!location || location.trim() === '') { // <-- CRITICAL: Catches the empty/missing location!
+        return res.status(400).json({ message: 'Missing required field: Delivery Location.' });
+    }
+    if (!email || email.trim() === '') {
+        return res.status(400).json({ message: 'Missing required field: Customer Email.' });
+    }
+    if (!phone || phone.trim() === '') {
+        return res.status(400).json({ message: 'Missing required field: Phone Number.' });
+    }
+    // ----------------------------------------------------
+    
+    // 1b. Now that all fields are guaranteed to be non-empty strings, 
+    // assign them directly for insertion, eliminating the risk of 'undefined'.
+    const customerName = name; 
+    const customerPhone = phone;
+    const customerEmail = email;
+    const deliveryLocation = location; // This value is now guaranteed to be a non-empty string!
     
     // --- End Validation ---
 
