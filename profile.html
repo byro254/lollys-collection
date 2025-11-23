@@ -35,7 +35,7 @@
             color: var(--color-text-dark); 
             line-height: 1.6; 
             min-height: 100vh;
-            display: flex; /* Setup for flex layout for header/main */
+            display: flex; 
             flex-direction: column;
         }
         h1, h2, h3 {
@@ -63,7 +63,7 @@
             align-items: center;
             position: sticky;
             top: 0;
-            z-index: 1000; /* Increased z-index */
+            z-index: 1000;
         }
         .logo-link {
             font-family: var(--font-heading);
@@ -77,7 +77,7 @@
         
         /* Hamburger icon for mobile */
         .hamburger-icon {
-            display: none; /* Hide by default on large screens */
+            display: none;
             background: none;
             border: none;
             font-size: 1.5rem;
@@ -100,7 +100,7 @@
             height: 100%;
             overflow-y: auto;
             z-index: 999;
-            transform: translateX(0); /* Default to visible on large screen */
+            transform: translateX(0);
             transition: transform 0.3s ease-in-out;
         }
         
@@ -116,7 +116,7 @@
         }
         
         .sidebar-close-icon {
-            display: none; /* Only visible in mobile view */
+            display: none;
             background: none;
             border: none;
             color: white;
@@ -155,7 +155,7 @@
             min-height: 100vh;
         }
         .main-content {
-            margin-left: 250px; /* Offset for fixed sidebar */
+            margin-left: 250px;
             padding: 30px;
             flex-grow: 1;
             max-width: 1000px;
@@ -182,12 +182,18 @@
             margin-right: 15px;
             color: var(--color-pink-accent);
         }
+        
+        /* 🚨 STYLING FIX: Enhanced Card */
         .card {
             background-color: var(--color-bg-light);
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 5px 20px var(--color-shadow);
+            box-shadow: 0 5px 25px var(--color-shadow); /* Stronger shadow */
             margin-bottom: 30px;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); /* Lift on hover */
         }
         
         /* --- Wallet and Payment Styles --- */
@@ -200,7 +206,23 @@
             padding: 25px;
             border-radius: 10px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+            position: relative; 
+            overflow: hidden;
+        }
+        /* Subtle design flare */
+        .wallet-balance::before {
+            content: '';
+            position: absolute;
+            top: -50px;
+            left: -50px;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+        }
+        .balance-info {
+            text-align: right;
         }
         .balance-amount {
             font-size: 2.5rem;
@@ -228,20 +250,21 @@
         }
         .method-card {
             text-align: center;
-            padding: 20px 10px;
-            border: 2px solid var(--color-border-medium);
-            border-radius: 8px;
+            padding: 25px 10px; 
+            border: 1px solid var(--color-border-medium); 
+            border-radius: 10px; 
             cursor: pointer;
-            transition: border-color 0.2s, background-color 0.2s;
+            transition: border-color 0.3s, background-color 0.3s, transform 0.2s;
         }
         .method-card:hover {
             border-color: var(--color-pink-accent);
-            background-color: #ffeef2;
+            background-color: #fff8f9; 
+            transform: translateY(-3px); 
         }
         .method-card i {
-            font-size: 2.5rem;
+            font-size: 3rem; 
             margin-bottom: 10px;
-            color: var(--color-text-dark);
+            color: var(--color-pink-dark); 
         }
         
         /* --- Order History Table --- */
@@ -262,6 +285,7 @@
         }
         .order-table tbody tr:hover {
             background-color: #fcfcfc;
+            cursor: pointer;
         }
         
         /* Status Badge */
@@ -276,12 +300,14 @@
         .status-badge.Shipped { background-color: var(--color-warning); color: var(--color-text-dark); }
         
         
-        /* --- Profile Picture & Form Styles (Adapted from previous) --- */
+        /* --- Profile Picture & Form Styles --- */
         #profile-picture-container {
             width: 120px;
             height: 120px;
             margin: 0 auto 20px;
             position: relative;
+            -webkit-transform: translateZ(0); 
+            transform: translateZ(0); 
         }
         #current-profile-picture {
             width: 100%;
@@ -289,9 +315,37 @@
             object-fit: cover;
             border-radius: 50%;
             border: 4px solid var(--color-pink-accent);
+            image-rendering: -webkit-optimize-contrast; 
+            image-rendering: crisp-edges; 
         }
-        /* ... rest of form styles ... */
-        
+        #profile-picture-upload {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            background-color: var(--color-pink-dark);
+            color: white;
+            border-radius: 50%;
+            padding: 8px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #file-input {
+            display: none;
+        }
+        .update-button {
+             background-color: var(--color-pink-dark);
+             color: white;
+             padding: 10px 20px;
+             border: none;
+             border-radius: 6px;
+             font-weight: 600;
+             cursor: pointer;
+             transition: background-color 0.3s;
+        }
+        .update-button:hover {
+            background-color: var(--color-pink-accent);
+        }
+
         /* Account Status Badge */
         .status-display {
             display: inline-block;
@@ -306,7 +360,6 @@
         
         
         /* --- Responsive Adjustments --- */
-        /* Hide sidebar and show hamburger on smaller screens */
         @media (max-width: 900px) {
             .site-header {
                 justify-content: flex-start;
@@ -326,7 +379,6 @@
                 transform: translateX(-100%);
                 width: 300px;
                 z-index: 1001;
-                /* Sidebar overlay transition */
                 transition: transform 0.3s ease-in-out;
             }
             .sidebar.mobile-open {
@@ -336,7 +388,7 @@
                 display: block;
             }
             .logo-link {
-                margin-left: auto; /* Push logo away from hamburger */
+                margin-left: auto;
             }
         }
         
@@ -353,7 +405,7 @@
             align-items: center; 
             z-index: 10000;
             padding: 10px; 
-            display: none; /* Hidden by default */
+            display: none;
         }
         .modal-content-small {
             background-color: white;
@@ -400,6 +452,7 @@
     </style>
 </head>
 <body>
+    <!-- 🚨 AUTH GATE MODALS -->
     <div id="access-required-modal" class="modal">
         <div class="modal-content-small">
             <i class="fa-solid fa-user-lock" style="font-size: 3rem; color: var(--color-pink-dark); margin-bottom: 10px;"></i>
@@ -423,6 +476,7 @@
         </div>
     </div>
     
+    <!-- 🚨 NEW: DEPOSIT MODAL -->
     <div id="deposit-modal" class="modal">
         <div class="modal-content-small">
             <span class="close-btn" onclick="document.getElementById('deposit-modal').style.display='none'">&times;</span>
@@ -441,11 +495,15 @@
             </button>
         </div>
     </div>
+    <!-- END MODALS -->
+
+    <!-- 🚨 HEADER -->
     <header class="site-header gated-content disabled">
         <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
             <i class="fas fa-bars"></i>
         </button>
         <a href="/" class="logo-link">Lolly's Collection</a>
+        <!-- Auth/Cart Icons -->
         <nav class="header-nav">
              <a href="/cart" class="nav-icon cart-icon-with-count" title="Cart">
                 <i class="fa-solid fa-shopping-cart"></i>
@@ -456,6 +514,7 @@
         </nav>
     </header>
 
+    <!-- 🚨 SIDEBAR -->
     <aside class="sidebar gated-content disabled" id="sidebar">
         <div class="sidebar-header">
             <span>My Account</span>
@@ -474,6 +533,7 @@
         </nav>
     </aside>
 
+    <!-- 🚨 MAIN CONTENT AREA -->
     <div class="main-content-wrapper">
         <main class="main-content gated-content disabled" id="main-content">
             
@@ -481,6 +541,7 @@
                 <h2 class="section-header"><i class="fas fa-user-circle"></i> Account Details</h2>
                 <div class="card">
                     <form id="profile-form" enctype="multipart/form-data">
+                        <!-- ... Profile Picture ... -->
                         <input type="hidden" id="current-pic-url" name="currentProfilePictureUrl">
                         <div id="profile-picture-container">
                             <img id="current-profile-picture" 
@@ -494,6 +555,7 @@
                             <input type="file" id="file-input" name="profilePicture" accept="image/*">
                         </div>
                         
+                        <!-- ... Name and Email (Read Only) ... -->
                         <div class="form-group">
                             <label for="full-name">Full Name:</label>
                             <input type="text" id="full-name" name="name" readonly required>
@@ -503,11 +565,13 @@
                             <input type="email" id="email" name="email" readonly required>
                         </div>
                         
+                        <!-- ... Phone Number (Editable) ... -->
                         <div class="form-group">
                             <label for="phone-number">Phone Number:</label>
                             <input type="text" id="phone-number" name="phoneNumber" placeholder="e.g., 07XXXXXXXX">
                         </div>
 
+                        <!-- ... Status Display ... -->
                         <div class="form-group">
                             <label>Account Status:</label>
                             <span id="account-status-display" class="status-display">
@@ -611,7 +675,7 @@
         const PROFILE_API_URL = '/api/user/profile';
         const ORDERS_API_URL = '/api/user/orders'; // New orders API endpoint
         const LOGOUT_API_URL = '/api/logout';
-        const REFRESH_INTERVAL_MS = 1000; 
+        const REFRESH_INTERVAL_MS = 5000; // 🚨 FIX: Increased interval to 5 seconds
         
         let isUserAuthenticated = false; 
         let currentUserData = {}; // Store all fetched user data
@@ -685,7 +749,7 @@
                     // Enable content
                     header.classList.remove('disabled');
                     wrapper.classList.remove('disabled');
-                    accessModal.classList.remove('is-open'); 
+                    accessModal.style.display = 'none'; // 🚨 FIX: Use style.display
                     document.body.style.overflow = 'auto'; 
                     return true;
                 } else {
@@ -693,7 +757,7 @@
                     isUserAuthenticated = false;
                     header.classList.add('disabled');
                     wrapper.classList.add('disabled');
-                    accessModal.classList.add('is-open');
+                    accessModal.style.display = 'flex'; // 🚨 FIX: Use style.display
                     document.body.style.overflow = 'hidden';
                     return false;
                 }
@@ -703,7 +767,7 @@
                 // Default to gated on network error
                 header.classList.add('disabled');
                 wrapper.classList.add('disabled');
-                accessModal.classList.add('is-open');
+                accessModal.style.display = 'flex'; // 🚨 FIX: Use style.display
                 document.body.style.overflow = 'hidden';
                 return false;
             }
@@ -738,6 +802,7 @@
 
             } catch (error) {
                 console.error("Background status check error:", error.message);
+                // The error may be a session/network failure, which can be ignored if the main check fails later
             }
         }
         
@@ -748,15 +813,27 @@
             if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             
             const modal = document.getElementById('deactivated-alert-modal');
-            document.getElementById('deactivated-message-content').innerHTML = message;
-            modal.classList.add('is-open');
-            document.body.style.overflow = 'hidden';
+            const alertOkButton = document.getElementById('alert-ok-button'); 
+            
+            // 🚨 FIX 1: Ensure modal elements exist and use correct display type
+            if (modal) {
+                document.getElementById('deactivated-message-content').innerHTML = message;
+                modal.style.display = 'flex'; // Use flex to display modal
+                document.body.style.overflow = 'hidden';
+            }
 
-            document.getElementById('alert-ok-button').onclick = () => {
-                fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
-                    window.location.href = '/auth';
+            if (alertOkButton) {
+                alertOkButton.onclick = () => {
+                    fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
+                        window.location.href = '/auth';
+                    });
+                };
+            } else {
+                 // Fallback if modal isn't rendered yet 
+                 fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
+                    if (forceRedirect) window.location.href = '/auth';
                 });
-            };
+            }
         }
         
         // --- Data Fetching and Initialization ---
@@ -827,15 +904,17 @@
             statusDisplay.className = `status-display status-${isActive ? 'active' : 'deactivated'}`;
             
             // Disable form if deactivated
-            const profileCard = document.querySelector('.profile-card');
+            const profileCard = document.querySelector('#details .card'); 
             const updateBtn = document.getElementById('update-btn');
             
-            if (!isActive) {
-                 profileCard.style.pointerEvents = 'none';
-                 updateBtn.disabled = true;
-            } else {
-                 profileCard.style.pointerEvents = 'auto';
-                 updateBtn.disabled = false;
+            if (profileCard && updateBtn) {
+                if (!isActive) {
+                     profileCard.style.pointerEvents = 'none';
+                     updateBtn.disabled = true;
+                } else {
+                     profileCard.style.pointerEvents = 'auto';
+                     updateBtn.disabled = false;
+                }
             }
             
             // Update the Wallet section display with the full name
@@ -903,7 +982,7 @@
             setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
         }
 
-        // --- NEW: Section Data Fetchers ---
+        // --- NEW: Section Data Fetchers (Remaining unchanged for now) ---
 
         /**
          * Fetches and renders the user's order history.
@@ -914,13 +993,12 @@
             tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching orders...</td></tr>';
 
             try {
-                // Assuming the orders API returns the structure defined in db.js (findUserOrders)
                 const response = await fetch(ORDERS_API_URL);
                 if (response.status === 401) throw new Error('Session expired.');
                 if (!response.ok) throw new Error('Failed to fetch orders.');
 
                 const orders = await response.json();
-                tbody.innerHTML = ''; // Clear loading message
+                tbody.innerHTML = '';
 
                 if (orders.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-text-subtle);">You have no past orders.</td></tr>';
@@ -956,9 +1034,6 @@
             if (!isUserAuthenticated) return;
             const balanceDisplay = document.getElementById('wallet-balance-display');
             const accountNoDisplay = document.getElementById('account-number-display');
-            
-            // Simulate fetching wallet data (Replace with actual API call later)
-            // Assuming API_BASE_URL/wallet returns { balance: 1500.50, account_number: 'Lollys123' }
             
             balanceDisplay.textContent = 'Loading...';
             accountNoDisplay.textContent = 'Loading...';
@@ -1030,7 +1105,6 @@
             const modal = document.getElementById('deposit-modal');
             document.getElementById('deposit-modal-title').textContent = `Deposit via ${method}`;
             
-            // For M-Pesa, display the account number (which is set by fetchAndRenderWallet)
             if (method === 'M-Pesa') {
                 document.getElementById('paybill-number').textContent = '888888 (Simulated Paybill)';
                 document.getElementById('deposit-modal-title').textContent = `Deposit via M-Pesa`;
@@ -1073,8 +1147,8 @@
                 const initialHash = window.location.hash ? window.location.hash.substring(1) : 'details';
                 showSection(initialHash);
                 
-                // 3. Start 1-second background security check loop
-                window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS);
+                // 3. Start 5-second background security check loop
+                window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS); 
             } else {
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             }
