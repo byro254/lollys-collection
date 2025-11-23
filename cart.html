@@ -937,11 +937,12 @@
 
                     // Pre-fill Name and Email
                     nameEl.value = userData.name || ''; 
+                    nameEl.readOnly = true;
                     emailEl.value = userData.email || '';
-                    
+                    emailEl.readOnly = true;
                     // Pre-fill Phone Number (FIXED)
                     phoneEl.value = userData.phoneNumber || '';
-                    
+                    phoneEl.readOnly = true;
                     nameEl.placeholder = 'Your Full Name (Pre-filled)';
                     emailEl.placeholder = 'Email (Pre-filled)';
                     phoneEl.placeholder = 'Phone Number (Pre-filled)';
