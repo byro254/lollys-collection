@@ -43,6 +43,31 @@
             color: var(--color-pink-dark);
         }
         
+        /* Form Group styling */
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--color-pink-dark);
+        }
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid var(--color-border-medium);
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            border-color: var(--color-pink-accent);
+            box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.2);
+            outline: none;
+        }
+
         /* --- GATING CSS (Causes blur and unresponsiveness) --- */
         .gated-content {
             transition: filter 0.3s, opacity 0.3s;
@@ -183,17 +208,29 @@
             color: var(--color-pink-accent);
         }
         
-        /* 🚨 STYLING FIX: Enhanced Card */
+        /* 🚨 Card Styling (General) */
         .card {
             background-color: var(--color-bg-light);
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 5px 25px var(--color-shadow); /* Stronger shadow */
+            box-shadow: 0 5px 25px var(--color-shadow); 
             margin-bottom: 30px;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.3s;
         }
         .card:hover {
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); /* Lift on hover */
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12); 
+        }
+
+        /* 🚨 STYLING FIX: Account Details Card (More Stylish) */
+        #details .card {
+            /* Deeper, more noticeable shadow */
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15), 0 0 0 2px var(--color-border-medium);
+            border: none; /* Rely on shadow border for cleaner look */
+            background: linear-gradient(135deg, #ffffff 90%, #ffe0e6 100%);
+        }
+        #details .card:hover {
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2), 0 0 0 2px var(--color-pink-accent);
+            transform: translateY(-5px);
         }
         
         /* --- Wallet and Payment Styles --- */
@@ -229,17 +266,18 @@
             font-weight: 700;
         }
         .deposit-button {
-            background-color: var(--color-bg-light);
-            color: var(--color-pink-accent);
+            background-color: var(--color-pink-dark);
+            color: white;
             padding: 10px 20px;
             border: none;
             border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: background-color 0.3s, transform 0.1s;
         }
         .deposit-button:hover {
-            background-color: var(--color-border-medium);
+            background-color: var(--color-pink-accent);
+            transform: translateY(-1px);
         }
         
         .payment-method-grid {
@@ -298,6 +336,7 @@
         .status-badge.Pending { background-color: var(--color-warning); color: var(--color-text-dark); }
         .status-badge.Completed { background-color: var(--color-success); color: white; }
         .status-badge.Shipped { background-color: var(--color-warning); color: var(--color-text-dark); }
+        .status-badge.Failed { background-color: var(--color-danger); color: white; }
         
         
         /* --- Profile Picture & Form Styles --- */
@@ -392,7 +431,7 @@
             }
         }
         
-        /* --- Deposit Modal Styles (New) --- */
+        /* --- Modal Styles --- */
         .modal { 
             position: fixed; 
             top: 0; 
@@ -415,6 +454,7 @@
             max-width: 400px;
             box-shadow: 0 5px 25px rgba(0,0,0,0.5);
             text-align: center;
+            position: relative;
         }
         .modal-content-small h3 {
             color: var(--color-pink-dark);
@@ -443,6 +483,14 @@
         .modal-info p {
             margin: 5px 0 0;
             font-size: 0.9rem;
+        }
+        .modal-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+        .modal-form-grid .form-group:last-child {
+            grid-column: span 2;
         }
         
         @keyframes fadeIn {
@@ -476,23 +524,68 @@
         </div>
     </div>
     
-    <!-- 🚨 NEW: DEPOSIT MODAL -->
-    <div id="deposit-modal" class="modal">
+    <!-- 🚨 NEW: M-PESA DEPOSIT MODAL -->
+    <div id="mpesa-deposit-modal" class="modal">
         <div class="modal-content-small">
-            <span class="close-btn" onclick="document.getElementById('deposit-modal').style.display='none'">&times;</span>
-            <h3 id="deposit-modal-title">Deposit via M-Pesa</h3>
-            <div id="deposit-modal-info" class="modal-info">
-                <strong>Paybill Number:</strong>
-                <p id="paybill-number">888888 (Simulated)</p>
-                <strong>Account Number:</strong>
-                <p id="account-number-display"></p>
-            </div>
-            <p style="font-size: 0.9rem; color: var(--color-text-subtle);">
-                Complete the payment on your phone. Funds will reflect in your wallet within 5 minutes.
-            </p>
-            <button class="deposit-button" onclick="document.getElementById('deposit-modal').style.display='none'" style="width: 100%;">
-                Done, Close
-            </button>
+            <span class="close-btn" onclick="closeModal('mpesa-deposit-modal')">&times;</span>
+            <h3 id="mpesa-modal-title">Deposit via M-Pesa</h3>
+            <form id="mpesa-deposit-form">
+                <div class="modal-info">
+                    <strong>Paybill Number:</strong>
+                    <p id="paybill-number">888888 (Simulated)</p>
+                    <strong>Account Number:</strong>
+                    <p id="account-number-display-mpesa"></p>
+                </div>
+
+                <div class="form-group">
+                    <label for="mpesa-phone">M-Pesa Phone Number:</label>
+                    <input type="tel" id="mpesa-phone" placeholder="e.g., 07XXXXXXXX" required pattern="07[0-9]{8}">
+                </div>
+
+                <div class="form-group">
+                    <label for="mpesa-amount">Amount (KES):</label>
+                    <input type="number" id="mpesa-amount" min="10" placeholder="Min. 10 KES" required>
+                </div>
+
+                <button type="submit" class="deposit-button" id="mpesa-deposit-btn" style="width: 100%;">
+                    Deposit Now
+                </button>
+                <div id="mpesa-deposit-message" style="margin-top: 10px; display: none;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 🚨 NEW: CARD DEPOSIT MODAL -->
+    <div id="card-deposit-modal" class="modal">
+        <div class="modal-content-small">
+            <span class="close-btn" onclick="closeModal('card-deposit-modal')">&times;</span>
+            <h3 id="card-modal-title">Deposit via Card (Simulated)</h3>
+            <form id="card-deposit-form">
+                <div class="form-group">
+                    <label for="card-number">Card Number:</label>
+                    <input type="text" id="card-number" placeholder="XXXX XXXX XXXX XXXX" required pattern="[0-9]{13,16}">
+                </div>
+                
+                <div class="modal-form-grid">
+                    <div class="form-group">
+                        <label for="expiry">Expiry (MM/YY):</label>
+                        <input type="text" id="expiry" placeholder="MM/YY" required pattern="(0[1-9]|1[0-2])\/\d{2}">
+                    </div>
+                    <div class="form-group">
+                        <label for="cvv">CVV:</label>
+                        <input type="text" id="cvv" placeholder="XXX" required pattern="[0-9]{3,4}">
+                    </div>
+                </div>
+                 <div class="form-group">
+                    <label for="card-amount">Amount (KES):</label>
+                    <input type="number" id="card-amount" min="10" placeholder="Min. 10 KES" required>
+                </div>
+                
+                <button type="submit" class="deposit-button" id="card-deposit-btn" style="width: 100%;">
+                    Pay Now
+                </button>
+                <div id="card-deposit-message" style="margin-top: 10px; display: none;"></div>
+            </form>
         </div>
     </div>
     <!-- END MODALS -->
@@ -671,39 +764,61 @@
     </footer>
     
     <script>
+        // API ENDPOINTS (Placeholder URLs)
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const PROFILE_API_URL = '/api/user/profile';
-        const ORDERS_API_URL = '/api/user/orders'; // New orders API endpoint
+        const ORDERS_API_URL = '/api/user/orders';
         const LOGOUT_API_URL = '/api/logout';
+        const WALLET_BALANCE_API_URL = '/api/wallet/balance'; // New API
+        const MPESA_DEPOSIT_API_URL = '/api/wallet/deposit/mpesa'; // New API
+        const CARD_DEPOSIT_API_URL = '/api/wallet/deposit/card'; // New API
+        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; // New API
+        
         const REFRESH_INTERVAL_MS = 5000; 
         
         let isUserAuthenticated = false; 
-        let currentUserData = {}; // Store all fetched user data
+        let currentUserData = {}; 
 
         // --- DOM Elements ---
-        // Note: sidebar and mainContent are defined here and used in checkAuthenticationStatus
         const sidebar = document.getElementById('sidebar');
         const hamburgerIcon = document.getElementById('hamburger-icon');
         const sidebarCloseIcon = document.getElementById('sidebar-close-icon');
         const mainContent = document.getElementById('main-content');
         const logoutLink = document.getElementById('logout-link');
 
-        // --- GATING LOGIC ---
-        
+        // --- Utility Functions ---
+
+        /**
+         * Closes a modal by its ID.
+         * @param {string} id 
+         */
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
+        }
+
+        /**
+         * Displays a temporary message in a specific modal's message area.
+         */
+        function showModalMessage(id, message, type) {
+            const messageEl = document.getElementById(id);
+            messageEl.textContent = message;
+            messageEl.style.color = type === 'success' ? 'var(--color-success)' : 'var(--color-danger)';
+            messageEl.style.display = 'block';
+            setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
+        }
+
         function redirectToAuthPage() {
             window.location.href = '/auth';
         }
 
-        /**
-         * Toggles the mobile sidebar state.
-         */
         function toggleSidebar() {
             sidebar.classList.toggle('mobile-open');
         }
 
         /**
          * Shows the specific content section and updates the sidebar link state.
-         * @param {string} targetId - The ID of the section to display.
+         * Also triggers a dynamic data refresh for the new section.
          */
         function showSection(targetId) {
             document.querySelectorAll('.profile-section').forEach(section => {
@@ -719,28 +834,20 @@
             if (targetSection) targetSection.classList.add('active');
             if (targetLink) targetLink.classList.add('active');
             
-            // Close sidebar on mobile after selection
             if (window.innerWidth <= 900) {
                  sidebar.classList.remove('mobile-open');
             }
 
-            // Fetch data relevant to the new section
-            if (targetId === 'orders') fetchAndRenderOrders();
-            if (targetId === 'wallet') fetchAndRenderWallet();
-            if (targetId === 'history') fetchAndRenderPaymentHistory();
+            // Immediately fetch data for the active section on tab switch
+            refreshDynamicData(targetId);
 
-            // Push state for better URL tracking
             history.pushState(null, '', `#${targetId}`);
         }
 
+        // --- GATING / AUTHENTICATION LOGIC (FIXED) ---
 
-        /**
-         * Checks base authentication status and gates the page.
-         * 🚨 FIX: Now correctly removes the 'disabled' class from sidebar and main content.
-         */
         async function checkAuthenticationStatus() {
             const header = document.querySelector('.site-header');
-            const wrapper = document.querySelector('.main-content-wrapper');
             const accessModal = document.getElementById('access-required-modal');
 
             try {
@@ -748,11 +855,10 @@
                 
                 if (response.ok) {
                     isUserAuthenticated = true;
-                    // Enable content - REMOVE 'disabled' CLASS FROM ALL GATED ELEMENTS
+                    // Enable content - FIX: Remove 'disabled' from all gated elements
                     header.classList.remove('disabled');
                     sidebar.classList.remove('disabled');
                     mainContent.classList.remove('disabled');
-                    // wrapper.classList.remove('disabled'); // Removed as wrapper has no 'disabled' class in HTML
                     
                     accessModal.style.display = 'none'; 
                     document.body.style.overflow = 'auto'; 
@@ -763,7 +869,6 @@
                     header.classList.add('disabled');
                     sidebar.classList.add('disabled');
                     mainContent.classList.add('disabled');
-                    // wrapper.classList.add('disabled'); // Removed as wrapper is not gated in HTML
                     
                     accessModal.style.display = 'flex'; 
                     document.body.style.overflow = 'hidden';
@@ -772,7 +877,7 @@
             } catch (error) {
                 console.error('Error checking auth status:', error);
                 isUserAuthenticated = false;
-                // Default to gated on network error
+                
                 header.classList.add('disabled');
                 sidebar.classList.add('disabled');
                 mainContent.classList.add('disabled');
@@ -784,10 +889,13 @@
         }
 
         /**
-         * Checks profile status every second. Logs out user if deactivated.
+         * Checks profile status and dynamic data periodically.
+         * 🚨 NEW: Now includes refresh of Orders, Wallet, and History.
          */
         async function checkProfileStatusAndLogout() {
             if (!isUserAuthenticated) return;
+            
+            await refreshDynamicData(); // Refresh dynamic content
             
             try {
                 const response = await fetch(PROFILE_API_URL);
@@ -800,10 +908,8 @@
                 const userData = await response.json();
                 currentUserData = userData; // Update global data
                 
-                // 1. Update UI with fresh status
                 populateStatusOnly(userData); 
 
-                // 2. CHECK DEACTIVATION FLAG
                 const isActive = userData.isActive === 1 || userData.isActive === true;
                 
                 if (!isActive) {
@@ -812,23 +918,18 @@
 
             } catch (error) {
                 console.error("Background status check error:", error.message);
-                // The error may be a session/network failure, which can be ignored if the main check fails later
             }
         }
         
-        /**
-         * Executes server logout and redirects.
-         */
         function logoutUser(forceRedirect, message) {
             if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             
             const modal = document.getElementById('deactivated-alert-modal');
             const alertOkButton = document.getElementById('alert-ok-button'); 
             
-            // Ensure modal elements exist and use correct display type
             if (modal) {
                 document.getElementById('deactivated-message-content').innerHTML = message;
-                modal.style.display = 'flex'; // Use flex to display modal
+                modal.style.display = 'flex'; 
                 document.body.style.overflow = 'hidden';
             }
 
@@ -839,14 +940,13 @@
                     });
                 };
             } else {
-                 // Fallback if modal isn't rendered yet 
                  fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
                     if (forceRedirect) window.location.href = '/auth';
                 });
             }
         }
         
-        // --- Data Fetching and Initialization ---
+        // --- Data Fetching and Renders ---
 
         async function fetchProfileData() {
             if (!isUserAuthenticated) return;
@@ -856,7 +956,7 @@
                 
                 if (response.ok) {
                     const userData = await response.json();
-                    currentUserData = userData; // Save data globally
+                    currentUserData = userData; 
                     populateForm(userData); 
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
@@ -869,9 +969,6 @@
             }
         }
 
-        /**
-         * Renders the profile picture onto the designated image element.
-         */
         function renderProfilePicture(imageUrl, elementId = 'current-profile-picture', defaultPath = '/images/profiles/default_profile.png') {
             const imgElement = document.getElementById(elementId);
             let finalUrl = imageUrl;
@@ -882,30 +979,19 @@
             imgElement.src = finalUrl;
         }
 
-        /**
-         * Populates all form fields (used on initial load).
-         */
         function populateForm(data) {
-            // Set Read-Only Fields
             renderProfilePicture(data.profilePictureUrl, 'current-profile-picture');
             document.getElementById('full-name').value = data.name || '';
             document.getElementById('email').value = data.email || '';
-           
-            // Set Editable Fields
             document.getElementById('phone-number').value = data.phoneNumber || '';
             document.getElementById('current-pic-url').value = data.profilePictureUrl || '';
             
-            // Set Profile Picture
             const profilePicEl = document.getElementById('current-profile-picture');
             profilePicEl.src = data.profilePictureUrl || '/images/profiles/default_profile.png';
             
-            // Set Account Status (Read Only)
             populateStatusOnly(data);
         }
         
-        /**
-         * Updates only the status badge (used in 1-second refresh).
-         */
         function populateStatusOnly(data) {
             const statusDisplay = document.getElementById('account-status-display');
             const isActive = data.isActive === 1 || data.isActive === true;
@@ -913,7 +999,6 @@
             statusDisplay.textContent = isActive ? 'ACTIVE' : 'DEACTIVATED';
             statusDisplay.className = `status-display status-${isActive ? 'active' : 'deactivated'}`;
             
-            // Disable form if deactivated
             const profileCard = document.querySelector('#details .card'); 
             const updateBtn = document.getElementById('update-btn');
             
@@ -927,14 +1012,251 @@
                 }
             }
             
-            // Update the Wallet section display with the full name
             const sidebarHeader = document.querySelector('.sidebar-header span');
             if (data.name) {
                 sidebarHeader.textContent = data.name.split(' ')[0] + "'s Account";
             }
         }
         
-        // --- Profile Update Handler (Existing Logic) ---
+        // --- Dynamic Data Refreshers (Removed Mock Data) ---
+
+        /**
+         * Fetches and renders the user's order history via API.
+         */
+        async function fetchAndRenderOrders() {
+            if (!isUserAuthenticated) return;
+            const tbody = document.getElementById('orders-tbody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching orders...</td></tr>';
+
+            try {
+                const response = await fetch(ORDERS_API_URL);
+                
+                if (response.ok) {
+                    const orders = await response.json(); // Assuming API returns [{...}, {...}]
+                    tbody.innerHTML = '';
+
+                    if (orders.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-text-subtle);">You have no past orders.</td></tr>';
+                        return;
+                    }
+
+                    orders.forEach(order => {
+                        const statusClass = order.status || 'Pending';
+                        const totalItems = order.items ? order.items.length : 'N/A';
+                        
+                        const row = `
+                            <tr>
+                                <td>#${order.orderId || '0000'}</td>
+                                <td>${new Date(order.date).toLocaleDateString()}</td>
+                                <td>${totalItems} items</td>
+                                <td>KES ${parseFloat(order.total || 0).toFixed(2)}</td>
+                                <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
+                            </tr>
+                        `;
+                        tbody.insertAdjacentHTML('beforeend', row);
+                    });
+                } else {
+                     // Handle API non-OK status
+                     tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Error (${response.status}) fetching orders.</td></tr>`;
+                }
+
+            } catch (error) {
+                console.error('Error fetching orders:', error);
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Network error loading orders.</td></tr>`;
+            }
+        }
+
+        /**
+         * Fetches and renders the user's wallet balance via API.
+         */
+        async function fetchAndRenderWallet() {
+            if (!isUserAuthenticated) return;
+            const balanceDisplay = document.getElementById('wallet-balance-display');
+            const accountNoDisplayMpesa = document.getElementById('account-number-display-mpesa');
+            
+            balanceDisplay.textContent = 'Loading...';
+            if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(WALLET_BALANCE_API_URL);
+                
+                if (response.ok) {
+                    const walletData = await response.json(); // Assuming API returns { balance: 1234.50, account_number: 'LC999' }
+                    
+                    balanceDisplay.textContent = `KES ${parseFloat(walletData.balance || 0).toFixed(2)}`;
+                    
+                    if (accountNoDisplayMpesa) {
+                        accountNoDisplayMpesa.textContent = walletData.account_number || 'N/A';
+                    }
+                } else {
+                    balanceDisplay.textContent = `KES 0.00`;
+                    if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'N/A';
+                }
+
+            } catch (error) {
+                balanceDisplay.textContent = `KES 0.00`;
+                if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'N/A';
+                console.error('Error fetching wallet:', error);
+            }
+        }
+
+        /**
+         * Fetches and renders payment history (deposits/deductions) via API.
+         */
+        async function fetchAndRenderPaymentHistory() {
+             if (!isUserAuthenticated) return;
+             const tbody = document.getElementById('payment-history-tbody');
+             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
+             
+             try {
+                const response = await fetch(PAYMENT_HISTORY_API_URL);
+
+                if (response.ok) {
+                    const historyData = await response.json(); // Assuming API returns [{date, type, amount, status}, ...]
+                    
+                    tbody.innerHTML = '';
+                    if (historyData.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-text-subtle);">No history available.</td></tr>';
+                        return;
+                    }
+                 
+                    historyData.forEach(transaction => {
+                        const statusClass = transaction.status || 'Pending';
+                        const amountText = `KES ${parseFloat(transaction.amount || 0).toFixed(2)}`;
+                        const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
+                        
+                        const row = `
+                            <tr>
+                                <td>${new Date(transaction.date).toLocaleDateString()}</td>
+                                <td>${transaction.type || 'Transaction'}</td>
+                                <td style="${amountStyle}">${amountText}</td>
+                                <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
+                            </tr>
+                        `;
+                        tbody.insertAdjacentHTML('beforeend', row);
+                    });
+                } else {
+                    // Handle API non-OK status
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Error (${response.status}) loading history.</td></tr>`;
+                }
+
+             } catch (error) {
+                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Network error loading history.</td></tr>`;
+                 console.error('Error fetching payment history:', error);
+             }
+        }
+
+        /**
+         * 🚨 NEW: Combined function to refresh dynamic data parts.
+         * @param {string} targetId Optional section ID to refresh immediately.
+         */
+        async function refreshDynamicData(targetId) {
+            const activeSectionId = targetId || document.querySelector('.profile-section.active')?.id;
+            
+            // Wallet and History are often updated by background services, so refresh them every cycle
+            fetchAndRenderWallet();
+            
+            if (activeSectionId === 'orders' || activeSectionId === 'all') {
+                fetchAndRenderOrders();
+            }
+            if (activeSectionId === 'history' || activeSectionId === 'all') {
+                fetchAndRenderPaymentHistory();
+            }
+            // Ensure status/profile data is also refreshed via checkProfileStatusAndLogout which is called in the main interval
+        }
+
+        // --- Payment Modals and Handlers ---
+
+        window.openDepositModal = function(method) {
+            closeModal('mpesa-deposit-modal');
+            closeModal('card-deposit-modal');
+            
+            if (method === 'M-Pesa') {
+                fetchAndRenderWallet(); // To get the latest account number
+                document.getElementById('mpesa-deposit-modal').style.display = 'flex';
+            } else if (method === 'Visa / Mastercard') {
+                document.getElementById('card-deposit-modal').style.display = 'flex';
+            } else if (method === 'PayPal') {
+                // Simulate redirection to PayPal official page
+                window.location.href = 'https://www.paypal.com/signin?simulated=true';
+            }
+        }
+        
+        document.getElementById('mpesa-deposit-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const phone = document.getElementById('mpesa-phone').value;
+            const amount = document.getElementById('mpesa-amount').value;
+            const accountNo = document.getElementById('account-number-display-mpesa').textContent;
+            const btn = document.getElementById('mpesa-deposit-btn');
+            const originalBtnHtml = btn.innerHTML;
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+            try {
+                const response = await fetch(MPESA_DEPOSIT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, amount, accountNo })
+                });
+
+                if (response.ok) {
+                    showModalMessage('mpesa-deposit-message', 'M-Pesa push sent! Confirm on your phone.', 'success');
+                    this.reset();
+                    // Keep modal open for user to confirm, but enable button for retries/close
+                } else {
+                    const result = await response.json();
+                    showModalMessage('mpesa-deposit-message', result.message || 'Deposit failed. Check details.', 'error');
+                }
+            } catch (error) {
+                console.error('M-Pesa deposit error:', error);
+                showModalMessage('mpesa-deposit-message', 'Network error during deposit.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+                refreshDynamicData('wallet');
+            }
+        });
+        
+        document.getElementById('card-deposit-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const cardNumber = document.getElementById('card-number').value;
+            const expiry = document.getElementById('expiry').value;
+            const cvv = document.getElementById('cvv').value;
+            const amount = document.getElementById('card-amount').value;
+            const btn = document.getElementById('card-deposit-btn');
+            const originalBtnHtml = btn.innerHTML;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            
+            try {
+                // In a real app, this would use a secure payment gateway SDK, not a direct POST to your API.
+                const response = await fetch(CARD_DEPOSIT_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cardNumber: cardNumber.slice(-4), expiry, cvv, amount }) // Send only last 4 digits securely
+                });
+
+                if (response.ok) {
+                    showModalMessage('card-deposit-message', 'Card payment successful! Funds are now available.', 'success');
+                    this.reset();
+                    setTimeout(() => closeModal('card-deposit-modal'), 2000);
+                } else {
+                    const result = await response.json();
+                    showModalMessage('card-deposit-message', result.message || 'Card payment failed. Please check details.', 'error');
+                }
+            } catch (error) {
+                console.error('Card deposit error:', error);
+                showModalMessage('card-deposit-message', 'Network error during card payment.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+                refreshDynamicData('wallet');
+            }
+        });
+
+        // --- Profile Update Handler ---
 
         document.getElementById('profile-form').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -967,7 +1289,6 @@
                         document.getElementById('current-pic-url').value = result.profilePictureUrl;
                     }
                     fileInput.value = ''; 
-
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
@@ -982,8 +1303,6 @@
             }
         });
         
-        // --- Status Message Display (Existing Logic) ---
-
         function showMessage(message, type) {
             const messageEl = document.getElementById('profile-message');
             messageEl.textContent = message;
@@ -992,148 +1311,12 @@
             setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
         }
 
-        // --- NEW: Section Data Fetchers (Remaining unchanged for now) ---
-
-        /**
-         * Fetches and renders the user's order history.
-         */
-        async function fetchAndRenderOrders() {
-            if (!isUserAuthenticated) return;
-            const tbody = document.getElementById('orders-tbody');
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching orders...</td></tr>';
-
-            try {
-                const response = await fetch(ORDERS_API_URL);
-                if (response.status === 401) throw new Error('Session expired.');
-                if (!response.ok) throw new Error('Failed to fetch orders.');
-
-                const orders = await response.json();
-                tbody.innerHTML = '';
-
-                if (orders.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-text-subtle);">You have no past orders.</td></tr>';
-                    return;
-                }
-
-                orders.forEach(order => {
-                    const statusClass = order.status || 'Pending';
-                    const totalItems = order.items ? order.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
-                    
-                    const row = `
-                        <tr>
-                            <td>#${order.orderId}</td>
-                            <td>${new Date(order.date).toLocaleDateString()}</td>
-                            <td>${totalItems} items</td>
-                            <td>KES ${parseFloat(order.total).toFixed(2)}</td>
-                            <td><span class="status-badge ${statusClass}">${order.status}</span></td>
-                        </tr>
-                    `;
-                    tbody.insertAdjacentHTML('beforeend', row);
-                });
-
-            } catch (error) {
-                console.error('Error fetching orders:', error);
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Error loading orders.</td></tr>`;
-            }
-        }
-
-        /**
-         * Fetches and renders the user's wallet balance.
-         */
-        async function fetchAndRenderWallet() {
-            if (!isUserAuthenticated) return;
-            const balanceDisplay = document.getElementById('wallet-balance-display');
-            const accountNoDisplay = document.getElementById('account-number-display');
-            
-            balanceDisplay.textContent = 'Loading...';
-            accountNoDisplay.textContent = 'Loading...';
-
-            try {
-                // --- MOCK DATA FOR FRONTEND (REPLACE WITH REAL FETCH) ---
-                const walletData = {
-                    balance: Math.floor(Math.random() * 5000) + 1000, 
-                    account_number: 'LC' + (currentUserData.id || 99999), 
-                };
-                // --- END MOCK ---
-                
-                balanceDisplay.textContent = `KES ${parseFloat(walletData.balance).toFixed(2)}`;
-                accountNoDisplay.textContent = walletData.account_number;
-
-            } catch (error) {
-                balanceDisplay.textContent = `KES 0.00`;
-                accountNoDisplay.textContent = 'N/A';
-                console.error('Error fetching wallet:', error);
-            }
-        }
-
-        /**
-         * Fetches and renders payment history (deposits/deductions).
-         */
-        async function fetchAndRenderPaymentHistory() {
-             if (!isUserAuthenticated) return;
-             const tbody = document.getElementById('payment-history-tbody');
-             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
-             
-             try {
-                 // --- MOCK DATA FOR FRONTEND (REPLACE WITH REAL FETCH) ---
-                 const historyData = [
-                    { date: '2025-10-15', type: 'Deposit', amount: 5000, status: 'Completed' },
-                    { date: '2025-10-16', type: 'Deduction', amount: -1500.50, status: 'Completed' },
-                    { date: '2025-10-18', type: 'Deposit', amount: 200, status: 'Pending' },
-                    { date: '2025-10-20', type: 'Deduction', amount: -50.00, status: 'Failed' },
-                 ];
-                 // --- END MOCK ---
-                 
-                 tbody.innerHTML = '';
-                 
-                 historyData.forEach(transaction => {
-                    const statusClass = transaction.status;
-                    const amountText = `KES ${parseFloat(transaction.amount).toFixed(2)}`;
-                    const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
-                    
-                    const row = `
-                        <tr>
-                            <td>${new Date(transaction.date).toLocaleDateString()}</td>
-                            <td>${transaction.type}</td>
-                            <td style="${amountStyle}">${amountText}</td>
-                            <td><span class="status-badge ${statusClass}">${transaction.status}</span></td>
-                        </tr>
-                    `;
-                    tbody.insertAdjacentHTML('beforeend', row);
-                 });
-                 
-             } catch (error) {
-                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Error loading history.</td></tr>`;
-                 console.error('Error fetching payment history:', error);
-             }
-        }
-        
-        /**
-         * Opens the deposit modal and sets the title based on the payment method.
-         */
-        window.openDepositModal = function(method) {
-            const modal = document.getElementById('deposit-modal');
-            document.getElementById('deposit-modal-title').textContent = `Deposit via ${method}`;
-            
-            if (method === 'M-Pesa') {
-                document.getElementById('paybill-number').textContent = '888888 (Simulated Paybill)';
-                document.getElementById('deposit-modal-title').textContent = `Deposit via M-Pesa`;
-            } else {
-                document.getElementById('paybill-number').textContent = 'Follow Prompts After Payment Gateway';
-                document.getElementById('deposit-modal-title').textContent = `Deposit via Card/PayPal`;
-            }
-            
-            modal.style.display = 'flex';
-        }
-        
         // --- Final Initialization ---
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Event listeners for sidebar toggle
             hamburgerIcon.addEventListener('click', toggleSidebar);
             sidebarCloseIcon.addEventListener('click', toggleSidebar);
             
-            // Event listeners for navigation links
             document.querySelectorAll('.nav-link').forEach(link => {
                 link.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -1141,29 +1324,25 @@
                 });
             });
             
-            // Logout link handler
             logoutLink.addEventListener('click', async (e) => {
                 e.preventDefault();
                 logoutUser(true, "Logging out...");
             });
             
-            // 1. Check auth status and set up the page gate
             const loggedIn = await checkAuthenticationStatus();
             
             if (loggedIn) {
                 await fetchProfileData();
                 
-                // 2. Load the correct initial section (default to 'details')
                 const initialHash = window.location.hash ? window.location.hash.substring(1) : 'details';
                 showSection(initialHash);
                 
-                // 3. Start 5-second background security check loop
+                // Start combined status/data refresh loop
                 window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS); 
             } else {
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             }
             
-            // File input preview setup (existing logic)
             document.getElementById('file-input').addEventListener('change', function(e) {
                 if (this.files && this.files[0]) {
                     const reader = new FileReader();
@@ -1177,7 +1356,6 @@
             window.redirectToAuthPage = redirectToAuthPage;
         });
         
-        // Failsafe: Clear interval if user navigates away
         window.onbeforeunload = function() {
             if (window.statusIntervalId) clearInterval(window.statusIntervalId);
         };
