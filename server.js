@@ -1079,8 +1079,14 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
 });
 
 app.post('/api/order', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
-
+    
+     const rawUserId = req.session.userId;
+if (!rawUserId) {
+    // If the ID is missing, exit immediately before transaction.
+    return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
+}
+// Coerce to string to satisfy the driver's type requirement
+const userId = String(rawUserId);
     // Extract fields safely
     const {
         name = "",
