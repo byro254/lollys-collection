@@ -15,7 +15,7 @@ const urlsToCache = [
     '/images/icons/favicon.ico',
     '/images/icons/logo.png',
     '/images/icons/icon-192x192.png',
-    '/images/icons/logo.png',
+    '/images/icons/logo.ico',
     '/images/icons/maskable_icon.png'
 ];
 
