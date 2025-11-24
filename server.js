@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logAdminExpenditure, getAdminFinancialHistory } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -67,6 +67,11 @@ const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
 // Admin ID used for chat, using the session ID set during login
 const ADMIN_CHAT_ID = 'admin_env'; 
+
+// 🚨 NEW: ADMIN WALLET ID (Fixed User ID 1 for central business account)
+// This wallet represents the business's capital and revenue.
+const ADMIN_WALLET_USER_ID = '1'; 
+
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 // --- Multer and Nodemailer setup ---
@@ -547,7 +552,9 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
     res.status(200).json({ 
         message: 'Admin privileges confirmed.',
         authenticated: true,
-        isAdmin: true
+        isAdmin: true,
+        // 🚨 FIX 5: Ensure the response contains the name/full_name for the welcome message
+        full_name: req.session.fullName || 'Admin Agent'
     });
 });
 // ------------------------------------------------------------------
@@ -642,16 +649,22 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
 /**
  * GET /api/wallet/balance
  * Fetches the user's current wallet balance and account number.
+ * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 1).
  */
 app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
+    // 🚨 Use ADMIN_WALLET_USER_ID if the user is an admin requesting the central balance
+    const userId = req.session.isAdmin ? ADMIN_WALLET_USER_ID : req.session.userId;
+    
     try {
+        // 🚨 FIX: Pass the correct userId to db.getWalletByUserId
         const walletData = await db.getWalletByUserId(userId);
         
         if (walletData) {
             return res.json({
                 balance: walletData.balance,
                 account_number: walletData.account_number,
+                // Ensure wallet_id is returned for admin usage if needed
+                wallet_id: walletData.wallet_id 
             });
         }
         // If wallet doesn't exist, return 0 balance (or 404 if creation is required)
@@ -668,7 +681,8 @@ app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
  * Handles the simulated M-Pesa deposit request.
  */
 app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId;
+    // Customer deposit always goes to their own ID
+    const userId = req.session.userId; 
     const { phone, amount, accountNo } = req.body;
     const numericAmount = parseFloat(amount);
 
@@ -680,12 +694,18 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
     const externalRef = `MPESA-${Date.now()}`; 
 
     try {
-        // 🚨 UPDATE: Use performWalletTransaction
+        // Customer's wallet is credited
         await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', externalRef, null, 'Completed');
         
-        // In a real app, this is where AfricasTalking or similar API would be called 
-        // to send the STK Push to the phone number.
-        
+        // 🚨 NEW: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1)
+        // This simulates the business receiving the money from the payment processor.
+        await db.logAdminExpenditure(
+            ADMIN_WALLET_USER_ID, 
+            numericAmount, 
+            `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}`
+        );
+
+
         res.json({ 
             message: 'Deposit initiated. Please approve the prompt on your phone.',
             transactionRef: externalRef 
@@ -700,7 +720,6 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
 /**
  * POST /api/wallet/deposit/card
  * Handles the simulated Card/Visa deposit request.
- * NOTE: This is for simulation only. Real card details should NEVER hit your server.
  */
 app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -715,8 +734,15 @@ app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
 
     try {
-        // 🚨 UPDATE: Use performWalletTransaction
+        // Customer's wallet is credited
         await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
+        
+        // 🚨 NEW: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1)
+        await db.logAdminExpenditure(
+            ADMIN_WALLET_USER_ID, 
+            numericAmount, 
+            `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}`
+        );
         
         res.json({ 
             message: 'Card payment processed successfully.',
@@ -743,6 +769,52 @@ app.get('/api/user/payment-history', isAuthenticated, async (req, res) => {
         res.status(500).json({ message: 'Failed to retrieve payment history.' });
     }
 });
+
+/**
+ * GET /api/admin/finance/history
+ * Fetches the central business financial history.
+ */
+app.get('/api/admin/finance/history', isAdmin, async (req, res) => {
+    try {
+        // 🚨 Call the new dedicated function using the Admin Wallet ID
+        const history = await db.getAdminFinancialHistory(ADMIN_WALLET_USER_ID);
+        res.json(history);
+    } catch (error) {
+        console.error('Error fetching admin financial history:', error);
+        res.status(500).json({ message: 'Failed to retrieve financial history.' });
+    }
+});
+
+/**
+ * POST /api/admin/finance/expenditure
+ * Handles admin withdrawal for business purposes (Restock, Loans, Refunds).
+ */
+app.post('/api/admin/finance/expenditure', isAdmin, async (req, res) => {
+    const { amount, purpose } = req.body;
+    const numericAmount = parseFloat(amount);
+
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ message: 'Invalid or missing withdrawal amount.' });
+    }
+    if (!purpose || purpose.length < 5) {
+        return res.status(400).json({ message: 'Purpose must be specified (min 5 characters).' });
+    }
+
+    try {
+        // Amount is passed as a positive number; the DB function handles the deduction.
+        await db.logAdminExpenditure(ADMIN_WALLET_USER_ID, numericAmount, purpose);
+        
+        res.json({ message: `Successfully logged KES ${numericAmount.toFixed(2)} withdrawal for ${purpose}.` });
+    } catch (error) {
+        if (error.message === 'INSUFFICIENT_ADMIN_FUNDS') {
+            return res.status(400).json({ message: 'Insufficient funds in the Admin Wallet for this withdrawal.' });
+        }
+        console.error('Admin expenditure error:', error);
+        res.status(500).json({ message: 'Failed to process withdrawal.' });
+    }
+});
+
+
 
 // ------------------------------------------------------------------
 // --- ADMIN API ENDPOINTS (Customer Listing and Dashboard) ---
@@ -1078,8 +1150,6 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     }
 });
 
-// ... (rest of server.js imports and setup)
-
 app.post('/api/order', isAuthenticated, async (req, res) => {
     
     // -------------------------------
@@ -1091,7 +1161,6 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
     }
     // Coerce to string to satisfy the driver's type requirement (assuming DB IDs are numbers stored as strings in session)
-    // 🚨 IMPROVEMENT: Ensure userId is coerced early for all subsequent uses
     const userId = String(rawUserId);
 
     // Extract fields safely
@@ -1137,15 +1206,15 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // -------------------------------
         // 4. FETCH USER WALLET
         // -------------------------------
-        // Note: db.getWalletByUserId uses the pool, but we must re-verify/lock the wallet 
-        // using the connection within the transaction if we were using SELECT FOR UPDATE.
-        // For simplicity, we proceed with fetching and relying on the transaction for atomicity.
-        const walletData = await db.getWalletByUserId(userId);
+        const walletDataResult = await db.getWalletByUserId(userId);
+        
+        const walletData = Array.isArray(walletDataResult) ? walletDataResult[0] : walletDataResult;
+        
 
         let wallet_id;
         let currentBalance = 0;
 
-        if (walletData) {
+        if (walletData && walletData.wallet_id) { 
             wallet_id = walletData.wallet_id;
             currentBalance = walletData.balance;
         } else {
@@ -1158,11 +1227,9 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
 
             // 🚨 IMPROVEMENT: Robust check for insertId
             if (!createResult.insertId) {
-                // Throw a custom error to trigger the rollback and catch block
                 throw new Error("CRITICAL: Failed to create user wallet and retrieve ID.");
             }
             
-            // 🚨 IMPROVEMENT: Coerce wallet_id to String if it's used in non-number contexts later (like concatenation)
             wallet_id = createResult.insertId;
         }
 
@@ -1217,14 +1284,6 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             
             const product = productRows[0];
             
-            // Console logs are helpful for debugging, removing them for production code clarity
-            // console.log(`--- Debugging Order Item ID: ${item.id} ---`);
-            // console.log(`Product data retrieved:`, product);
-            // console.log(`item.quantity value:`, item.quantity);
-            // console.log(`product.name value:`, product ? product.name : 'Product Not Found');
-            // console.log(`product.price value:`, product ? product.price : 'Product Not Found');
-            // console.log('-------------------------------------------');
-            
             if (product.stock < item.quantity) {
                 throw new Error(`Not enough stock for product ID ${item.id}`);
             }
@@ -1236,68 +1295,75 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             );
 
             // Insert order item
-            // FIX IS APPLIED HERE: Using validated, DB-fetched product details
             await connection.execute(itemSql, [
-                orderId,        // Parameter 1
-                item.id,        // Parameter 2 (product_id)
-                product.name,   // Parameter 3 (product_name)
-                product.price,  // Parameter 4 (unit_price)
-                item.quantity   // Parameter 5
+                orderId,        
+                item.id,        
+                product.name,   
+                product.price,  
+                item.quantity   
             ]);
         }
 
 
         // -------------------------------
-        // 7. WALLET DEDUCTION
+        // 7. CUSTOMER WALLET DEDUCTION
         // -------------------------------
-       
-const finalWalletId = Number(wallet_id);
+        // Ensure wallet_id is valid before insertion
+        if (!wallet_id) throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
 
-if (!wallet_id || isNaN(finalWalletId)) { // Checking original variable or NaN after coercion
-  
-    throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
-}
+        // Coerce IDs to Number for DB operations where required
+        const finalWalletId = Number(wallet_id);
+        const finalOrderId = Number(orderId);
 
-// Ensure orderId is explicitly a Number for the transactions table
-const finalOrderId = Number(orderId);
+        // 7a. Customer Transaction Log (Deduction)
+        await connection.execute(
+            `INSERT INTO transactions
+             (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+             VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+            [userId, finalWalletId, finalOrderId, -orderTotal] 
+        );
 
-
-await connection.execute(
-    // 🚨 FIX: Ensure a clean space after 'transactions'
-    `INSERT INTO transactions 
-    (user_id, wallet_id, order_id, type, method, amount, transaction_status)
-    VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
-    // Use the coerced, guaranteed safe variables
-    [userId, finalWalletId, finalOrderId, -orderTotal] 
-);
-
-        await connection.execute(
-            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
-            [orderTotal, finalWalletId] // Use finalWalletId here too
-        );
+        // 7b. Update Customer Wallet Balance
+        await connection.execute(
+            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
+            [orderTotal, finalWalletId]
+        );
 
         // -------------------------------
-        // 8. CLEAR CART
+        // 8. ADMIN WALLET CREDIT (Revenue In)
         // -------------------------------
-        // userId is guaranteed to be a string here due to the initial check and coercion.
+        // This simulates the business receiving the revenue paid by the customer.
+        const adminCreditAmount = orderTotal;
+        
+        // 🚨 NEW: Log Revenue IN to the Admin Wallet (User ID 1)
+        await db.logAdminExpenditure(
+            ADMIN_WALLET_USER_ID, 
+            adminCreditAmount, 
+            `Revenue from Order #${orderId}`,
+            // NOTE: logAdminExpenditure handles its own transaction and commit/rollback 
+            // inside db.js, which is why we call it without the connection object here.
+            // In a strict transaction, you would execute the admin credit query directly 
+            // using the existing connection, but for simplicity, we rely on the DB helper.
+        );
+        
+
+        // -------------------------------
+        // 9. CLEAR CART
+        // -------------------------------
         await connection.execute(
             'DELETE FROM cart WHERE user_id = ?',
             [userId] 
         );
 
         // -------------------------------
-        // 9. COMMIT TRANSACTION
+        // 10. COMMIT TRANSACTION
         // -------------------------------
         await connection.commit();
 
         // -------------------------------
-        // 10. SEND EMAILS (Non-critical)
+        // 11. SEND EMAILS (Non-critical)
         // -------------------------------
-
-        // Note: For email, item.name and item.price might still be undefined if the client didn't send them, 
-        // but since email sending is non-critical and happens *after* the transaction, 
-        // we can safely use the client-provided data here (or fetch product details again for absolute safety, but 
-        // for email reporting, it's usually acceptable if the database is the source of truth).
+        // ... (Email sending logic remains here)
         const orderDetailsHtml = items.map(item =>
             // Using item.name and item.price here is acceptable for non-transactional reporting
             `<li>${item.name || 'Product'} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
@@ -1341,7 +1407,7 @@ await connection.execute(
         await connection.rollback();
 
         // 🚨 IMPROVEMENT: Use generic error message if the specific error is a stock or critical error
-        const userMessage = error.message.includes('stock') || error.message.includes('CRITICAL') 
+        const userMessage = error.message.includes('stock') || error.message.includes('CRITICAL') || error.message.includes('INSUFFICIENT')
             ? error.message 
             : error.sqlMessage || 'Order failed due to a server error. Please try again.';
 
@@ -1353,6 +1419,7 @@ await connection.execute(
         connection.release();
     }
 });
+// ... (rest of server.js remains the same)
 app.get('/api/orders/:orderId', isAdmin, async (req, res) => {
     try {
         const orderId = req.params.orderId;

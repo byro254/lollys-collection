@@ -322,6 +322,9 @@
             background-color: var(--color-danger); 
             color: var(--color-bg-light); 
         }
+        /* New Badges for Finance */
+        .status-badge.deposit { background-color: var(--color-success); }
+        .status-badge.deduction, .status-badge.expenditure { background-color: var(--color-danger); }
 
 
         /* Table Action Buttons & Modal */
@@ -458,6 +461,10 @@
         /* Style for the new reply modal content */
         #reply-modal .modal-content {
              max-width: 550px;
+        }
+        /* Style for the new withdrawal modal content */
+        #withdrawal-modal .modal-content {
+             max-width: 450px;
         }
         .close-btn {
             color: var(--color-text-dark);
@@ -612,6 +619,9 @@
     <ul>
         <li><a href="#dashboard" class="nav-link" data-target="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></a></li>
         <li><a href="#orders" class="nav-link active" data-target="orders"><i class="fas fa-shopping-cart"></i> <span>Orders</span></a></li>
+        <!-- 🚨 NEW MONEY TRACKER LINK -->
+        <li><a href="#finance" class="nav-link" data-target="finance"><i class="fas fa-money-bill-wave"></i> <span>Money Tracker</span></a></li>
+        <!-- END NEW LINK -->
         <li><a href="#products" class="nav-link" data-target="products"><i class="fas fa-boxes"></i> <span>Products</span></a></li>
         <li><a href="#customers" class="nav-link" data-target="customers"><i class="fas fa-users"></i> <span>Customers</span></a></li>
         <li><a href="#messages" class="nav-link" data-target="messages"><i class="fas fa-envelope"></i> <span>Messages</span></a></li>
@@ -721,6 +731,70 @@
                 </div>
             </div>
         </section>
+        
+        <!-- 🚨 NEW FINANCE SECTION -->
+        <section id="finance" class="content-section">
+            <h2>
+                <i class="fas fa-money-bill-wave"></i> Money Tracker
+            </h2>
+            
+            <div class="stats-grid">
+                <!-- Card 1: Total Balance -->
+                <div class="stat-card" style="border-left: 5px solid var(--color-success);">
+                    <div class="stat-card-info">
+                        <p>Current Account Balance</p>
+                        <h4 id="finance-total-balance">KES 0.00</h4>
+                    </div>
+                    <i class="fas fa-wallet" style="color: var(--color-success); opacity: 0.7;"></i>
+                </div>
+                
+                <!-- Card 2: Money In -->
+                <div class="stat-card" style="border-left: 5px solid var(--color-info);">
+                    <div class="stat-card-info">
+                        <p>Total Money In (Orders/Deposits)</p>
+                        <h4 id="finance-money-in">KES 0.00</h4>
+                    </div>
+                    <i class="fas fa-arrow-alt-circle-up" style="color: var(--color-info); opacity: 0.7;"></i>
+                </div>
+                
+                <!-- Card 3: Money Out -->
+                <div class="stat-card" style="border-left: 5px solid var(--color-danger);">
+                    <div class="stat-card-info">
+                        <p>Total Money Out (Restock/Refunds)</p>
+                        <h4 id="finance-money-out">KES 0.00</h4>
+                    </div>
+                    <i class="fas fa-arrow-alt-circle-down" style="color: var(--color-danger); opacity: 0.7;"></i>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="flex-between">
+                    <h3><i class="fas fa-history"></i> Detailed Transaction History</h3>
+                    <button class="submit-button" onclick="openWithdrawalModal()">
+                        <i class="fas fa-credit-card"></i> Withdraw / Log Expenditure
+                    </button>
+                </div>
+                
+                <div class="scrollable-table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Amount (KES)</th>
+                                <th>Order ID / Ref</th>
+                                <th>Description</th>
+                            </tr>
+                        </thead>
+                        <tbody id="finance-transactions-tbody">
+                            <tr><td colspan="5" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading financial data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        <!-- END NEW FINANCE SECTION -->
+
 
         <section id="products" class="content-section">
             <h2><i class="fas fa-boxes"></i> Product Management</h2>
@@ -999,6 +1073,36 @@
             </button>
         </div>
     </div>
+    
+    <!-- 🚨 NEW WITHDRAWAL MODAL -->
+    <div id="withdrawal-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-btn" onclick="document.getElementById('withdrawal-modal').style.display='none'">&times;</span>
+            <h3><i class="fas fa-hand-holding-usd"></i> Log Business Expenditure</h3>
+            
+            <form id="withdrawal-form">
+                
+                <label for="withdraw-amount">Amount to Withdraw (KES):</label>
+                <input type="number" id="withdraw-amount" name="amount" step="0.01" min="1" required>
+
+                <label for="withdraw-purpose-select">Purpose Category:</label>
+                <select id="withdraw-purpose-select" name="purposeCategory" required>
+                    <option value="" disabled selected>Select reason for expenditure</option>
+                    <option value="Restock/Inventory Purchase">Restock / Inventory Purchase</option>
+                    <option value="Refund (Customer)">Refund (Customer)</option>
+                    <option value="Loan Payment">Loan Payment</option>
+                    <option value="Marketing/Advertising">Marketing / Advertising</option>
+                    <option value="Other Business Expense">Other Business Expense</option>
+                </select>
+
+                <label for="withdraw-purpose-details">Details / Reference:</label>
+                <textarea id="withdraw-purpose-details" name="purposeDetails" rows="2" required placeholder="e.g., Supplier name, Loan ID, Customer email for refund..."></textarea>
+                
+                <button type="submit" class="submit-button" id="withdraw-btn"><i class="fas fa-sign-out-alt"></i> Confirm Withdrawal</button>
+            </form>
+        </div>
+    </div>
+    <!-- END NEW WITHDRAWAL MODAL -->
 
     <div id="chat-modal" class="modal">
         <div class="modal-content">
@@ -1032,6 +1136,9 @@
   <script>
        // Ensure this URL matches your backend API
 const API_BASE_URL = '/api'; 
+// 🚨 NEW: Admin Wallet API
+const ADMIN_FINANCE_HISTORY_URL = `${API_BASE_URL}/admin/finance/history`;
+const ADMIN_EXPENDITURE_URL = `${API_BASE_URL}/admin/finance/expenditure`;
 
 // Chart instance reference
 let salesChartInstance = null;
@@ -1138,9 +1245,17 @@ async function autoRefreshOrders() {
     await fetchAndRenderOrders();
 }
 
+// 🚨 NEW: Auto Refresh Finance Data
+async function autoRefreshFinance() {
+    if (!(await checkAdminAuthentication())) return;
+    // console.log('Auto-refreshing Finance...');
+    await fetchFinancialData();
+}
+
+
 /**
  * Manages the automatic refresh for a given section.
- * @param {string | null} sectionId - The ID of the section to manage ('dashboard' or 'orders').
+ * @param {string | null} sectionId - The ID of the section to manage ('dashboard', 'orders', or 'finance').
  */
 function manageAutoRefresh(sectionId) {
     // 1. Clear all existing intervals to prevent overlap
@@ -1152,18 +1267,24 @@ function manageAutoRefresh(sectionId) {
         clearInterval(ordersIntervalId);
         ordersIntervalId = null;
     }
+    // 🚨 NEW: Clear finance interval
+    if (window.financeIntervalId) {
+        clearInterval(window.financeIntervalId);
+        window.financeIntervalId = null;
+    }
+
 
     // 2. Start the interval for the currently active section
     if (sectionId === 'dashboard') {
-        // Run immediately on section load
         autoRefreshDashboard(); 
-        // Then start the interval
         dashboardIntervalId = setInterval(autoRefreshDashboard, REFRESH_INTERVAL);
     } else if (sectionId === 'orders') {
-        // Run immediately on section load
         autoRefreshOrders();
-        // Then start the interval
         ordersIntervalId = setInterval(autoRefreshOrders, REFRESH_INTERVAL);
+    } else if (sectionId === 'finance') {
+        // 🚨 NEW: Start finance interval
+        autoRefreshFinance();
+        window.financeIntervalId = setInterval(autoRefreshFinance, REFRESH_INTERVAL);
     }
 }
 
@@ -1331,7 +1452,7 @@ async function showSection(targetId) {
     if (targetLink) targetLink.classList.add('active');
 
     // Manage Auto-Refresh based on active section
-    if (targetId === 'dashboard' || targetId === 'orders') {
+    if (targetId === 'dashboard' || targetId === 'orders' || targetId === 'finance') {
         manageAutoRefresh(targetId);
     } else {
         manageAutoRefresh(null); // Stop refresh on other tabs
@@ -1342,6 +1463,7 @@ async function showSection(targetId) {
     if (targetId === 'customers') fetchAndRenderCustomers();
     if (targetId === 'messages') fetchMessages(); 
     if (targetId === 'chat') fetchAndRenderChatUsers(); // NEW
+    if (targetId === 'finance') fetchFinancialData();
 }
 
 // --- DOM Content Loaded Listener ---
@@ -1385,6 +1507,10 @@ document.getElementById('reply-form').addEventListener('submit', sendReply);
 
 // NEW: Add event listener for the chat input form
 document.getElementById('chat-input-form').addEventListener('submit', sendChatMessage);
+
+// 🚨 NEW: Add event listener for withdrawal form
+document.getElementById('withdrawal-form').addEventListener('submit', handleWithdrawalSubmission);
+
 
 const handoffModal = document.getElementById('handoff-modal');
     const handoffAcceptBtn = document.getElementById('handoff-accept-btn');
@@ -2231,6 +2357,184 @@ async function sendReply(e) {
         sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reply';
     }
 }
+
+// -----------------------------------------------------
+// FINANCE TRACKER LOGIC (UPDATED)
+// -----------------------------------------------------
+/**
+ * Fetches the central admin wallet balance and transaction history.
+ */
+async function fetchFinancialData() {
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const balanceEl = document.getElementById('finance-total-balance');
+    const moneyInEl = document.getElementById('finance-money-in');
+    const moneyOutEl = document.getElementById('finance-money-out');
+    const tbody = document.getElementById('finance-transactions-tbody');
+
+    balanceEl.textContent = '...';
+    moneyInEl.textContent = '...';
+    moneyOutEl.textContent = '...';
+    tbody.innerHTML = '<tr><td colspan="5" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Fetching data...</td></tr>';
+
+    let totalMoneyIn = 0;
+    let totalMoneyOut = 0;
+    
+    try {
+        // 1. Fetch Current Wallet Balance (using the Admin Wallet ID on the server)
+        const balanceResponse = await fetch(`${API_BASE_URL}/wallet/balance`);
+        const balanceData = await balanceResponse.json();
+        const currentBalance = parseFloat(balanceData.balance) || 0.00;
+
+        // 2. Fetch Admin Financial History (Only transactions logged against the admin ID)
+        const historyResponse = await fetch(ADMIN_FINANCE_HISTORY_URL);
+        const history = await historyResponse.json();
+        
+        // 3. Process History
+        const transactions = [];
+        
+        history.forEach(t => {
+            const amount = parseFloat(t.amount);
+            const absoluteAmount = Math.abs(amount);
+            
+            if (t.status === 'Completed') {
+                if (amount > 0) {
+                    // Positive amount: Deposit (Capital) or Revenue (Order payment from customer)
+                    totalMoneyIn += absoluteAmount;
+                } else if (amount < 0) {
+                    // Negative amount: Deduction/Expenditure (Restock, Refund, Loan)
+                    totalMoneyOut += absoluteAmount; 
+                }
+            }
+            
+            // Determine transaction type for display and badge
+            let displayType = t.type;
+            if (t.type === 'Expenditure') {
+                // If it's expenditure, use the purpose as the description
+                displayType = t.description.split(' (')[0] || 'Expenditure'; 
+            } else if (t.type === 'Deduction' && t.order_id) {
+                 displayType = 'Revenue (Order)';
+            } else if (t.type === 'Deposit') {
+                 displayType = 'Capital Deposit';
+            }
+
+
+            transactions.push({
+                date: new Date(t.date).toLocaleString(),
+                type: displayType,
+                amount: absoluteAmount.toFixed(2),
+                // Use Order ID if available, otherwise use external ref
+                orderRef: t.order_id ? `#${t.order_id}` : t.external_ref || 'N/A', 
+                description: t.description || t.method || ''
+            });
+        });
+
+        // 4. Update UI
+        balanceEl.textContent = `KES ${currentBalance.toFixed(2)}`;
+        moneyInEl.textContent = `KES ${totalMoneyIn.toFixed(2)}`;
+        moneyOutEl.textContent = `KES ${totalMoneyOut.toFixed(2)}`;
+        
+        renderTransactionHistory(transactions); 
+
+    } catch (error) {
+        console.error('Error fetching financial data:', error);
+        showToast('Failed to load Money Tracker data.', 'error');
+        tbody.innerHTML = '<tr><td colspan="5" class="no-hover" style="text-align: center; color: var(--color-danger);">Error fetching data.</td></tr>';
+    }
+}
+
+/**
+ * Renders the transaction history table.
+ */
+function renderTransactionHistory(transactions) {
+    const tbody = document.getElementById('finance-transactions-tbody');
+    tbody.innerHTML = '';
+
+    if (transactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">No transactions recorded.</td></tr>';
+        return;
+    }
+
+    transactions.forEach(t => {
+        // Use amount > 0 check for color consistency since we only push positive absolute amounts
+        const isMoneyIn = t.type === 'Capital Deposit' || t.type === 'Revenue (Order)';
+        const amountClass = isMoneyIn ? 'color: var(--color-success); font-weight: 600;' : 'color: var(--color-danger); font-weight: 600;';
+        const sign = isMoneyIn ? '+' : '-';
+        
+        // Use a generic badge for all transactions in this table
+        const badgeType = isMoneyIn ? 'deposit' : 'deduction';
+        
+        const row = `
+            <tr>
+                <td>${t.date}</td>
+                <td><span class="status-badge ${badgeType}">${t.type}</span></td>
+                <td style="${amountClass}">${sign} KES ${t.amount}</td>
+                <td>${t.orderRef}</td>
+                <td>${t.description}</td>
+            </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', row);
+    });
+}
+
+// --- WITHDRAWAL LOGIC ---
+
+window.openWithdrawalModal = function() {
+    // Clear form and display modal
+    document.getElementById('withdrawal-form').reset();
+    document.getElementById('withdrawal-modal').style.display = 'flex';
+}
+
+async function handleWithdrawalSubmission(e) {
+    if (!(await checkAdminAuthentication())) return;
+    e.preventDefault();
+    
+    const form = e.target;
+    const amount = document.getElementById('withdraw-amount').value;
+    const purposeCategory = document.getElementById('withdraw-purpose-select').value;
+    const purposeDetails = document.getElementById('withdraw-purpose-details').value;
+    const withdrawBtn = document.getElementById('withdraw-btn');
+
+    if (!amount || parseFloat(amount) <= 0) {
+        showToast('Please enter a valid positive amount.', 'error');
+        return;
+    }
+
+    withdrawBtn.disabled = true;
+    withdrawBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    
+    const purpose = `${purposeCategory} (${purposeDetails})`;
+
+    try {
+        const response = await fetch(ADMIN_EXPENDITURE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                amount: parseFloat(amount),
+                purpose: purpose
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            document.getElementById('withdrawal-modal').style.display = 'none';
+            form.reset();
+            showToast(result.message, 'success');
+            await fetchFinancialData(); // Refresh finance dashboard
+        } else {
+            showToast(result.message || 'Withdrawal failed due to server error.', 'error');
+        }
+
+    } catch (error) {
+        console.error('Withdrawal error:', error);
+        showToast('Network error during withdrawal attempt.', 'error');
+    } finally {
+        withdrawBtn.disabled = false;
+        withdrawBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Confirm Withdrawal';
+    }
+}
+
 
 // -----------------------------------------------------
 // NEW REAL-TIME CHAT LOGIC (Rearranged to fix ReferenceError)

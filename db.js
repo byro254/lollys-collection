@@ -311,11 +311,12 @@ async function updateUserStatus(userId, newStatus) {
 /**
  * Fetches the current wallet balance and account number for a user.
  * @param {number} userId - The ID of the user.
- * @returns {Promise<{balance: number, account_number: string} | null>}
+ * @returns {Promise<{balance: number, account_number: string, wallet_id: number} | null>}
  */
 async function getWalletByUserId(userId) {
     try {
         const [rows] = await pool.execute(
+            // 🚨 FIX: Add wallet_id to the SELECT clause
             'SELECT wallet_id, balance, account_number FROM wallets WHERE user_id = ?',
             [userId]
         );
@@ -351,6 +352,117 @@ async function findPaymentHistory(userId) {
         throw error;
     }
 }
+
+/**
+ * Logs an expenditure from the Admin's central operating account.
+ * This function performs an internal wallet transaction (deduction) for the Admin's ID.
+ * @param {number | string} adminId - The ID associated with the admin wallet.
+ * @param {number} amount - The positive amount being withdrawn (stored as negative in DB).
+ * @param {string} purpose - The reason for withdrawal (Restock, Loan, Refund, etc.).
+ * @returns {Promise<boolean>} True if the deduction succeeded.
+ */
+async function logAdminExpenditure(adminId, amount, purpose) {
+    const connection = await pool.getConnection();
+    const deductionAmount = -Math.abs(amount); // Ensure amount is negative for deduction
+    const method = 'Withdrawal'; // Method for this internal transaction
+    const type = 'Expenditure'; // New type for Money Out
+    const transactionStatus = 'Completed';
+    const externalRef = `EXP-${Date.now()}`;
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
+        let [walletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+            [adminId]
+        );
+
+        let wallet_id;
+        let currentBalance;
+
+        if (walletRows.length === 0) {
+            // Admin wallet must exist. If not, create it with 0 balance.
+            const accountNumber = `ADM-${adminId}`; 
+            const [createResult] = await connection.execute(
+                'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+                [adminId, accountNumber]
+            );
+            if (!createResult.insertId) throw new Error('Failed to initialize Admin Wallet.');
+            wallet_id = createResult.insertId;
+            currentBalance = 0;
+        } else {
+            wallet_id = walletRows[0].wallet_id;
+            currentBalance = walletRows[0].balance;
+        }
+
+        // 2. Validate balance for expenditure
+        if (currentBalance + deductionAmount < 0) { 
+             throw new Error('INSUFFICIENT_ADMIN_FUNDS');
+        }
+
+        const newBalance = currentBalance + deductionAmount;
+
+        // 3. Log Transaction (Use 'purpose' for the description column if available)
+        const transactionSql = `
+            INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, description, transaction_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        `;
+        await connection.execute(transactionSql, [adminId, wallet_id, type, method, deductionAmount, externalRef, purpose, transactionStatus]);
+
+        // 4. Update Wallet Balance
+        await connection.execute(
+            'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
+            [newBalance, wallet_id]
+        );
+
+        await connection.commit();
+        return true;
+
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Database error during Admin Expenditure transaction:`, error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+
+/**
+ * Fetches all transactions related to the Admin's central account (Deposits, Orders, Expenditures).
+ * @param {string | number} adminId - The ID associated with the admin wallet.
+ * @returns {Promise<Array<object>>} List of all relevant transaction records.
+ */
+async function getAdminFinancialHistory(adminId) {
+    try {
+        // Query should fetch transactions associated with the Admin's ID AND (if applicable) 
+        // the transactions where the transaction was a Deduction (Order) but the money went 
+        // into the Admin's account (this is tricky without a dedicated ledger).
+        // For simplicity, we fetch all transactions where the user_id is the adminId.
+        
+        const [rows] = await pool.execute(
+            `SELECT 
+                transaction_date as date, 
+                type, 
+                amount, 
+                order_id,
+                external_ref, 
+                method,
+                description,
+                transaction_status as status
+            FROM transactions 
+            WHERE user_id = ?
+            ORDER BY transaction_date DESC`,
+            [adminId]
+        );
+        return rows;
+    } catch (error) {
+        console.error('Database error fetching admin financial history:', error);
+        throw error;
+    }
+}
+
 
 // ---------------------------------------------------------------- //
 // --- CHAT FUNCTIONS ---
@@ -451,6 +563,7 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         `;
+        // Use the existing externalRef for the external_ref column.
         await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus]);
 
         // 4. Update Wallet Balance (Only if status is Completed)
@@ -493,6 +606,9 @@ module.exports = {
     getWalletByUserId,
     findPaymentHistory,
     performWalletTransaction, 
+    // 🚨 NEW Admin Wallet functions
+    logAdminExpenditure,
+    getAdminFinancialHistory,
     // Chat functions
     saveChatMessage, 
     getChatHistory,
