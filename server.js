@@ -1250,22 +1250,30 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // -------------------------------
         // 7. WALLET DEDUCTION
         // -------------------------------
-        // Ensure wallet_id and orderId are valid before insertion
-        if (!wallet_id) throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
+       
+const finalWalletId = Number(wallet_id);
 
-       await connection.execute(
-            `INSERT INTO transactions
-            (user_id, wallet_id, order_id, type, method, amount, transaction_status)
-            VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
-            // Use the coerced variable here
-            [userId, wallet_id, orderId, -orderTotal] 
-        );
+if (!wallet_id || isNaN(finalWalletId)) { // Checking original variable or NaN after coercion
+  
+    throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
+}
+
+// Ensure orderId is explicitly a Number for the transactions table
+const finalOrderId = Number(orderId);
 
 
-        await connection.execute(
-            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
-            [orderTotal, wallet_id]
-        );
+await connection.execute(
+    `INSERT INTO transactions
+    (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+    VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+    // Use the coerced, guaranteed safe variables
+    [userId, finalWalletId, finalOrderId, -orderTotal] 
+);
+
+        await connection.execute(
+            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
+            [orderTotal, finalWalletId] // Use finalWalletId here too
+        );
 
         // -------------------------------
         // 8. CLEAR CART
