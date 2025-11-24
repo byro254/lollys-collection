@@ -1253,13 +1253,14 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // Ensure wallet_id and orderId are valid before insertion
         if (!wallet_id) throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
 
-        await connection.execute(
+       await connection.execute(
             `INSERT INTO transactions
             (user_id, wallet_id, order_id, type, method, amount, transaction_status)
             VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
             // Use the coerced variable here
             [userId, wallet_id, orderId, -orderTotal] 
         );
+
 
         await connection.execute(
             `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
