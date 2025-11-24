@@ -316,7 +316,7 @@ async function updateUserStatus(userId, newStatus) {
 async function getWalletByUserId(userId) {
     try {
         const [rows] = await pool.execute(
-            'SELECT balance, account_number FROM wallets WHERE user_id = ?',
+            'SELECT wallet_id, balance, account_number FROM wallets WHERE user_id = ?',
             [userId]
         );
         return rows.length > 0 ? rows[0] : null;
