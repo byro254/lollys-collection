@@ -695,15 +695,20 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
 
     try {
         // Customer's wallet is credited
-        await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', externalRef, null, 'Completed');
-        
-        // 🚨 NEW: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1)
-        // This simulates the business receiving the money from the payment processor.
-        await db.logAdminExpenditure(
-            ADMIN_WALLET_USER_ID, 
-            numericAmount, 
-            `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}`
-        );
+        // Customer's wallet is credited
+await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', externalRef, null, 'Completed');
+
+// 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
+await db.performWalletTransaction(
+    ADMIN_WALLET_USER_ID, 
+    numericAmount, 
+    'M-Pesa Revenue', 
+    'Deposit', // Correct type for revenue
+    externalRef, 
+    null, 
+    'Completed',
+    `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}` // Add description
+);
 
 
         res.json({ 
@@ -734,15 +739,19 @@ app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
 
     try {
-        // Customer's wallet is credited
-        await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
-        
-        // 🚨 NEW: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1)
-        await db.logAdminExpenditure(
-            ADMIN_WALLET_USER_ID, 
-            numericAmount, 
-            `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}`
-        );
+       await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
+
+// 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
+       await db.performWalletTransaction(
+       ADMIN_WALLET_USER_ID, 
+       numericAmount, 
+       'Card Revenue', 
+       'Deposit', // Correct type for revenue
+       externalRef, 
+       null, 
+       'Completed',
+       `Capital Deposit: KES ${numericAmount.toFixed(2)} from Card Payment from Customer #${userId}` // Add description
+);
         
         res.json({ 
             message: 'Card payment processed successfully.',
@@ -1334,19 +1343,18 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // -------------------------------
         // This simulates the business receiving the revenue paid by the customer.
         const adminCreditAmount = orderTotal;
-        
-        // 🚨 NEW: Log Revenue IN to the Admin Wallet (User ID 1)
-        await db.logAdminExpenditure(
-            ADMIN_WALLET_USER_ID, 
-            adminCreditAmount, 
-            `Revenue from Order #${orderId}`,
-            // NOTE: logAdminExpenditure handles its own transaction and commit/rollback 
-            // inside db.js, which is why we call it without the connection object here.
-            // In a strict transaction, you would execute the admin credit query directly 
-            // using the existing connection, but for simplicity, we rely on the DB helper.
-        );
-        
 
+// 🚨 FIX: Log Revenue IN to the Admin Wallet (User ID 1) using the correct function.
+await db.performWalletTransaction(
+    ADMIN_WALLET_USER_ID, 
+    adminCreditAmount, 
+    'Wallet Revenue', 
+    'Deposit', // Correct type for revenue
+    `ORDER-${orderId}`, 
+    Number(orderId), 
+    'Completed',
+    `Revenue from Order #${orderId}` // Add description
+);
         // -------------------------------
         // 9. CLEAR CART
         // -------------------------------

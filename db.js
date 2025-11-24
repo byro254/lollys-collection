@@ -512,14 +512,15 @@ async function getChatHistory(customerId) {
  * Executes an atomic wallet transaction (Deposit or Deduction).
  * @param {number} userId - The user ID.
  * @param {number} amount - The amount to transact (positive for Deposit, negative for Deduction/Withdrawal).
- * @param {string} method - Payment method ('M-Pesa', 'Card', 'Wallet Deduction').
+ * @param {string} method - Payment method ('M-Pesa', 'Card', 'Wallet Deduction', 'Wallet Revenue').
  * @param {string} type - Transaction type ('Deposit', 'Deduction').
  * @param {string} externalRef - Transaction ID/Reference (for deposits).
  * @param {number | null} orderId - The ID of the order if this is a deduction for an order.
  * @param {string} transactionStatus - 'Completed' or 'Pending'.
+ * @param {string | null} description - The description/purpose for the transaction. 🚨 NEW PARAMETER
  * @returns {Promise<boolean>} True if transaction and balance update succeeded.
  */
-async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed') {
+async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -551,20 +552,20 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             currentBalance = walletRows[0].balance;
         }
 
-        // 2. Validate balance for deductions (only if the transaction is a deduction)
-        if (type === 'Deduction' && currentBalance + amount < 0) { 
+        // 2. Validate balance for deductions (only if the transaction is a deduction or a negative amount)
+        if (amount < 0 && currentBalance + amount < 0) { 
              throw new Error('INSUFFICIENT_FUNDS');
         }
 
         const newBalance = currentBalance + amount;
 
-        // 3. Log Transaction
+        // 3. Log Transaction (🚨 UPDATED to include 'description')
         const transactionSql = `
-            INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         `;
         // Use the existing externalRef for the external_ref column.
-        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus]);
+        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]); // 🚨 Added description
 
         // 4. Update Wallet Balance (Only if status is Completed)
         if (transactionStatus === 'Completed') {
