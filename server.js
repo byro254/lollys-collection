@@ -1263,9 +1263,10 @@ const finalOrderId = Number(orderId);
 
 
 await connection.execute(
-    `INSERT INTO transactions
-    (user_id, wallet_id, order_id, type, method, amount, transaction_status)
-    VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+    // 🚨 FIX: Ensure a clean space after 'transactions'
+    `INSERT INTO transactions 
+    (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+    VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
     // Use the coerced, guaranteed safe variables
     [userId, finalWalletId, finalOrderId, -orderTotal] 
 );
