@@ -92,12 +92,12 @@
         }
         .logo-link {
             font-family: var(--font-heading);
-            font-size: 1em;
+            font-size: 1.2em;
             font-weight: 700;
             color: var(--color-pink-dark);
             text-decoration: none;
             flex-shrink: 0; 
-            margin-right: 10px;
+            margin-right: 15px;
         }
         
         /* Hamburger icon for mobile */
@@ -238,7 +238,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background-color: darkgreen;
+            background-color: var(--color-pink-accent);
             color: white;
             padding: 25px;
             border-radius: 10px;
@@ -532,7 +532,7 @@
             <form id="mpesa-deposit-form">
                 <div class="modal-info">
                     <strong>Paybill Number:</strong>
-                    <p id="paybill-number">123456</p>
+                    <p id="paybill-number">888888 (Simulated)</p>
                     <strong>Account Number:</strong>
                     <p id="account-number-display-mpesa"></p>
                 </div>
@@ -601,10 +601,9 @@
              <a href="/cart" class="nav-icon cart-icon-with-count" title="Cart">
                 <i class="fa-solid fa-shopping-cart"></i>
             </a>
-           <a href="/" class="nav-icon" hometitle="Home">
-                <i class="fa-solid fa-house"></i>
+            <a href="#" class="nav-icon" id="logout-link" title="Logout">
+                <i class="fas fa-sign-out-alt"></i>
             </a>
-            
         </nav>
     </header>
 
@@ -711,7 +710,7 @@
                         <span>Current Account Balance (KES)</span>
                         <div class="balance-info">
                             <span class="balance-amount" id="wallet-balance-display">KES 0.00</span>
-                            
+                            <button class="deposit-button" onclick="openDepositModal('Wallet Deposit')">Deposit Funds</button>
                         </div>
                     </div>
                     
