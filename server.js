@@ -1342,18 +1342,40 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // 8. ADMIN WALLET CREDIT (Revenue In)
         // -------------------------------
         // This simulates the business receiving the revenue paid by the customer.
-        const adminCreditAmount = orderTotal;
+       const adminId = ADMIN_WALLET_USER_ID;
+const adminCreditAmount = orderTotal;
+const adminExternalRef = `ORDER-REV-${orderId}`;
+const adminDescription = `Revenue from Order #${orderId}`;
 
-// 🚨 FIX: Log Revenue IN to the Admin Wallet (User ID 1) using the correct function.
-await db.performWalletTransaction(
-    ADMIN_WALLET_USER_ID, 
-    adminCreditAmount, 
-    'Wallet Revenue', 
-    'Deposit', // Correct type for revenue
-    `ORDER-${orderId}`, 
-    Number(orderId), 
-    'Completed',
-    `Revenue from Order #${orderId}` // Add description
+// Get Admin Wallet ID and current balance using the main connection (NO FOR UPDATE needed here 
+// as the main transaction is holding the lock, but we need the current balance/ID)
+let [adminWalletRows] = await connection.execute(
+    'SELECT wallet_id, balance FROM wallets WHERE user_id = ?',
+    [adminId]
+);
+
+if (adminWalletRows.length === 0) {
+    // CRITICAL: Handle missing Admin Wallet creation (should be done on setup)
+    throw new Error("Admin Wallet not initialized.");
+}
+
+const adminWalletId = adminWalletRows[0].wallet_id;
+const adminCurrentBalance = adminWalletRows[0].balance;
+const adminNewBalance = adminCurrentBalance + adminCreditAmount;
+
+
+// 8a. Admin Transaction Log (Deposit) - Using existing connection
+await connection.execute(
+    `INSERT INTO transactions
+     (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
+     VALUES (?, ?, ?, 'Deposit', 'Wallet Revenue', ?, ?, 'Completed', ?)`,
+    [adminId, adminWalletId, Number(orderId), adminCreditAmount, adminExternalRef, adminDescription] 
+);
+
+// 8b. Update Admin Wallet Balance - Using existing connection
+await connection.execute(
+    `UPDATE wallets SET balance = ? WHERE wallet_id = ?`,
+    [adminNewBalance, adminWalletId]
 );
         // -------------------------------
         // 9. CLEAR CART
