@@ -1149,7 +1149,7 @@ let unreadSessions = new Set(); // Stores customerId's with unread messages
 // Global variables for auto-refresh timers
 let dashboardIntervalId = null;
 let ordersIntervalId = null;
-const REFRESH_INTERVAL = 30000; // 30 seconds
+const REFRESH_INTERVAL_MS = 1800000; // 30 minutes
 
 // --- NEW CHAT GLOBALS ---
 let webSocket = null;
