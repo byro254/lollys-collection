@@ -521,11 +521,13 @@ async function getChatHistory(customerId) {
  */
 async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
     const connection = await pool.getConnection();
+    
+    // ⬇️ FIX 1: Declare variables at the top for proper scope
+    let wallet_id;
+    let currentBalance;
+    
     try {
         await connection.beginTransaction();
-        
-        let wallet_id;
-        let currentBalance = 0;
         
         // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
         let [walletRows] = await connection.execute(
@@ -534,8 +536,7 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         );
         
         if (walletRows.length === 0) {
-            // 🚨 FIX: Wallet not found, create it now.
-            // Generate a simple account number (e.g., U + userId)
+            // Wallet not found, create it
             const accountNumber = `U${userId}`; 
             
             const [createResult] = await connection.execute(
@@ -544,34 +545,39 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             );
             
             wallet_id = createResult.insertId;
-            // currentBalance remains 0, which is correct for a new wallet
+            currentBalance = 0; // New wallet starts at 0
             
         } else {
+            // Wallet found
             wallet_id = walletRows[0].wallet_id;
             currentBalance = walletRows[0].balance;
         }
 
-        // 2. Validate balance for deductions (only if the transaction is a deduction or a negative amount)
+        // 2. Validation and Balance Calculation (Logic remains unchanged)
         if (amount < 0 && currentBalance + amount < 0) { 
              throw new Error('INSUFFICIENT_FUNDS');
         }
 
         const newBalance = currentBalance + amount;
 
-        // 3. Log Transaction (🚨 UPDATED to include 'description')
+        // 3. Log Transaction
         const transactionSql = `
             INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         `;
-        // Use the existing externalRef for the external_ref column.
-        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]); // 🚨 Added description
+        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]);
 
-        // 4. Update Wallet Balance (Only if status is Completed)
+        // 4. Update Wallet Balance - CRITICAL FIX: Verify affected rows
         if (transactionStatus === 'Completed') {
-             await connection.execute(
+             const [updateResult] = await connection.execute( // Capture result
                 'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
                 [newBalance, wallet_id]
             );
+            
+            // 🚨 CRITICAL CHECK: If 0 rows were affected, throw an error to force ROLLBACK
+            if (updateResult.affectedRows === 0) {
+                 throw new Error(`CRITICAL: Wallet balance update failed for wallet ID ${wallet_id}.`);
+            }
         }
 
         await connection.commit();
