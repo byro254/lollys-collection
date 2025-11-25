@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, performDepositTransaction,findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -680,10 +680,6 @@ app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
  * POST /api/wallet/deposit/mpesa
  * Handles the simulated M-Pesa deposit request.
  */
-/**
- * POST /api/wallet/deposit/mpesa
- * Handles the simulated M-Pesa deposit request.
- */
 app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
     // Customer deposit always goes to their own ID
     const userId = req.session.userId; 
@@ -698,23 +694,29 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
     const externalRef = `MPESA-${Date.now()}`; 
 
     try {
-        // 🚨 FIX: Use the new unified atomic transaction handler
-        await db.performDepositTransaction(
-            userId, 
-            BUSINESS_WALLET_USER_ID, 
-            numericAmount, 
-            'M-Pesa', 
-            externalRef, 
-            `Customer Deposit via M-Pesa: KES ${numericAmount.toFixed(2)}`
-        );
-        
+        // Customer's wallet is credited
+        // Customer's wallet is credited
+await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', externalRef, null, 'Completed');
+
+// 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
+await db.performWalletTransaction(
+   BUSINESS_WALLET_USER_ID,
+    numericAmount, 
+    'M-Pesa Revenue', 
+    'Deposit', // Correct type for revenue
+    externalRef, 
+    null, 
+    'Completed',
+    `Capital Deposit: KES ${numericAmount.toFixed(2)} from Customer #${userId}` // Add description
+);
+
+
         res.json({ 
             message: 'Deposit initiated. Please approve the prompt on your phone.',
             transactionRef: externalRef 
         });
 
     } catch (error) {
-        // The error log is now much more informative from db.js
         console.error('M-Pesa Deposit API error:', error);
         res.status(500).json({ message: 'Failed to process deposit request.' });
     }
@@ -723,11 +725,10 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
 /**
  * POST /api/wallet/deposit/card
  * Handles the simulated Card/Visa deposit request.
-$0
  */
 app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
-    const { cardNumber, amount } = req.body; 
+    const { cardNumber, amount } = req.body; // Card details are truncated on the client
     const numericAmount = parseFloat(amount);
 
     if (isNaN(numericAmount) || numericAmount < 10) {
@@ -738,15 +739,19 @@ app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
 
     try {
-        // 🚨 FIX: Use the new unified atomic transaction handler
-        await db.performDepositTransaction(
-            userId, 
-            BUSINESS_WALLET_USER_ID, 
-            numericAmount, 
-            'Card', 
-            externalRef, 
-            `Customer Deposit via Card: KES ${numericAmount.toFixed(2)}`
-        );
+       await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
+
+// 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
+       await db.performWalletTransaction(
+      BUSINESS_WALLET_USER_ID,
+       numericAmount, 
+       'Card Revenue', 
+       'Deposit', // Correct type for revenue
+       externalRef, 
+       null, 
+       'Completed',
+       `Capital Deposit: KES ${numericAmount.toFixed(2)} from Card Payment from Customer #${userId}` // Add description
+);
         
         res.json({ 
             message: 'Card payment processed successfully.',
@@ -754,7 +759,6 @@ app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
         });
 
     } catch (error) {
-        // The error log is now much more informative from db.js
         console.error('Card Deposit API error:', error);
         res.status(500).json({ message: 'Failed to process card payment.' });
     }
@@ -1303,11 +1307,11 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
 
             // Insert order item
             await connection.execute(itemSql, [
-                orderId,        
-                item.id,        
-                product.name,   
-                product.price,  
-                item.quantity   
+                orderId,        
+                item.id,        
+                product.name,   
+                product.price,  
+                item.quantity   
             ]);
         }
 
