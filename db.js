@@ -562,7 +562,7 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
              throw new Error('INSUFFICIENT_FUNDS');
         }
 
-        const newBalance = currentBalance + amount;
+       
 
         // 3. Log Transaction
         const transactionSql = `
