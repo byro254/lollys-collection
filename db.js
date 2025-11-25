@@ -354,18 +354,19 @@ async function findPaymentHistory(userId) {
 }
 
 /**
- * Logs an expenditure from the Admin's central operating account.
- * This function performs an internal wallet transaction (deduction) for the Admin's ID.
- * @param {number | string} adminId - The ID associated with the admin wallet.
+ * Logs an expenditure from the Business's central operating account.
+ * This function performs an internal wallet transaction (deduction).
+ * @param {number | string} businessId - The ID associated with the business wallet (should be '0').
  * @param {number} amount - The positive amount being withdrawn (stored as negative in DB).
  * @param {string} purpose - The reason for withdrawal (Restock, Loan, Refund, etc.).
  * @returns {Promise<boolean>} True if the deduction succeeded.
  */
-async function logAdminExpenditure(adminId, amount, purpose) {
+// 🚨 FIX 9a: Renamed function
+async function logBusinessExpenditure(businessId, amount, purpose) { 
     const connection = await pool.getConnection();
     const deductionAmount = -Math.abs(amount); // Ensure amount is negative for deduction
-    const method = 'Withdrawal'; // Method for this internal transaction
-    const type = 'Expenditure'; // New type for Money Out
+    const method = 'Withdrawal'; 
+    const type = 'Expenditure'; 
     const transactionStatus = 'Completed';
     const externalRef = `EXP-${Date.now()}`;
 
@@ -375,20 +376,20 @@ async function logAdminExpenditure(adminId, amount, purpose) {
         // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
         let [walletRows] = await connection.execute(
             'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [adminId]
+            [businessId] // Use the businessId
         );
 
         let wallet_id;
         let currentBalance;
 
         if (walletRows.length === 0) {
-            // Admin wallet must exist. If not, create it with 0 balance.
-            const accountNumber = `ADM-${adminId}`; 
+            // 🚨 FIX 9b: Initialize Business wallet
+            const accountNumber = `BIZ-${businessId}`; 
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
-                [adminId, accountNumber]
+                [businessId, accountNumber]
             );
-            if (!createResult.insertId) throw new Error('Failed to initialize Admin Wallet.');
+            if (!createResult.insertId) throw new Error('Failed to initialize Business Wallet.');
             wallet_id = createResult.insertId;
             currentBalance = 0;
         } else {
@@ -397,8 +398,9 @@ async function logAdminExpenditure(adminId, amount, purpose) {
         }
 
         // 2. Validate balance for expenditure
+        // 🚨 FIX 9c: Updated error message
         if (currentBalance + deductionAmount < 0) { 
-             throw new Error('INSUFFICIENT_ADMIN_FUNDS');
+             throw new Error('INSUFFICIENT_BUSINESS_FUNDS');
         }
 
         const newBalance = currentBalance + deductionAmount;
@@ -430,17 +432,14 @@ async function logAdminExpenditure(adminId, amount, purpose) {
 
 
 /**
- * Fetches all transactions related to the Admin's central account (Deposits, Orders, Expenditures).
- * @param {string | number} adminId - The ID associated with the admin wallet.
+ * Fetches all transactions related to the central Business Account.
+ * @param {string | number} businessId - The ID associated with the business wallet (should be '0').
  * @returns {Promise<Array<object>>} List of all relevant transaction records.
  */
-async function getAdminFinancialHistory(adminId) {
+// 🚨 FIX 10a: Renamed function
+async function getBusinessFinancialHistory(businessId) {
     try {
-        // Query should fetch transactions associated with the Admin's ID AND (if applicable) 
-        // the transactions where the transaction was a Deduction (Order) but the money went 
-        // into the Admin's account (this is tricky without a dedicated ledger).
-        // For simplicity, we fetch all transactions where the user_id is the adminId.
-        
+       
         const [rows] = await pool.execute(
             `SELECT 
                 transaction_date as date, 
@@ -454,11 +453,11 @@ async function getAdminFinancialHistory(adminId) {
             FROM transactions 
             WHERE user_id = ?
             ORDER BY transaction_date DESC`,
-            [adminId]
+           [businessId]
         );
         return rows;
     } catch (error) {
-        console.error('Database error fetching admin financial history:', error);
+       console.error('Database error fetching business financial history:', error); 
         throw error;
     }
 }
@@ -608,8 +607,8 @@ module.exports = {
     findPaymentHistory,
     performWalletTransaction, 
     // 🚨 NEW Admin Wallet functions
-    logAdminExpenditure,
-    getAdminFinancialHistory,
+    logBusinessExpenditure,
+    getBusinessFinancialHistory,
     // Chat functions
     saveChatMessage, 
     getChatHistory,

@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logAdminExpenditure, getAdminFinancialHistory } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -70,7 +70,7 @@ const ADMIN_CHAT_ID = 'admin_env';
 
 // 🚨 NEW: ADMIN WALLET ID (Fixed User ID 1 for central business account)
 // This wallet represents the business's capital and revenue.
-const ADMIN_WALLET_USER_ID = '1'; 
+const BUSINESS_WALLET_USER_ID = '0';
 
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -653,7 +653,7 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
  */
 app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
     // 🚨 Use ADMIN_WALLET_USER_ID if the user is an admin requesting the central balance
-    const userId = req.session.isAdmin ? ADMIN_WALLET_USER_ID : req.session.userId;
+   const userId = req.session.isAdmin ? BUSINESS_WALLET_USER_ID : req.session.userId;
     
     try {
         // 🚨 FIX: Pass the correct userId to db.getWalletByUserId
@@ -700,7 +700,7 @@ await db.performWalletTransaction(userId, numericAmount, 'M-Pesa', 'Deposit', ex
 
 // 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
 await db.performWalletTransaction(
-    ADMIN_WALLET_USER_ID, 
+   BUSINESS_WALLET_USER_ID,
     numericAmount, 
     'M-Pesa Revenue', 
     'Deposit', // Correct type for revenue
@@ -743,7 +743,7 @@ app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
 
 // 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
        await db.performWalletTransaction(
-       ADMIN_WALLET_USER_ID, 
+      BUSINESS_WALLET_USER_ID,
        numericAmount, 
        'Card Revenue', 
        'Deposit', // Correct type for revenue
@@ -786,7 +786,7 @@ app.get('/api/user/payment-history', isAuthenticated, async (req, res) => {
 app.get('/api/admin/finance/history', isAdmin, async (req, res) => {
     try {
         // 🚨 Call the new dedicated function using the Admin Wallet ID
-        const history = await db.getAdminFinancialHistory(ADMIN_WALLET_USER_ID);
+      const history = await db.getBusinessFinancialHistory(BUSINESS_WALLET_USER_ID);
         res.json(history);
     } catch (error) {
         console.error('Error fetching admin financial history:', error);
@@ -810,15 +810,17 @@ app.post('/api/admin/finance/expenditure', isAdmin, async (req, res) => {
     }
 
     try {
-        // Amount is passed as a positive number; the DB function handles the deduction.
-        await db.logAdminExpenditure(ADMIN_WALLET_USER_ID, numericAmount, purpose);
-        
-        res.json({ message: `Successfully logged KES ${numericAmount.toFixed(2)} withdrawal for ${purpose}.` });
-    } catch (error) {
-        if (error.message === 'INSUFFICIENT_ADMIN_FUNDS') {
-            return res.status(400).json({ message: 'Insufficient funds in the Admin Wallet for this withdrawal.' });
-        }
-        console.error('Admin expenditure error:', error);
+    // Amount is passed as a positive number; the DB function handles the deduction.
+    // 🚨 FIX 7a: Call the new expenditure function
+    await db.logBusinessExpenditure(BUSINESS_WALLET_USER_ID, numericAmount, purpose);
+    
+    res.json({ message: `Successfully logged KES ${numericAmount.toFixed(2)} withdrawal for ${purpose}.` });
+} catch (error) {
+    // 🚨 FIX 7b: Update the error message to reflect the business wallet check
+    if (error.message === 'INSUFFICIENT_BUSINESS_FUNDS') {
+        return res.status(400).json({ message: 'Insufficient funds in the Business Wallet for this withdrawal.' });
+    }
+    console.error('Business expenditure error:', error);
         res.status(500).json({ message: 'Failed to process withdrawal.' });
     }
 });
@@ -1339,44 +1341,53 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         );
 
         // -------------------------------
-        // 8. ADMIN WALLET CREDIT (Revenue In)
+        // 8. BUSINESS WALLET CREDIT (Revenue In)
         // -------------------------------
-        // This simulates the business receiving the revenue paid by the customer.
-       const adminId = ADMIN_WALLET_USER_ID;
-const adminCreditAmount = orderTotal;
-const adminExternalRef = `ORDER-REV-${orderId}`;
-const adminDescription = `Revenue from Order #${orderId}`;
+        // 🚨 CRITICAL FIX 8: Inline the Business Credit logic to prevent nested transaction lock contention.
+       const businessId = BUSINESS_WALLET_USER_ID;
+       const businessCreditAmount = orderTotal;
+       const businessExternalRef = `ORDER-REV-${orderId}`;
+       const businessDescription = `Revenue from Order #${orderId}`;
 
-// Get Admin Wallet ID and current balance using the main connection (NO FOR UPDATE needed here 
-// as the main transaction is holding the lock, but we need the current balance/ID)
-let [adminWalletRows] = await connection.execute(
-    'SELECT wallet_id, balance FROM wallets WHERE user_id = ?',
-    [adminId]
-);
+        // Fetch Business Wallet ID and current balance using the main connection (no FOR UPDATE needed)
+        let [businessWalletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ?',
+            [businessId]
+        );
 
-if (adminWalletRows.length === 0) {
-    // CRITICAL: Handle missing Admin Wallet creation (should be done on setup)
-    throw new Error("Admin Wallet not initialized.");
-}
+        if (businessWalletRows.length === 0) {
+            // CRITICAL: Handle missing Business Wallet creation (should be done on setup)
+            // If the wallet for user_id=0 doesn't exist, we must create it here.
+            const accountNumber = `BIZ-${businessId}`; 
+            const [createResult] = await connection.execute(
+                'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+                [businessId, accountNumber]
+            );
+            if (!createResult.insertId) throw new Error("CRITICAL: Failed to initialize Business Wallet.");
+            
+            businessWalletId = createResult.insertId;
+            businessCurrentBalance = 0;
+        } else {
+            var businessWalletId = businessWalletRows[0].wallet_id;
+            var businessCurrentBalance = businessWalletRows[0].balance;
+        }
+        
+        const businessNewBalance = businessCurrentBalance + businessCreditAmount;
 
-const adminWalletId = adminWalletRows[0].wallet_id;
-const adminCurrentBalance = adminWalletRows[0].balance;
-const adminNewBalance = adminCurrentBalance + adminCreditAmount;
 
+        // 8a. Business Transaction Log (Deposit) - Using existing connection
+        await connection.execute(
+            `INSERT INTO transactions
+             (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
+             VALUES (?, ?, ?, 'Deposit', 'Wallet Revenue', ?, ?, 'Completed', ?)`,
+            [businessId, businessWalletId, Number(orderId), businessCreditAmount, businessExternalRef, businessDescription] 
+        );
 
-// 8a. Admin Transaction Log (Deposit) - Using existing connection
-await connection.execute(
-    `INSERT INTO transactions
-     (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
-     VALUES (?, ?, ?, 'Deposit', 'Wallet Revenue', ?, ?, 'Completed', ?)`,
-    [adminId, adminWalletId, Number(orderId), adminCreditAmount, adminExternalRef, adminDescription] 
-);
-
-// 8b. Update Admin Wallet Balance - Using existing connection
-await connection.execute(
-    `UPDATE wallets SET balance = ? WHERE wallet_id = ?`,
-    [adminNewBalance, adminWalletId]
-);
+        // 8b. Update Business Wallet Balance - Using existing connection
+        await connection.execute(
+            `UPDATE wallets SET balance = ? WHERE wallet_id = ?`,
+            [businessNewBalance, businessWalletId]
+        );
         // -------------------------------
         // 9. CLEAR CART
         // -------------------------------
