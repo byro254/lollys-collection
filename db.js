@@ -519,33 +519,35 @@ async function getChatHistory(customerId) {
  * @param {string | null} description - The description/purpose for the transaction. 🚨 NEW PARAMETER
  * @returns {Promise<boolean>} True if transaction and balance update succeeded.
  */
+
+
 // db.js (performWalletTransaction - Final Corrected Version)
 
 async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
+    // 1. Setup and User ID Coercion
     const connection = await pool.getConnection();
-    
-    // ⬇️ CRITICAL FIX: Coerce userId to a Number for database matching (user_id is INT)
-    const dbUserId = Number(userId);
+    const dbUserId = Number(userId); // Coerce userId to a Number for database matching
     
     let wallet_id;
     let currentBalance; 
+    let newBalance; // Declare newBalance here to ensure it's available for the final return
 
     try {
         await connection.beginTransaction();
         
-        // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
+        // 2. Get Wallet ID and current balance (with CRITICAL FOR UPDATE lock)
         let [walletRows] = await connection.execute(
             'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [dbUserId] // Use the coerced Number
+            [dbUserId]
         );
         
         if (walletRows.length === 0) {
-            // Wallet not found, create it
+            // Wallet not found, create it with a starting balance of 0
             const accountNumber = `U${dbUserId}`; 
             
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
-                [dbUserId, accountNumber] // Use the coerced Number
+                [dbUserId, accountNumber]
             );
             
             wallet_id = createResult.insertId;
@@ -554,26 +556,27 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         } else {
             // Wallet found
             wallet_id = walletRows[0].wallet_id;
-            currentBalance = walletRows[0].balance;
+            // Use parseFloat to ensure balance is treated as a number
+            currentBalance = parseFloat(walletRows[0].balance);
         }
 
-        // 2. Validation and Calculation
-        if (amount < 0 && currentBalance + amount < 0) { 
+        // 3. Validation and Calculation
+        newBalance = currentBalance + amount;
+
+        if (amount < 0 && newBalance < 0) { 
              throw new Error('INSUFFICIENT_FUNDS');
         }
 
-       
-
-        // 3. Log Transaction
+        // 4. Log Transaction (Must happen before updating the wallet for audit integrity)
         const transactionSql = `
             INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         `;
         await connection.execute(transactionSql, [dbUserId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]);
 
-        // 4. Update Wallet Balance
+        // 5. Update Wallet Balance (Only if transaction is completed)
         if (transactionStatus === 'Completed') {
-             const [updateResult] = await connection.execute(
+            const [updateResult] = await connection.execute(
                 'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
                 [newBalance, wallet_id]
             );
@@ -584,13 +587,19 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             }
         }
 
+        // 6. Commit and Return Final Balance
         await connection.commit();
-        return true;
+        
+        // Return the final balance, which is the most useful piece of information for the client side.
+        return newBalance; 
+        
     } catch (error) {
+        // 7. Rollback on Error
         await connection.rollback();
         console.error(`Database error during ${type} transaction:`, error);
         throw error;
     } finally {
+        // 8. Release Connection
         connection.release();
     }
 }
