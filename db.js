@@ -519,33 +519,37 @@ async function getChatHistory(customerId) {
  * @param {string | null} description - The description/purpose for the transaction. 🚨 NEW PARAMETER
  * @returns {Promise<boolean>} True if transaction and balance update succeeded.
  */
+// db.js (performWalletTransaction - Final Corrected Version)
+
 async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
     const connection = await pool.getConnection();
     
-    // ⬇️ FIX 1: Declare variables at the top for proper scope
-    let wallet_id;
-    let currentBalance;
+    // ⬇️ CRITICAL FIX: Coerce userId to a Number for database matching (user_id is INT)
+    const dbUserId = Number(userId);
     
+    let wallet_id;
+    let currentBalance; 
+
     try {
         await connection.beginTransaction();
         
         // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
         let [walletRows] = await connection.execute(
             'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [userId]
+            [dbUserId] // Use the coerced Number
         );
         
         if (walletRows.length === 0) {
             // Wallet not found, create it
-            const accountNumber = `U${userId}`; 
+            const accountNumber = `U${dbUserId}`; 
             
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
-                [userId, accountNumber]
+                [dbUserId, accountNumber] // Use the coerced Number
             );
             
             wallet_id = createResult.insertId;
-            currentBalance = 0; // New wallet starts at 0
+            currentBalance = 0; 
             
         } else {
             // Wallet found
@@ -553,7 +557,7 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             currentBalance = walletRows[0].balance;
         }
 
-        // 2. Validation and Balance Calculation (Logic remains unchanged)
+        // 2. Validation and Calculation
         if (amount < 0 && currentBalance + amount < 0) { 
              throw new Error('INSUFFICIENT_FUNDS');
         }
@@ -565,18 +569,18 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
             INSERT INTO transactions (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         `;
-        await connection.execute(transactionSql, [userId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]);
+        await connection.execute(transactionSql, [dbUserId, wallet_id, orderId, type, method, amount, externalRef, transactionStatus, description]);
 
-        // 4. Update Wallet Balance - CRITICAL FIX: Verify affected rows
+        // 4. Update Wallet Balance
         if (transactionStatus === 'Completed') {
-             const [updateResult] = await connection.execute( // Capture result
+             const [updateResult] = await connection.execute(
                 'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
                 [newBalance, wallet_id]
             );
             
-            // 🚨 CRITICAL CHECK: If 0 rows were affected, throw an error to force ROLLBACK
+            // Critical Check: Ensures the update actually happened
             if (updateResult.affectedRows === 0) {
-                 throw new Error(`CRITICAL: Wallet balance update failed for wallet ID ${wallet_id}.`);
+                 throw new Error(`CRITICAL: Wallet balance update failed for user ${dbUserId} and wallet ID ${wallet_id}.`);
             }
         }
 
