@@ -545,76 +545,105 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         connection.release();
     }
 }
+// db.js (around line 578 or wherever performDepositTransaction is defined)
+
 /**
- * 🚨 NEW FUNCTION: Handles an entire deposit, consisting of two atomic actions:
- * 1. Credit the Customer's Wallet.
- * 2. Log the Capital In to the Business/Admin Wallet.
- * Ensures both steps either succeed or fail together.
- * @param {number} customerUserId - The ID of the customer.
- * @param {number} businessUserId - The ID of the business/admin wallet (e.g., 1).
- * @param {number} amount - The deposit amount.
- * @param {string} method - Payment method (e.g., 'M-Pesa').
- * @param {string} externalRef - External reference ID.
- * @param {string} description - Transaction description.
- * @returns {Promise<void>}
+ * Performs a unified atomic transaction for a customer deposit.
+ * This is a two-phase commit: Customer gets credited, Business gets credited.
+ * @param {number} customerUserId - The ID of the customer receiving the deposit (source).
+ * @param {number} businessUserId - The ID of the business wallet (destination).
+ * @param {number} amount - The amount to deposit.
+ * @param {string} method - The payment method (e.g., 'M-Pesa').
+ * @param {string} externalRef - The external transaction reference (e.g., M-Pesa code).
+ * @param {string} description - A description of the transaction.
  */
 async function performDepositTransaction(customerUserId, businessUserId, amount, method, externalRef, description) {
     const connection = await pool.getConnection();
-    await connection.beginTransaction();
 
     try {
-        const numericAmount = parseFloat(amount);
-        if (isNaN(numericAmount) || numericAmount <= 0) {
-            throw new Error('Invalid deposit amount.');
-        }
+        await connection.beginTransaction();
 
-        // --- 1. CREDIT CUSTOMER WALLET ---
-        const [customerWalletRows] = await connection.execute(
-            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE', 
+        // --- 1. HANDLE CUSTOMER SIDE (Credit) ---
+        // 1a. Get Customer Wallet ID and current balance (with FOR UPDATE lock)
+        let [customerWalletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
             [customerUserId]
         );
 
+        // 🚨 FIX: If no wallet found, create a new one atomically and re-fetch to acquire the lock.
         if (customerWalletRows.length === 0) {
-            throw new Error(`Customer wallet not found for user ID: ${customerUserId}`);
-        }
-        
-        const { wallet_id: customer_wallet_id, balance: customer_balance } = customerWalletRows[0];
-        const newCustomerBalance = customer_balance + numericAmount;
-        
-        // Insert Customer Deposit Log
-        const transactionSql = `
-            INSERT INTO transactions (wallet_id, user_id, type, method, amount, external_ref, status, description)
-            VALUES (?, ?, 'Deposit', ?, ?, ?, 'Completed', ?)
-        `;
-        await connection.execute(transactionSql, [customer_wallet_id, customerUserId, method, numericAmount, externalRef, description]);
+            // Generate a simple, unique account number.
+            const newAccountNumber = String(customerUserId).padStart(8, '0') + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            
+            // Create the wallet within the transaction.
+            await connection.execute(
+                'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+                [customerUserId, newAccountNumber]
+            );
 
-        // Update Customer Wallet Balance
+            // Re-fetch the wallet to get the new ID AND re-acquire the FOR UPDATE lock.
+            [customerWalletRows] = await connection.execute( 
+                'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+                [customerUserId]
+            );
+        }
+
+        // Final safety check (should now always pass)
+        if (customerWalletRows.length === 0) {
+            throw new Error(`Customer wallet not found for user ID: ${customerUserId} after attempted creation.`);
+        }
+
+        const customerWalletId = customerWalletRows[0].wallet_id;
+        const customerCurrentBalance = customerWalletRows[0].balance;
+        const newCustomerBalance = customerCurrentBalance + amount;
+
+        // 1b. Update Customer Balance
         await connection.execute(
             'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
-            [newCustomerBalance, customer_wallet_id]
+            [newCustomerBalance, customerWalletId]
         );
-        
-        // --- 2. LOG BUSINESS CAPITAL IN ---
+
+        // 1c. Log Transaction for Customer
+        await connection.execute(
+            `INSERT INTO payment_history 
+             (wallet_id, transaction_type, amount, method, status, external_ref, description, balance_after) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [customerWalletId, 'deposit', amount, method, 'completed', externalRef, description, newCustomerBalance]
+        );
+
+
+        // --- 2. HANDLE BUSINESS SIDE (Debit/Credit - in this case, it's a credit to the business) ---
+        // 2a. Get Business Wallet ID and current balance (with FOR UPDATE lock)
         const [businessWalletRows] = await connection.execute(
-            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE', 
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
             [businessUserId]
         );
-        
+
         if (businessWalletRows.length === 0) {
-            throw new Error(`Business wallet not found for user ID: ${businessUserId}`);
+             // In a production system, this should also create the business wallet or fail early.
+             // For simplicity, we assume the BUSINESS_WALLET_USER_ID always exists.
+            throw new Error(`Business wallet not found for user ID: ${businessUserId}. System setup error.`);
         }
 
-        const { wallet_id: business_wallet_id, balance: business_balance } = businessWalletRows[0];
-        const newBusinessBalance = business_balance + numericAmount;
+        const business_wallet_id = businessWalletRows[0].wallet_id;
+        const businessCurrentBalance = businessWalletRows[0].balance;
+        const newBusinessBalance = businessCurrentBalance + amount;
 
-        // Insert Business Log Entry
-        await connection.execute(transactionSql, [business_wallet_id, businessUserId, 'Deposit', `${method} Revenue`, numericAmount, externalRef, 'Completed', `Capital In: KES ${numericAmount.toFixed(2)} from Customer #${customerUserId}`]);
-        
-        // Update Business Wallet Balance
+        // 2b. Update Business Balance (Credit the business)
         await connection.execute(
             'UPDATE wallets SET balance = ? WHERE wallet_id = ?',
             [newBusinessBalance, business_wallet_id]
         );
+
+        // 2c. Log Business Financial History
+        // NOTE: This uses the business's own wallet_id to track the income
+        await connection.execute(
+            `INSERT INTO business_financial_history 
+             (wallet_id, transaction_type, amount, source_description, reference_id, balance_after) 
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [business_wallet_id, 'income', amount, `Deposit from Customer ${customerUserId} via ${method}`, externalRef, newBusinessBalance]
+        );
+
 
         // --- 3. COMMIT BOTH ACTIONS ---
         await connection.commit();
@@ -628,6 +657,7 @@ async function performDepositTransaction(customerUserId, businessUserId, amount,
         connection.release();
     }
 }
+// ---------------------------------------------------------------- //
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
