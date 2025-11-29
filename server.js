@@ -17,6 +17,7 @@ const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
 const fetch = require('node-fetch'); // For making HTTP requests
+
 // 🚨 NEW: WebSocket Dependencies
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
@@ -691,6 +692,8 @@ function generateMpesaPassword(timestamp) {
     return Buffer.from(raw).toString('base64');
 }
 
+// server.js
+
 /**
  * Fetches the M-Pesa OAuth access token.
  */
@@ -702,8 +705,8 @@ async function getMpesaAccessToken() {
     const authString = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
     try {
-        // 🚨 Note: This requires an HTTP client like 'axios' or 'node-fetch'
-        const response = await fetch(
+        // Line 706 is where the error occurred, ensure 'fetch' is used here
+        const response = await fetch( // <--- THIS LINE MUST USE THE IMPORTED 'fetch'
             'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
             {
                 method: 'GET',
