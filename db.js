@@ -697,7 +697,31 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
 }
 
 
-
+/**
+ * Fetches a transaction record by its external reference (CheckoutRequestID).
+ * @param {string} externalRef - The M-Pesa CheckoutRequestID.
+ * @param {number} userId - The user ID to scope the transaction (security check).
+ * @returns {Promise<{status: string, external_ref: string, amount: number, description: string} | null>}
+ */
+async function findTransactionByRef(externalRef, userId) {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT 
+                transaction_status as status, 
+                external_ref, 
+                amount,
+                description
+            FROM transactions 
+            WHERE external_ref = ? AND user_id = ?`,
+            [externalRef, userId]
+        );
+        
+        return rows.length > 0 ? rows[0] : null;
+    } catch (error) {
+        console.error('Database error finding transaction by reference:', error);
+        throw error;
+    }
+}
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
@@ -728,4 +752,5 @@ module.exports = {
     getChatHistory,
     completeMpesaDeposit,
     performWalletTransaction,
+    findTransactionByRef,
 };

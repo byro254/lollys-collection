@@ -880,6 +880,54 @@ app.post('/api/mpesa/callback', async (req, res) => {
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
     }
 });
+/**
+ * NEW: POST /api/wallet/deposit/status
+ * Client-side polling API to check the final status of a pending M-Pesa transaction.
+ */
+app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { checkoutRequestID } = req.body;
+
+    if (!checkoutRequestID) {
+        return res.status(400).json({ message: 'Checkout Request ID is required.' });
+    }
+
+    try {
+        // 1. Check the database first (fastest way to get completed status)
+        // CRITICAL: We need a new DB function to fetch the transaction details by external_ref and user_id
+        const transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
+
+        if (transaction) {
+            // Check if the transaction is finalized
+            if (transaction.status === 'Completed') {
+                return res.json({
+                    status: 'Completed',
+                    mpesaRef: transaction.external_ref, // This will be the MpesaReceiptNumber
+                    amount: transaction.amount,
+                    message: 'Payment confirmed successfully.'
+                });
+            }
+            if (transaction.status === 'Failed' || transaction.status === 'Cancelled') {
+                return res.json({
+                    status: transaction.status,
+                    message: transaction.description || 'Payment failed or was cancelled.',
+                    mpesaRef: transaction.external_ref,
+                });
+            }
+        }
+        
+        // 2. If status is still Pending in DB, query Safaricom API as a fallback
+        // This is complex and rate-limited. For simplicity in the client-server relationship,
+        // we assume the callback handles the final state, and client only queries the DB.
+        
+        // If the transaction is not found or status is still 'Pending: STK Request Sent', return Pending
+        return res.json({ status: 'Pending', message: 'Waiting for M-Pesa confirmation...' });
+
+    } catch (error) {
+        console.error('M-Pesa status query error:', error);
+        res.status(500).json({ message: 'Internal server error while checking status.' });
+    }
+});
 
 /**
  * POST /api/wallet/deposit/card
