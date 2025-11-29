@@ -17,7 +17,8 @@ const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
 const fetch = require('node-fetch'); // For making HTTP requests
-
+const axios = require('axios'); // For making HTTP requests
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 // 🚨 NEW: WebSocket Dependencies
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
