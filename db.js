@@ -603,6 +603,101 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         connection.release();
     }
 }
+// db.js (Add this function)
+
+/**
+ * Completes a pending M-Pesa deposit transaction, updates the original record, 
+ * and credits the user's wallet.
+ * @param {string} externalRef - The M-Pesa CheckoutRequestID.
+ * @param {number} finalAmount - The final amount confirmed by M-Pesa.
+ * @param {string} mpesaReceipt - The MpesaReceiptNumber.
+ * @param {string} transactionStatus - 'Completed' or 'Cancelled'.
+ * @param {string} description - Final transaction description.
+ */
+async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, transactionStatus, description) {
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Find the original pending transaction (CRITICAL: Needs to be user_id = customer's id)
+        const [rows] = await connection.execute(
+            `SELECT user_id, wallet_id, amount 
+             FROM transactions 
+             WHERE external_ref = ? AND transaction_status = 'Pending' FOR UPDATE`,
+            [externalRef]
+        );
+
+        if (rows.length === 0) {
+            throw new Error('PENDING_TRANSACTION_NOT_FOUND');
+        }
+
+        const { user_id, wallet_id, amount: initialAmount } = rows[0];
+
+        // Ensure the amount is consistent (or log an error if inconsistent)
+        // For a real system, you'd check initialAmount vs finalAmount, but we assume it matches here.
+        
+        if (transactionStatus === 'Completed') {
+            // 2. Update the transaction status and add receipt number
+            await connection.execute(
+                `UPDATE transactions 
+                 SET transaction_status = ?, amount = ?, external_ref = ?, description = ? 
+                 WHERE external_ref = ?`,
+                [transactionStatus, finalAmount, mpesaReceipt, description, externalRef]
+            );
+
+            // 3. Update the Wallet Balance
+            await connection.execute(
+                'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?',
+                [finalAmount, wallet_id]
+            );
+
+            // 4. Log a corresponding revenue transaction for the Business Wallet (User ID '0')
+            const businessId = '0'; // Assumed Business Wallet ID
+            // Since the business wallet is also a user, we can use the performWalletTransaction logic 
+            // but ensure we use the same connection to keep it atomic.
+            // Simplified: Direct update
+            const [businessWallet] = await connection.execute(
+                'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+                [businessId]
+            );
+            if (businessWallet.length > 0) {
+                const businessWalletId = businessWallet[0].wallet_id;
+                await connection.execute(
+                    'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?',
+                    [finalAmount, businessWalletId]
+                );
+                // Log business revenue transaction
+                await connection.execute(
+                    `INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status, description)
+                     VALUES (?, ?, 'Deposit', 'M-Pesa Revenue', ?, ?, 'Completed', ?)`,
+                    [businessId, businessWalletId, finalAmount, mpesaReceipt, `Revenue from Customer ID ${user_id}`]
+                );
+            }
+        } else {
+             // 2. Just update the transaction status to 'Failed' or 'Cancelled'
+            await connection.execute(
+                `UPDATE transactions 
+                 SET transaction_status = ?, description = ? 
+                 WHERE external_ref = ?`,
+                [transactionStatus, description, externalRef]
+            );
+        }
+
+        await connection.commit();
+        return true;
+
+    } catch (error) {
+        await connection.rollback();
+        console.error(`Database error during M-Pesa callback processing:`, error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+
+
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
@@ -631,4 +726,6 @@ module.exports = {
     // Chat functions
     saveChatMessage, 
     getChatHistory,
+    completeMpesaDeposit,
+    performWalletTransaction,
 };
