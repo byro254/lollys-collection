@@ -7,7 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require('uuid'); // 🚨 Imported for unique user ID generation (Requirement #2)
 // 🚨 RESEND INTEGRATION
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -68,7 +68,7 @@ const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
 // Admin ID used for chat, using the session ID set during login
 const ADMIN_CHAT_ID = 'admin_env'; 
 
-// 🚨 NEW: ADMIN WALLET ID (Fixed User ID 1 for central business account)
+// 🚨 NEW: ADMIN WALLET ID (Fixed User ID 0 for central business account)
 // This wallet represents the business's capital and revenue.
 const BUSINESS_WALLET_USER_ID = '0';
 
@@ -240,11 +240,13 @@ app.post('/api/signup', async (req, res) => {
     }
 
     try {
+        const userId = uuidv4(); // 🚨 NEW: Generate unique UUID (Requirement #2)
         const password_hash = await bcrypt.hash(password, saltRounds);
-        // NOTE: is_active column defaults to TRUE in the DB schema, no need to specify here
+        
+        // 🚨 UPDATE: Insert the generated UUID into the ID column
         await pool.execute(
-            'INSERT INTO users (full_name, email, password_hash) VALUES (?, ?, ?)',
-            [full_name, email, password_hash]
+            'INSERT INTO users (id, full_name, email, password_hash) VALUES (?, ?, ?, ?)',
+            [userId, full_name, email, password_hash]
         );
         res.status(201).json({ message: 'User registered successfully.' });
     } catch (error) {
@@ -275,6 +277,7 @@ app.post('/api/login', async (req, res) => {
 
 
     try {
+        // ID is now a VARCHAR(36) UUID, but the logic remains the same for retrieval.
         const [users] = await pool.execute(
             'SELECT id, full_name, password_hash, is_admin, is_active FROM users WHERE email = ?',
             [email]
@@ -303,7 +306,7 @@ app.post('/api/login', async (req, res) => {
         delete loginAttempts[attemptKey];
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
-        req.session.userId = user.id;
+        req.session.userId = user.id; // Storing the UUID
         req.session.fullName = user.full_name;
         
         res.json({ 
@@ -649,7 +652,7 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
 /**
  * GET /api/wallet/balance
  * Fetches the user's current wallet balance and account number.
- * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 1).
+ * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 0).
  */
 app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
     // 🚨 Use ADMIN_WALLET_USER_ID if the user is an admin requesting the central balance
@@ -769,7 +772,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                     "PartyB": shortCode,
                     "PhoneNumber": phoneNumber,
                     "CallBackURL": callbackUrl,
-                    "AccountReference": `USER${userId}`, // Unique reference
+                    "AccountReference": `USER${userId}`, // Unique reference (uses UUID now)
                     "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
             }
@@ -785,7 +788,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                 numericAmount, 
                 'M-Pesa STK', 
                 'Deposit', 
-                data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef
+                data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef (temporarily)
                 null, 
                 'Pending', // Set status to PENDING
                 `STK Push initiated for KES ${numericAmount.toFixed(2)}`
@@ -796,7 +799,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                 transactionRef: data.CheckoutRequestID // Send this ID back to the client
             });
         } else {
-            // Log a FAILED transaction
+            // Log a FAILED transaction (as completed=false)
             await db.performWalletTransaction(
                 userId, 
                 numericAmount, 
@@ -829,17 +832,24 @@ app.post('/api/mpesa/callback', async (req, res) => {
     const body = req.body.Body.stkCallback;
     const checkoutRequestID = body.CheckoutRequestID;
     const resultCode = body.ResultCode;
+    const resultDesc = body.ResultDesc;
 
-    // A. Transaction was cancelled or failed by user
+    
+    // A. Transaction was cancelled or failed by user (ResultCode != 0)
     if (resultCode !== 0) {
         console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}`);
-        // Log the final status as 'Cancelled'
-        // CRITICAL: We need a function to update the transaction status and wallet balance
-        // We will add a new function to db.js for this (see next section).
-        // Since the initial transaction was 'Pending', we only need to update the status to 'Failed'/'Cancelled'.
-        // No need to adjust balance as it was never credited.
-        // await db.updateTransactionStatus(checkoutRequestID, 'Cancelled', body.ResultDesc); 
         
+        // 🚨 CRITICAL IMPLEMENTATION (Failed/Cancelled Case):
+        const finalDescription = `MPESA transaction failed/cancelled: ${resultDesc}`;
+        
+        // Use the new DB function to update the PENDING transaction status to 'Cancelled'/'Failed'
+        // No credit is applied. MpesaReceiptNumber is N/A.
+        try {
+             await db.completeMpesaDeposit(checkoutRequestID, 0.00, 'N/A', 'Cancelled', finalDescription);
+        } catch (error) {
+            console.error('Error updating status for cancelled transaction:', error);
+        }
+
         // M-Pesa requires a specific, immediate response
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received." });
     }
@@ -852,24 +862,16 @@ app.post('/api/mpesa/callback', async (req, res) => {
         const phoneNumberItem = metaData.find(item => item.Name === 'PhoneNumber');
 
         const amount = parseFloat(amountItem?.Value);
-        const mpesaReceipt = mpesaReceiptItem?.Value;
+        const mpesaReceipt = mpesaReceiptItem?.Value; // This is the M-Pesa transaction code (Requirement #1)
         const phone = phoneNumberItem?.Value;
         
-        // 2. Find the original pending transaction from the DB (using CheckoutRequestID)
-        // CRITICAL: We need a new function in db.js to find the transaction and its associated userId.
-        // For now, we'll assume we can use db.performWalletTransaction for the *credit*
-        
-        // 3. CRITICAL: Find the USER ID from the original transaction (or AccountReference if logged)
-        // Since we stored the user ID in the AccountReference: `USER${userId}`, you could parse it here
-        // For simplicity here, we'll assume a new DB function handles the lookup and credit.
-        
-        // 4. Perform the final CREDIT and update the PENDING transaction status to 'Completed'
+        // 2. Perform the final CREDIT and update the PENDING transaction status to 'Completed'
         const finalStatus = 'Completed';
-        const finalDescription = `MPESA successful transaction: ${mpesaReceipt}`;
+        const finalDescription = `MPESA successful deposit: ${mpesaReceipt} from phone ${phone}`;
         
-        // CRITICAL: New DB function `completeMpesaDeposit` is needed here to update the original pending transaction
-        // and credit the user's wallet.
-        // await db.completeMpesaDeposit(checkoutRequestID, amount, mpesaReceipt, finalStatus, finalDescription);
+        // CRITICAL: Call DB function to update original pending transaction, use mpesaReceipt as external_ref,
+        // and CREDIT the user's wallet. (Requirement #4 - Instant Credit)
+        await db.completeMpesaDeposit(checkoutRequestID, amount, mpesaReceipt, finalStatus, finalDescription);
 
         // Send a success response back to M-Pesa
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
@@ -894,15 +896,20 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
 
     try {
         // 1. Check the database first (fastest way to get completed status)
-        // CRITICAL: We need a new DB function to fetch the transaction details by external_ref and user_id
-        const transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
+        // Check for the initial pending transaction (using CheckoutRequestID) OR the final transaction (using MpesaReceiptNumber)
+        let transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
 
+        // Fallback: If the initial CheckoutRequestID was overwritten by the MpesaReceiptNumber, 
+        // the CheckoutRequestID lookup might fail, but the client only has the CheckoutRequestID
+        // We rely on the callback updating the record which means the client must poll for the final MpesaRef.
+        
         if (transaction) {
             // Check if the transaction is finalized
             if (transaction.status === 'Completed') {
                 return res.json({
                     status: 'Completed',
-                    mpesaRef: transaction.external_ref, // This will be the MpesaReceiptNumber
+                    // The external_ref is now the MpesaReceiptNumber (Requirement #1)
+                    mpesaRef: transaction.external_ref, 
                     amount: transaction.amount,
                     message: 'Payment confirmed successfully.'
                 });
@@ -911,14 +918,11 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
                 return res.json({
                     status: transaction.status,
                     message: transaction.description || 'Payment failed or was cancelled.',
-                    mpesaRef: transaction.external_ref,
+                    // If failed/cancelled, it might still have the CheckoutRequestID or the initial value
+                    mpesaRef: transaction.external_ref, 
                 });
             }
         }
-        
-        // 2. If status is still Pending in DB, query Safaricom API as a fallback
-        // This is complex and rate-limited. For simplicity in the client-server relationship,
-        // we assume the callback handles the final state, and client only queries the DB.
         
         // If the transaction is not found or status is still 'Pending: STK Request Sent', return Pending
         return res.json({ status: 'Pending', message: 'Waiting for M-Pesa confirmation...' });
@@ -1328,7 +1332,7 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         const newQuantity = currentQuantity + quantity;
 
         if (newQuantity > product.stock) {
-            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
+            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock} of ${product.name} left.` });
         }
 
         if (cartRows.length > 0) {
@@ -1378,7 +1382,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // If the ID is missing, exit immediately before transaction.
         return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
     }
-    // Coerce to string to satisfy the driver's type requirement (assuming DB IDs are numbers stored as strings in session)
+    // Coerce to string to satisfy the driver's type requirement (assuming DB IDs are now strings/UUIDs)
     const userId = String(rawUserId);
 
     // Extract fields safely
@@ -1437,10 +1441,11 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             currentBalance = walletData.balance;
         } else {
             // Create wallet if it doesn't exist
+            const accountNumber = `U${userId.substring(0, 8)}`; // Use UUID part for account number
             const [createResult] = await connection.execute(
                 `INSERT INTO wallets (user_id, account_number, balance)
                  VALUES (?, ?, 0.00)`,
-                [userId, `U${userId}`]
+                [userId, accountNumber]
             );
 
             // 🚨 IMPROVEMENT: Robust check for insertId

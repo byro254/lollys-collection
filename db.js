@@ -25,7 +25,7 @@ const pool = mysql.createPool({
 /**
  * Retrieves a list of all registered users (customers).
  * This is intended for the admin panel listing.
- * @returns {Promise<Array<{id: number, full_name: string, email: string, is_admin: boolean, created_at: Date}>>} - List of users.
+ * @returns {Promise<Array<{id: string, full_name: string, email: string, is_admin: boolean, created_at: Date}>>} - List of users.
  */
 async function findAllUsers() {
     try {
@@ -115,7 +115,6 @@ async function updateProduct(productId, updatedData) {
 }
 /**
  * Retrieves a user object (with all essential fields for login/reset) by their email address.
- * This function is crucial for both login and the new OTP request step.
  * @param {string} email - The email address of the user.
  * @returns {Promise<object | null>} - User object including full_name, password_hash, and is_admin, or null.
  */
@@ -135,9 +134,8 @@ async function findUserByEmail(email) {
 }
 
 /**
- * Resets the user's password. The token clearing logic is removed 
- * as the password reset flow now uses an in-memory cache for verification.
- * @param {number} userId - The ID of the user.
+ * Resets the user's password.
+ * @param {string} userId - The ID of the user.
  * @param {string} hashedPassword - The new, securely hashed password.
  * @returns {Promise<boolean>} True if the password was successfully updated.
  */
@@ -205,7 +203,6 @@ async function findUserOrders(userId) {
 }
 /**
  * Retrieves a user object by their phone number.
- * This is crucial for OTP-based password reset lookup.
  * @param {string} phone - The phone number of the user.
  * @returns {Promise<object | null>} - User object including id, full_name, email, password_hash, is_admin, and is_active, or null.
  */
@@ -227,8 +224,8 @@ async function findUserByPhone(phone) {
 // ---------------------------------------------------------------- //
 /**
  * Retrieves a user object by their ID.
- * @param {number} userId - The ID of the user.
- * @returns {Promise<{id: number, name: string, email: string, ...} | null>} - User profile or null.
+ * @param {string} userId - The ID of the user.
+ * @returns {Promise<{id: string, name: string, email: string, ...} | null>} - User profile or null.
  */
 async function findUserById(userId) {
     try {
@@ -310,7 +307,7 @@ async function updateUserStatus(userId, newStatus) {
 
 /**
  * Fetches the current wallet balance and account number for a user.
- * @param {number} userId - The ID of the user.
+ * @param {string} userId - The ID of the user.
  * @returns {Promise<{balance: number, account_number: string, wallet_id: number} | null>}
  */
 async function getWalletByUserId(userId) {
@@ -330,7 +327,7 @@ async function getWalletByUserId(userId) {
 
 /**
  * Fetches a user's payment history from the transactions table.
- * @param {number} userId - The ID of the user.
+ * @param {string} userId - The ID of the user.
  * @returns {Promise<Array<object>>} List of transaction objects.
  */
 async function findPaymentHistory(userId) {
@@ -356,7 +353,7 @@ async function findPaymentHistory(userId) {
 /**
  * Logs an expenditure from the Business's central operating account.
  * This function performs an internal wallet transaction (deduction).
- * @param {number | string} businessId - The ID associated with the business wallet (should be '0').
+ * @param {string} businessId - The ID associated with the business wallet (should be '0').
  * @param {number} amount - The positive amount being withdrawn (stored as negative in DB).
  * @param {string} purpose - The reason for withdrawal (Restock, Loan, Refund, etc.).
  * @returns {Promise<boolean>} True if the deduction succeeded.
@@ -410,7 +407,7 @@ async function logBusinessExpenditure(businessId, amount, purpose) {
             INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, description, transaction_status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?);
         `;
-        await connection.execute(transactionSql, [adminId, wallet_id, type, method, deductionAmount, externalRef, purpose, transactionStatus]);
+        await connection.execute(transactionSql, [businessId, wallet_id, type, method, deductionAmount, externalRef, purpose, transactionStatus]);
 
         // 4. Update Wallet Balance
         await connection.execute(
@@ -433,7 +430,7 @@ async function logBusinessExpenditure(businessId, amount, purpose) {
 
 /**
  * Fetches all transactions related to the central Business Account.
- * @param {string | number} businessId - The ID associated with the business wallet (should be '0').
+ * @param {string} businessId - The ID associated with the business wallet (should be '0').
  * @returns {Promise<Array<object>>} List of all relevant transaction records.
  */
 // 🚨 FIX 10a: Renamed function
@@ -509,7 +506,7 @@ async function getChatHistory(customerId) {
 
 /**
  * Executes an atomic wallet transaction (Deposit or Deduction).
- * @param {number} userId - The user ID.
+ * @param {string} userId - The user ID.
  * @param {number} amount - The amount to transact (positive for Deposit, negative for Deduction/Withdrawal).
  * @param {string} method - Payment method ('M-Pesa', 'Card', 'Wallet Deduction', 'Wallet Revenue').
  * @param {string} type - Transaction type ('Deposit', 'Deduction').
@@ -526,7 +523,7 @@ async function getChatHistory(customerId) {
 async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
     // 1. Setup and User ID Coercion
     const connection = await pool.getConnection();
-    const dbUserId = Number(userId); // Coerce userId to a Number for database matching
+    const dbUserId = userId; // User ID is now a string (UUID)
     
     let wallet_id;
     let currentBalance; 
@@ -543,7 +540,7 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         
         if (walletRows.length === 0) {
             // Wallet not found, create it with a starting balance of 0
-            const accountNumber = `U${dbUserId}`; 
+            const accountNumber = `U${dbUserId.substring(0, 8)}`; // Use a truncated UUID part for account number
             
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
@@ -607,10 +604,11 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
 
 /**
  * Completes a pending M-Pesa deposit transaction, updates the original record, 
- * and credits the user's wallet.
- * @param {string} externalRef - The M-Pesa CheckoutRequestID.
+ * and credits the user's wallet. (Requirement #1: MpesaReceiptNumber becomes external_ref)
+ * (Requirement #4: Instant crediting logic is here)
+ * * @param {string} externalRef - The M-Pesa CheckoutRequestID (used to find the original PENDING transaction).
  * @param {number} finalAmount - The final amount confirmed by M-Pesa.
- * @param {string} mpesaReceipt - The MpesaReceiptNumber.
+ * @param {string} mpesaReceipt - The MpesaReceiptNumber (the required new reference code).
  * @param {string} transactionStatus - 'Completed' or 'Cancelled'.
  * @param {string} description - Final transaction description.
  */
@@ -620,7 +618,7 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
     try {
         await connection.beginTransaction();
 
-        // 1. Find the original pending transaction (CRITICAL: Needs to be user_id = customer's id)
+        // 1. Find the original pending transaction (CRITICAL: Needs FOR UPDATE lock)
         const [rows] = await connection.execute(
             `SELECT user_id, wallet_id, amount 
              FROM transactions 
@@ -632,35 +630,32 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
             throw new Error('PENDING_TRANSACTION_NOT_FOUND');
         }
 
-        const { user_id, wallet_id, amount: initialAmount } = rows[0];
+        const { user_id, wallet_id } = rows[0];
+        const businessId = '0'; // Assumed Business Wallet ID
 
-        // Ensure the amount is consistent (or log an error if inconsistent)
-        // For a real system, you'd check initialAmount vs finalAmount, but we assume it matches here.
+        // 2. Update the transaction status and use mpesaReceipt as the new external_ref
+        // This fulfills the user's requirement to use the M-Pesa code as the reference.
+        await connection.execute(
+            `UPDATE transactions 
+             SET transaction_status = ?, amount = ?, external_ref = ?, description = ? 
+             WHERE external_ref = ?`,
+            [transactionStatus, finalAmount, mpesaReceipt, description, externalRef] // Note: externalRef is used in WHERE, mpesaReceipt in SET
+        );
         
         if (transactionStatus === 'Completed') {
-            // 2. Update the transaction status and add receipt number
-            await connection.execute(
-                `UPDATE transactions 
-                 SET transaction_status = ?, amount = ?, external_ref = ?, description = ? 
-                 WHERE external_ref = ?`,
-                [transactionStatus, finalAmount, mpesaReceipt, description, externalRef]
-            );
-
-            // 3. Update the Wallet Balance
+            // 3. Update the User's Wallet Balance (Instant Credit - Requirement #4)
             await connection.execute(
                 'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?',
                 [finalAmount, wallet_id]
             );
 
             // 4. Log a corresponding revenue transaction for the Business Wallet (User ID '0')
-            const businessId = '0'; // Assumed Business Wallet ID
-            // Since the business wallet is also a user, we can use the performWalletTransaction logic 
-            // but ensure we use the same connection to keep it atomic.
-            // Simplified: Direct update
+            
             const [businessWallet] = await connection.execute(
                 'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
                 [businessId]
             );
+            
             if (businessWallet.length > 0) {
                 const businessWalletId = businessWallet[0].wallet_id;
                 await connection.execute(
@@ -673,16 +668,12 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
                      VALUES (?, ?, 'Deposit', 'M-Pesa Revenue', ?, ?, 'Completed', ?)`,
                     [businessId, businessWalletId, finalAmount, mpesaReceipt, `Revenue from Customer ID ${user_id}`]
                 );
+            } else {
+                 // CRITICAL: Handle the case where the business wallet is missing
+                console.error(`CRITICAL: Business Wallet ID ${businessId} not found during M-Pesa deposit.`);
             }
-        } else {
-             // 2. Just update the transaction status to 'Failed' or 'Cancelled'
-            await connection.execute(
-                `UPDATE transactions 
-                 SET transaction_status = ?, description = ? 
-                 WHERE external_ref = ?`,
-                [transactionStatus, description, externalRef]
-            );
-        }
+        } 
+        // If 'Cancelled' or 'Failed', only the transaction record status is updated (step 2), and no credit is applied.
 
         await connection.commit();
         return true;
@@ -700,7 +691,7 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
 /**
  * Fetches a transaction record by its external reference (CheckoutRequestID).
  * @param {string} externalRef - The M-Pesa CheckoutRequestID.
- * @param {number} userId - The user ID to scope the transaction (security check).
+ * @param {string} userId - The user ID to scope the transaction (security check).
  * @returns {Promise<{status: string, external_ref: string, amount: number, description: string} | null>}
  */
 async function findTransactionByRef(externalRef, userId) {
