@@ -7,7 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid'); // Left for legacy/other UUID use if needed, but not for user ID
+const { v4: uuidv4 } = require('uuid');
 // 🚨 RESEND INTEGRATION
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
@@ -27,7 +27,7 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -70,7 +70,7 @@ const ADMIN_CHAT_ID = 'admin_env';
 
 // 🚨 NEW: ADMIN WALLET ID (Fixed User ID 0 for central business account)
 // This wallet represents the business's capital and revenue.
-const BUSINESS_WALLET_USER_ID = '0'; // Still using '0' as a fixed string ID
+const BUSINESS_WALLET_USER_ID = '0';
 
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -234,46 +234,44 @@ app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.h
 // =========================================================
 
 app.post('/api/signup', async (req, res) => {
-    // 🚨 UPDATE: Collect username and nationalId
+    // 🚨 UPDATED: Collect username and nationalId (which serves as user ID)
     const { username, email, nationalId, password } = req.body;
     
-    // 🚨 UPDATE: Check new required fields
     if (!username || !email || !nationalId || !password) {
-        return res.status(400).json({ message: 'All fields are required.' });
-    }
-    // Simple National ID validation (e.g., must be numeric and correct length, adjust as needed)
-    if (!/^\d{8,15}$/.test(nationalId)) {
-         return res.status(400).json({ message: 'Invalid National ID number format.' });
+        return res.status(400).json({ message: 'All fields (Username, Email, National ID, Password) are required.' });
     }
 
-    // National ID is used as the primary ID (id) and Account Number
-    const userId = nationalId; 
-    const accountNumber = nationalId;
+    // Simple validation for National ID length/format
+    if (!/^\d{8,15}$/.test(nationalId)) {
+        return res.status(400).json({ message: 'Invalid National ID format. Must be 8-15 digits.' });
+    }
+
+    // Set the National ID as the unique userId for the database
+    const userId = nationalId;
 
     try {
         const password_hash = await bcrypt.hash(password, saltRounds);
         
-        // 🚨 UPDATE: Insert id, username, email, and password_hash
-        // id = National ID
-        // full_name is replaced by username in the schema, but we pass username here.
+        // 1. Insert User (ID is the National ID)
         await pool.execute(
             'INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)',
             [userId, username, email, password_hash]
         );
-        
-        // 🚨 CRITICAL: Create the wallet immediately with the National ID as the account number
+
+        // 2. Automatically create a Wallet for the new user (ID is also the account number)
         await pool.execute(
             'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
-            [userId, accountNumber]
+            [userId, userId] // National ID used for both user_id and account_number
         );
         
         res.status(201).json({ message: 'User registered successfully and wallet created.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
-            // This could be duplicate email or duplicate National ID (PK violation)
+            // Check if the duplicate entry is the PRIMARY KEY (National ID)
             if (error.message.includes('PRIMARY')) {
                  return res.status(409).json({ message: 'National ID is already registered.' });
             }
+            // Otherwise, assume it's the UNIQUE KEY for email
             return res.status(409).json({ message: 'Email already registered.' });
         }
         console.error('Signup error:', error);
@@ -300,7 +298,7 @@ app.post('/api/login', async (req, res) => {
 
 
     try {
-        // 🚨 FIX: Fetch username instead of full_name for modern schema
+        // 🚨 FIX: Fetch 'username' instead of 'full_name' for new structure
         const [users] = await pool.execute(
             'SELECT id, username, password_hash, is_admin, is_active FROM users WHERE email = ?',
             [email]
@@ -329,12 +327,14 @@ app.post('/api/login', async (req, res) => {
         delete loginAttempts[attemptKey];
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
-        req.session.userId = user.id; // Store National ID (user.id)
-        req.session.fullName = user.username; // Use username for session name
+        // 🚨 CRITICAL FIX: The user ID is now the National ID (VARCHAR)
+        req.session.userId = user.id; 
+        // 🚨 FIX: Use 'username' for session compatibility
+        req.session.fullName = user.username; 
         
         res.json({ 
             message: 'Login successful.', 
-            // 🚨 FIX: Use username here
+            // 🚨 FIX: Use 'username' for response compatibility
             user: { id: user.id, full_name: user.username, is_admin: user.is_admin } 
         });
 
@@ -387,7 +387,7 @@ app.post('/api/admin/login', async (req, res) => {
     
     // 2. Check for DB user with admin flag
     try {
-        // 🚨 FIX: Fetch username instead of full_name
+        // 🚨 FIX: Fetch 'username' instead of 'full_name'
         const [users] = await pool.execute('SELECT id, username, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
         const user = users[0];
 
@@ -397,10 +397,9 @@ app.post('/api/admin/login', async (req, res) => {
                 req.session.isAuthenticated = true;
                 req.session.isAdmin = true;
                 req.session.userId = user.id;
-                req.session.fullName = user.username; // Use username for session name
+                req.session.fullName = user.username; // Use username
                 return res.json({ 
                     message: 'Admin login successful.', 
-                    // 🚨 FIX: Use username here
                     user: { full_name: user.username, is_admin: true } 
                 });
             }
@@ -449,7 +448,6 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
         // 3. Joins with users table to get names (if registered)
         // 4. Limits to top 20 recent conversations
         
-        // 🚨 FIX: Select username instead of full_name
         const sql = `
             SELECT 
                 m.customer_id, 
@@ -468,7 +466,7 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
         // Format data for frontend
         const sessions = rows.map(row => ({
             id: row.customer_id, // Can be 'anon-...' or '123'
-            full_name: row.username || 'Guest User', // Use username
+            full_name: row.username || 'Guest User',
             email: row.email || 'N/A',
             last_active: row.last_active
         }));
@@ -602,11 +600,7 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
         const userProfile = await db.findUserById(userId); 
 
         if (userProfile) {
-            // Include National ID (id) and use username (name)
-            return res.json({
-                ...userProfile,
-                nationalId: userProfile.id // National ID is the PK (id)
-            });
+            return res.json(userProfile);
         } else {
             return res.status(404).json({ 
                 message: 'User profile not found.' 
@@ -683,7 +677,7 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
 /**
  * GET /api/wallet/balance
  * Fetches the user's current wallet balance and account number.
- * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 0).
+ * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 1).
  */
 app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
     // 🚨 Use ADMIN_WALLET_USER_ID if the user is an admin requesting the central balance
@@ -702,7 +696,7 @@ app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
             });
         }
         // If wallet doesn't exist, return 0 balance (or 404 if creation is required)
-        return res.json({ balance: 0.00, account_number: userId || 'N/A' });
+        return res.json({ balance: 0.00, account_number: 'N/A' });
         
     } catch (error) {
         console.error('Error fetching wallet balance:', error);
@@ -803,7 +797,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                     "PartyB": shortCode,
                     "PhoneNumber": phoneNumber,
                     "CallBackURL": callbackUrl,
-                    // AccountReference is the National ID (userId)
+                    // 🚨 CRITICAL: Use the user's National ID as the AccountReference
                     "AccountReference": userId, 
                     "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
@@ -820,7 +814,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                 numericAmount, 
                 'M-Pesa STK', 
                 'Deposit', 
-                data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef (temporarily)
+                data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef (the map key)
                 null, 
                 'Pending', // Set status to PENDING
                 `STK Push initiated for KES ${numericAmount.toFixed(2)}`
@@ -831,7 +825,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                 transactionRef: data.CheckoutRequestID // Send this ID back to the client
             });
         } else {
-            // Log a FAILED transaction (as completed=false)
+            // Log a FAILED transaction
             await db.performWalletTransaction(
                 userId, 
                 numericAmount, 
@@ -860,30 +854,40 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
  * M-Pesa's Confirmation and Validation URL endpoint.
  */
 app.post('/api/mpesa/callback', async (req, res) => {
+    
+    // 🚨 START LOG MONITORING HERE
+    console.log("--- M-Pesa Callback Received ---");
+    // Use JSON.stringify for clean, readable output in your console
+    console.log(JSON.stringify(req.body, null, 2)); 
+    console.log("---------------------------------");
+    // 🚨 END LOG MONITORING HERE
+
     // 1. Process the M-Pesa result
     const body = req.body.Body.stkCallback;
     const checkoutRequestID = body.CheckoutRequestID;
     const resultCode = body.ResultCode;
-    const resultDesc = body.ResultDesc;
-
+    const resultDesc = body.ResultDesc; // General message (e.g., success or user cancelled)
     
     // A. Transaction was cancelled or failed by user (ResultCode != 0)
     if (resultCode !== 0) {
-        console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}`);
+        console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}. ResultDesc: ${resultDesc}`);
         
-        // 🚨 CRITICAL IMPLEMENTATION (Failed/Cancelled Case):
-        const finalDescription = `MPESA transaction failed/cancelled: ${resultDesc}`;
-        
-        // Use the new DB function to update the PENDING transaction status to 'Cancelled'/'Failed'
-        // No credit is applied. MpesaReceiptNumber is N/A.
+        // We only need to update the status in the DB, no wallet changes needed as it was never credited.
         try {
-             await db.completeMpesaDeposit(checkoutRequestID, 0.00, 'N/A', 'Cancelled', finalDescription);
+            // Log the final status as 'Cancelled' or 'Failed'. We pass resultCode as the new external_ref since mpesaReceipt is null.
+            await db.completeMpesaDeposit(
+                checkoutRequestID, 
+                0, // Amount doesn't matter for rollback/cancellation
+                `FAILURE-${resultCode}`, // Use a unique failure ref
+                'Failed', 
+                resultDesc || 'Transaction cancelled by user or expired.'
+            );
         } catch (error) {
-            console.error('Error updating status for cancelled transaction:', error);
+            console.error('Error logging M-Pesa failure status:', error.message);
         }
-
+        
         // M-Pesa requires a specific, immediate response
-        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received." });
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and recorded as failure." });
     }
     
     // B. Transaction was successful (ResultCode == 0)
@@ -891,30 +895,34 @@ app.post('/api/mpesa/callback', async (req, res) => {
         const metaData = body.CallbackMetadata.Item;
         const amountItem = metaData.find(item => item.Name === 'Amount');
         const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
-        const phoneNumberItem = metaData.find(item => item.Name === 'PhoneNumber');
         
-        // Also try to find the AccountReference which should contain the User ID (National ID)
-        // Note: Safaricom API documentation implies the AccountReference set in STK Push is returned in the callback,
-        // but it's not always in the CallbackMetadata. We must rely on looking up the PENDING transaction by CheckoutRequestID.
-        
+        // Note: The AccountReference (user ID) is not in CallbackMetadata, 
+        // which is why we must rely on the CheckoutRequestID lookup in db.js.
+
         const amount = parseFloat(amountItem?.Value);
-        const mpesaReceipt = mpesaReceiptItem?.Value; // This is the M-Pesa transaction code (Requirement #1)
-        const phone = phoneNumberItem?.Value;
+        const mpesaReceipt = mpesaReceiptItem?.Value; // This is the required final reference code
         
-        // 2. Perform the final CREDIT and update the PENDING transaction status to 'Completed'
+        // 2. Perform the final CREDIT, update PENDING transaction status to 'Completed', 
+        // and CRITICALLY replace the external_ref with the MpesaReceiptNumber.
         const finalStatus = 'Completed';
-        const finalDescription = `MPESA successful deposit: ${mpesaReceipt} from phone ${phone}`;
+        const finalDescription = `MPESA successful deposit: ${mpesaReceipt}`;
         
-        // CRITICAL: Call DB function to update original pending transaction, use mpesaReceipt as external_ref,
-        // and CREDIT the user's wallet. (Requirement #4 - Instant Credit)
-        await db.completeMpesaDeposit(checkoutRequestID, amount, mpesaReceipt, finalStatus, finalDescription);
+        // 🚨 CRITICAL: This DB function handles the instant crediting (Requirement #4)
+        await db.completeMpesaDeposit(
+            checkoutRequestID, 
+            amount, 
+            mpesaReceipt, // New reference code (Requirement #1)
+            finalStatus, 
+            finalDescription
+        );
 
         // Send a success response back to M-Pesa
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
 
     } catch (error) {
+        // If the transaction ID is not found (shouldn't happen) or DB credit fails
         console.error('M-Pesa Callback processing error:', error);
-        // Respond with success to M-Pesa to prevent retries, but log the failure
+        // Respond with success to M-Pesa to prevent retries, but log the internal failure
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
     }
 });
@@ -932,15 +940,15 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
 
     try {
         // 1. Check the database first (fastest way to get completed status)
-        let transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
+        // CRITICAL: We need a new DB function to fetch the transaction details by external_ref and user_id
+        const transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
 
-        // If transaction is found by CheckoutRequestID (meaning it's the pending one, or it's failed/cancelled)
         if (transaction) {
             // Check if the transaction is finalized
             if (transaction.status === 'Completed') {
                 return res.json({
                     status: 'Completed',
-                    // The external_ref is now the MpesaReceiptNumber (Requirement #1)
+                    // The external_ref in the completed record is the MpesaReceiptNumber
                     mpesaRef: transaction.external_ref, 
                     amount: transaction.amount,
                     message: 'Payment confirmed successfully.'
@@ -950,12 +958,12 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
                 return res.json({
                     status: transaction.status,
                     message: transaction.description || 'Payment failed or was cancelled.',
-                    mpesaRef: transaction.external_ref, 
+                    mpesaRef: transaction.external_ref,
                 });
             }
         }
         
-        // If the transaction is not found or status is still 'Pending: STK Request Sent', return Pending
+        // If the transaction is not found or status is still 'Pending', return Pending
         return res.json({ status: 'Pending', message: 'Waiting for M-Pesa confirmation...' });
 
     } catch (error) {
@@ -1105,12 +1113,12 @@ app.get('/api/dashboard/stats', isAdmin, async (req, res) => {
 
         // 4. Count Pending Orders
         const [pendingOrders] = await pool.query(
-            "SELECT COUNT(id) AS pendingCount FROM orders WHERE status = 'Pending'"
+            "SELECT COUNT(*) AS pendingCount FROM orders WHERE status = 'Pending'"
         );
         
         // 5. Count Completed Orders
         const [completedOrders] = await pool.query(
-            "SELECT COUNT(id) AS completedCount FROM orders WHERE status = 'Completed'"
+            "SELECT COUNT(*) AS completedCount FROM orders WHERE status = 'Completed'"
         );
 
         const stats = {
@@ -1363,7 +1371,7 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         const newQuantity = currentQuantity + quantity;
 
         if (newQuantity > product.stock) {
-            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock} of ${product.name} left.` });
+            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
         }
 
         if (cartRows.length > 0) {
@@ -1413,7 +1421,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // If the ID is missing, exit immediately before transaction.
         return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
     }
-    // Coerce to string to satisfy the driver's type requirement (National ID)
+    // The user ID is now the National ID (VARCHAR)
     const userId = String(rawUserId);
 
     // Extract fields safely
@@ -1471,8 +1479,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             wallet_id = walletData.wallet_id;
             currentBalance = walletData.balance;
         } else {
-            // Create wallet if it doesn't exist (Shouldn't happen with updated signup)
-            // 🚨 FIX: National ID is the account number
+            // Create wallet if it doesn't exist (using National ID as account number)
             const accountNumber = userId; 
             const [createResult] = await connection.execute(
                 `INSERT INTO wallets (user_id, account_number, balance)
@@ -1602,15 +1609,15 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         if (businessWalletRows.length === 0) {
             // CRITICAL: Handle missing Business Wallet creation (should be done on setup)
             // If the wallet for user_id=0 doesn't exist, we must create it here.
-            const accountNumber = `BIZ-${businessId}`; 
+            const accountNumber = businessId; // Use '0' as account number
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
                 [businessId, accountNumber]
             );
             if (!createResult.insertId) throw new Error("CRITICAL: Failed to initialize Business Wallet.");
             
-            businessWalletId = createResult.insertId;
-            businessCurrentBalance = 0;
+            var businessWalletId = createResult.insertId;
+            var businessCurrentBalance = 0;
         } else {
             var businessWalletId = businessWalletRows[0].wallet_id;
             var businessCurrentBalance = businessWalletRows[0].balance;
@@ -1862,7 +1869,7 @@ app.post("/api/request-otp", async (req, res) => {
         const expiry = Date.now() + 5 * 60 * 1000;
 
         // 3. Save OTP in memory using the global otpCache
-        // Store userId (National ID) and email for the final reset step lookup, keyed by phone number
+        // Store userId and email for the final reset step lookup, keyed by phone number
         otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
 
         // 4. Send Email (Proxy for SMS)
@@ -1922,7 +1929,7 @@ app.post("/api/verify-otp", (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const expiry = Date.now() + 10 * 60 * 1000; 
 
-    // Store user ID (National ID), email, and phone (as resetKey) in the verification cache
+    // Store user ID, email, and phone (as resetKey) in the verification cache
     verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
     delete otpCache[verificationKey];
 
@@ -1962,7 +1969,7 @@ app.post('/api/reset-password', async (req, res) => {
     }
 
     try {
-        // Use the userId (National ID) saved during the OTP request step
+        // Use the userId saved during the OTP request step
         const userIdToUpdate = verificationEntry.userId;
         
         // 5. Hash the new password securely
@@ -2127,8 +2134,7 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             
             if (!isAnon) { 
                 const user = await findUserById(customerId); 
-                // 🚨 FIX: use 'name' which is mapped to username in db.js
-                if (user) customerName = user.name; 
+                if (user) customerName = user.name; // Use user.name (which is username)
             }
             // END FIX
             
@@ -2320,7 +2326,8 @@ server.on('upgrade', (req, socket, head) => {
         let finalCustomerId = customerIdFromUrl;
         
         if (role === 'customer' && req.session.userId) {
-            // If the user is logged in, force the use of their DB ID (National ID) as the session key.
+            // If the user is logged in, force the use of their DB ID as the session key.
+            // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
             finalCustomerId = String(req.session.userId);
         }
         // ------------------------------------
@@ -2360,7 +2367,7 @@ server.on('upgrade', (req, socket, head) => {
        
         
         // 4. Attach params/session data for use in the wss.on('connection') handler
-        // CRITICAL: Use the finalCustomerId (which is the DB ID/National ID if logged in)
+        // CRITICAL: Use the finalCustomerId (which is the DB ID if logged in)
         req.params = { customerId: finalCustomerId, role }; 
         
         // 5. Handle WebSocket handshake
