@@ -7,7 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid'); // 🚨 Imported for unique user ID generation (Requirement #2)
+const { v4: uuidv4 } = require('uuid'); // Left for legacy/other UUID use if needed, but not for user ID
 // 🚨 RESEND INTEGRATION
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
@@ -70,7 +70,7 @@ const ADMIN_CHAT_ID = 'admin_env';
 
 // 🚨 NEW: ADMIN WALLET ID (Fixed User ID 0 for central business account)
 // This wallet represents the business's capital and revenue.
-const BUSINESS_WALLET_USER_ID = '0';
+const BUSINESS_WALLET_USER_ID = '0'; // Still using '0' as a fixed string ID
 
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -234,23 +234,46 @@ app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.h
 // =========================================================
 
 app.post('/api/signup', async (req, res) => {
-    const { full_name, email, password } = req.body;
-    if (!full_name || !email || !password) {
+    // 🚨 UPDATE: Collect username and nationalId
+    const { username, email, nationalId, password } = req.body;
+    
+    // 🚨 UPDATE: Check new required fields
+    if (!username || !email || !nationalId || !password) {
         return res.status(400).json({ message: 'All fields are required.' });
     }
+    // Simple National ID validation (e.g., must be numeric and correct length, adjust as needed)
+    if (!/^\d{8,15}$/.test(nationalId)) {
+         return res.status(400).json({ message: 'Invalid National ID number format.' });
+    }
+
+    // National ID is used as the primary ID (id) and Account Number
+    const userId = nationalId; 
+    const accountNumber = nationalId;
 
     try {
-        const userId = uuidv4(); // 🚨 NEW: Generate unique UUID (Requirement #2)
         const password_hash = await bcrypt.hash(password, saltRounds);
         
-        // 🚨 UPDATE: Insert the generated UUID into the ID column
+        // 🚨 UPDATE: Insert id, username, email, and password_hash
+        // id = National ID
+        // full_name is replaced by username in the schema, but we pass username here.
         await pool.execute(
-            'INSERT INTO users (id, full_name, email, password_hash) VALUES (?, ?, ?, ?)',
-            [userId, full_name, email, password_hash]
+            'INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)',
+            [userId, username, email, password_hash]
         );
-        res.status(201).json({ message: 'User registered successfully.' });
+        
+        // 🚨 CRITICAL: Create the wallet immediately with the National ID as the account number
+        await pool.execute(
+            'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+            [userId, accountNumber]
+        );
+        
+        res.status(201).json({ message: 'User registered successfully and wallet created.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
+            // This could be duplicate email or duplicate National ID (PK violation)
+            if (error.message.includes('PRIMARY')) {
+                 return res.status(409).json({ message: 'National ID is already registered.' });
+            }
             return res.status(409).json({ message: 'Email already registered.' });
         }
         console.error('Signup error:', error);
@@ -277,9 +300,9 @@ app.post('/api/login', async (req, res) => {
 
 
     try {
-        // ID is now a VARCHAR(36) UUID, but the logic remains the same for retrieval.
+        // 🚨 FIX: Fetch username instead of full_name for modern schema
         const [users] = await pool.execute(
-            'SELECT id, full_name, password_hash, is_admin, is_active FROM users WHERE email = ?',
+            'SELECT id, username, password_hash, is_admin, is_active FROM users WHERE email = ?',
             [email]
         );
 
@@ -306,12 +329,13 @@ app.post('/api/login', async (req, res) => {
         delete loginAttempts[attemptKey];
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
-        req.session.userId = user.id; // Storing the UUID
-        req.session.fullName = user.full_name;
+        req.session.userId = user.id; // Store National ID (user.id)
+        req.session.fullName = user.username; // Use username for session name
         
         res.json({ 
             message: 'Login successful.', 
-            user: { id: user.id, full_name: user.full_name, is_admin: user.is_admin } 
+            // 🚨 FIX: Use username here
+            user: { id: user.id, full_name: user.username, is_admin: user.is_admin } 
         });
 
     } catch (error) {
@@ -363,7 +387,8 @@ app.post('/api/admin/login', async (req, res) => {
     
     // 2. Check for DB user with admin flag
     try {
-        const [users] = await pool.execute('SELECT id, full_name, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
+        // 🚨 FIX: Fetch username instead of full_name
+        const [users] = await pool.execute('SELECT id, username, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
         const user = users[0];
 
         if (user) {
@@ -372,10 +397,11 @@ app.post('/api/admin/login', async (req, res) => {
                 req.session.isAuthenticated = true;
                 req.session.isAdmin = true;
                 req.session.userId = user.id;
-                req.session.fullName = user.full_name;
+                req.session.fullName = user.username; // Use username for session name
                 return res.json({ 
                     message: 'Admin login successful.', 
-                    user: { full_name: user.full_name, is_admin: true } 
+                    // 🚨 FIX: Use username here
+                    user: { full_name: user.username, is_admin: true } 
                 });
             }
         }
@@ -423,11 +449,12 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
         // 3. Joins with users table to get names (if registered)
         // 4. Limits to top 20 recent conversations
         
+        // 🚨 FIX: Select username instead of full_name
         const sql = `
             SELECT 
                 m.customer_id, 
                 MAX(m.created_at) as last_active,
-                u.full_name, 
+                u.username, 
                 u.email
             FROM chat_messages m
             LEFT JOIN users u ON m.customer_id = u.id
@@ -441,7 +468,7 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
         // Format data for frontend
         const sessions = rows.map(row => ({
             id: row.customer_id, // Can be 'anon-...' or '123'
-            full_name: row.full_name || 'Guest User',
+            full_name: row.username || 'Guest User', // Use username
             email: row.email || 'N/A',
             last_active: row.last_active
         }));
@@ -575,7 +602,11 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
         const userProfile = await db.findUserById(userId); 
 
         if (userProfile) {
-            return res.json(userProfile);
+            // Include National ID (id) and use username (name)
+            return res.json({
+                ...userProfile,
+                nationalId: userProfile.id // National ID is the PK (id)
+            });
         } else {
             return res.status(404).json({ 
                 message: 'User profile not found.' 
@@ -671,7 +702,7 @@ app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
             });
         }
         // If wallet doesn't exist, return 0 balance (or 404 if creation is required)
-        return res.json({ balance: 0.00, account_number: 'N/A' });
+        return res.json({ balance: 0.00, account_number: userId || 'N/A' });
         
     } catch (error) {
         console.error('Error fetching wallet balance:', error);
@@ -772,7 +803,8 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                     "PartyB": shortCode,
                     "PhoneNumber": phoneNumber,
                     "CallBackURL": callbackUrl,
-                    "AccountReference": `USER${userId}`, // Unique reference (uses UUID now)
+                    // AccountReference is the National ID (userId)
+                    "AccountReference": userId, 
                     "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
             }
@@ -860,7 +892,11 @@ app.post('/api/mpesa/callback', async (req, res) => {
         const amountItem = metaData.find(item => item.Name === 'Amount');
         const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
         const phoneNumberItem = metaData.find(item => item.Name === 'PhoneNumber');
-
+        
+        // Also try to find the AccountReference which should contain the User ID (National ID)
+        // Note: Safaricom API documentation implies the AccountReference set in STK Push is returned in the callback,
+        // but it's not always in the CallbackMetadata. We must rely on looking up the PENDING transaction by CheckoutRequestID.
+        
         const amount = parseFloat(amountItem?.Value);
         const mpesaReceipt = mpesaReceiptItem?.Value; // This is the M-Pesa transaction code (Requirement #1)
         const phone = phoneNumberItem?.Value;
@@ -896,13 +932,9 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
 
     try {
         // 1. Check the database first (fastest way to get completed status)
-        // Check for the initial pending transaction (using CheckoutRequestID) OR the final transaction (using MpesaReceiptNumber)
         let transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
 
-        // Fallback: If the initial CheckoutRequestID was overwritten by the MpesaReceiptNumber, 
-        // the CheckoutRequestID lookup might fail, but the client only has the CheckoutRequestID
-        // We rely on the callback updating the record which means the client must poll for the final MpesaRef.
-        
+        // If transaction is found by CheckoutRequestID (meaning it's the pending one, or it's failed/cancelled)
         if (transaction) {
             // Check if the transaction is finalized
             if (transaction.status === 'Completed') {
@@ -918,7 +950,6 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
                 return res.json({
                     status: transaction.status,
                     message: transaction.description || 'Payment failed or was cancelled.',
-                    // If failed/cancelled, it might still have the CheckoutRequestID or the initial value
                     mpesaRef: transaction.external_ref, 
                 });
             }
@@ -1382,7 +1413,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // If the ID is missing, exit immediately before transaction.
         return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
     }
-    // Coerce to string to satisfy the driver's type requirement (assuming DB IDs are now strings/UUIDs)
+    // Coerce to string to satisfy the driver's type requirement (National ID)
     const userId = String(rawUserId);
 
     // Extract fields safely
@@ -1440,8 +1471,9 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             wallet_id = walletData.wallet_id;
             currentBalance = walletData.balance;
         } else {
-            // Create wallet if it doesn't exist
-            const accountNumber = `U${userId.substring(0, 8)}`; // Use UUID part for account number
+            // Create wallet if it doesn't exist (Shouldn't happen with updated signup)
+            // 🚨 FIX: National ID is the account number
+            const accountNumber = userId; 
             const [createResult] = await connection.execute(
                 `INSERT INTO wallets (user_id, account_number, balance)
                  VALUES (?, ?, 0.00)`,
@@ -1830,7 +1862,7 @@ app.post("/api/request-otp", async (req, res) => {
         const expiry = Date.now() + 5 * 60 * 1000;
 
         // 3. Save OTP in memory using the global otpCache
-        // Store userId and email for the final reset step lookup, keyed by phone number
+        // Store userId (National ID) and email for the final reset step lookup, keyed by phone number
         otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
 
         // 4. Send Email (Proxy for SMS)
@@ -1890,7 +1922,7 @@ app.post("/api/verify-otp", (req, res) => {
     const verificationToken = crypto.randomBytes(32).toString('hex');
     const expiry = Date.now() + 10 * 60 * 1000; 
 
-    // Store user ID, email, and phone (as resetKey) in the verification cache
+    // Store user ID (National ID), email, and phone (as resetKey) in the verification cache
     verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
     delete otpCache[verificationKey];
 
@@ -1930,7 +1962,7 @@ app.post('/api/reset-password', async (req, res) => {
     }
 
     try {
-        // Use the userId saved during the OTP request step
+        // Use the userId (National ID) saved during the OTP request step
         const userIdToUpdate = verificationEntry.userId;
         
         // 5. Hash the new password securely
@@ -2095,7 +2127,8 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
             
             if (!isAnon) { 
                 const user = await findUserById(customerId); 
-                if (user) customerName = user.full_name;
+                // 🚨 FIX: use 'name' which is mapped to username in db.js
+                if (user) customerName = user.name; 
             }
             // END FIX
             
@@ -2287,8 +2320,7 @@ server.on('upgrade', (req, socket, head) => {
         let finalCustomerId = customerIdFromUrl;
         
         if (role === 'customer' && req.session.userId) {
-            // If the user is logged in, force the use of their DB ID as the session key.
-            // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
+            // If the user is logged in, force the use of their DB ID (National ID) as the session key.
             finalCustomerId = String(req.session.userId);
         }
         // ------------------------------------
@@ -2328,7 +2360,7 @@ server.on('upgrade', (req, socket, head) => {
        
         
         // 4. Attach params/session data for use in the wss.on('connection') handler
-        // CRITICAL: Use the finalCustomerId (which is the DB ID if logged in)
+        // CRITICAL: Use the finalCustomerId (which is the DB ID/National ID if logged in)
         req.params = { customerId: finalCustomerId, role }; 
         
         // 5. Handle WebSocket handshake

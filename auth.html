@@ -14,6 +14,9 @@
             --color-text-dark: #333333;
             --font-body: 'Poppins', sans-serif;
             --font-heading: 'Playfair Display', serif;
+            --color-success: #28a745;
+            --color-danger: #dc3545;
+            --color-text-subtle: #757575;
         }
         
         /* --- Global Styles --- */
@@ -33,7 +36,7 @@
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 420px;
+            max-width: 480px; /* 🚨 UPGRADE: Expanded max-width for extra form fields */
             text-align: center;
             position: relative;
         }
@@ -152,7 +155,7 @@
             padding: 30px;
             border-radius: 12px;
             width: 90%;
-            max-width: 350px;
+            max-width: 420px; /* 🚨 UPGRADE: Expanded max-width for modal */
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             position: relative;
         }
@@ -235,8 +238,10 @@
 
         <div id="signup-section" class="form-section">
             <form id="signup-form">
-                <input type="text" id="signup-name" placeholder="Full Name" required>
+                <!-- 🚨 UPDATED SIGNUP FIELDS -->
+                <input type="text" id="signup-username" placeholder="Username (e.g. JohnDoe)" required>
                 <input type="email" id="signup-email" placeholder="Email Address" required>
+                <input type="text" id="signup-national-id" placeholder="National ID Number (Account Number)" required pattern="[0-9]{8,15}" title="National ID must be between 8 and 15 digits">
                 
                 <div class="password-container">
                     <input type="password" id="signup-password" placeholder="Password (min 6 chars)" required minlength="6">
@@ -421,16 +426,23 @@ function showToast(message, type = 'info', duration = 4000) {
             }
         });
         
-        // 2. SIGN UP (MODIFIED for Password Confirmation)
+        // 2. SIGN UP (MODIFIED for New Fields and Password Confirmation)
         document.getElementById('signup-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const name = document.getElementById('signup-name').value;
+            // 🚨 UPDATED: Get new fields
+            const username = document.getElementById('signup-username').value;
             const email = document.getElementById('signup-email').value;
+            const nationalId = document.getElementById('signup-national-id').value;
             const password = document.getElementById('signup-password').value;
             const confirmPassword = document.getElementById('signup-password-confirm').value;
             
             if (password !== confirmPassword) {
                 showToast('❌ Passwords do not match.', 'error');
+                return;
+            }
+            // Basic National ID validation check (using input pattern above, but useful client-side check)
+            if (!/^\d{8,15}$/.test(nationalId)) {
+                showToast('❌ Invalid National ID format. Must be 8-15 digits.', 'error');
                 return;
             }
             
@@ -439,7 +451,8 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ full_name: name, email, password })
+                    // 🚨 UPDATED: Send all required data fields
+                    body: JSON.stringify({ username, email, nationalId, password })
                 });
 
                 const result = await response.json();

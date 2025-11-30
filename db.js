@@ -29,10 +29,14 @@ const pool = mysql.createPool({
  */
 async function findAllUsers() {
     try {
+        // 🚨 FIX: full_name column used here is now username in INSERT/UPDATE
         const [rows] = await pool.execute(
-            'SELECT id, full_name, email, is_admin, is_active, created_at FROM users ORDER BY created_at DESC'
+            'SELECT id, username, email, is_admin, is_active, created_at FROM users ORDER BY created_at DESC'
         );
-        return rows;
+        return rows.map(row => ({
+            ...row,
+            full_name: row.username // Map username back to full_name for compatibility
+        }));
     } catch (error) {
         console.error('Database error fetching all users (customers):', error);
         throw error;
@@ -120,13 +124,18 @@ async function updateProduct(productId, updatedData) {
  */
 async function findUserByEmail(email) {
     try {
-        // Updated to fetch all fields needed for login/auth/reset email sending
+        // 🚨 FIX: Fetch 'username' instead of 'full_name' for modern schema
         const [rows] = await pool.execute(
-            'SELECT id, full_name, email, password_hash,is_admin FROM users WHERE email = ?',
+            'SELECT id, username, email, password_hash,is_admin FROM users WHERE email = ?',
             [email]
         );
         
-        return rows.length > 0 ? rows[0] : null;
+        if (rows.length === 0) return null;
+
+        return {
+            ...rows[0],
+            full_name: rows[0].username // Map username back to full_name for compatibility
+        }
     } catch (error) {
         console.error('Database error fetching user by email:', error);
         throw error;
@@ -135,7 +144,7 @@ async function findUserByEmail(email) {
 
 /**
  * Resets the user's password.
- * @param {string} userId - The ID of the user.
+ * @param {string} userId - The ID (National ID) of the user.
  * @param {string} hashedPassword - The new, securely hashed password.
  * @returns {Promise<boolean>} True if the password was successfully updated.
  */
@@ -203,17 +212,24 @@ async function findUserOrders(userId) {
 }
 /**
  * Retrieves a user object by their phone number.
+ * This is crucial for OTP-based password reset lookup.
  * @param {string} phone - The phone number of the user.
- * @returns {Promise<object | null>} - User object including id, full_name, email, password_hash, is_admin, and is_active, or null.
+ * @returns {Promise<object | null>} - User object including id, username, email, password_hash, is_admin, and is_active, or null.
  */
 async function findUserByPhone(phone) {
     try {
+        // 🚨 FIX: Fetch 'username' instead of 'full_name' for modern schema
         const [rows] = await pool.execute(
-            'SELECT id, full_name, email, password_hash, is_admin, is_active FROM users WHERE phone_number = ?',
+            'SELECT id, username, email, password_hash, is_admin, is_active FROM users WHERE phone_number = ?',
             [phone]
         );
         
-        return rows.length > 0 ? rows[0] : null;
+        if (rows.length === 0) return null;
+
+        return {
+            ...rows[0],
+            full_name: rows[0].username // Map username back to full_name for compatibility
+        }
     } catch (error) {
         console.error('Database error fetching user by phone:', error);
         throw error;
@@ -223,14 +239,15 @@ async function findUserByPhone(phone) {
 // --- Profile Management Functions (Used by profile.html) ---
 // ---------------------------------------------------------------- //
 /**
- * Retrieves a user object by their ID.
+ * Retrieves a user object by their ID (National ID).
  * @param {string} userId - The ID of the user.
  * @returns {Promise<{id: string, name: string, email: string, ...} | null>} - User profile or null.
  */
 async function findUserById(userId) {
     try {
+        // 🚨 FIX: Fetch 'username' and map it to 'name' for profile.html compatibility
         const [rows] = await pool.execute(
-            'SELECT id, full_name, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
+            'SELECT id, username, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
             [userId]
         );
         
@@ -240,7 +257,7 @@ async function findUserById(userId) {
 
         return {
             id: rows[0].id, 
-            name: rows[0].full_name,
+            name: rows[0].username, // Use username for the profile display name
             email: rows[0].email,
             phoneNumber: rows[0].phone_number,
             profilePictureUrl: rows[0].profile_picture_url,
@@ -307,13 +324,13 @@ async function updateUserStatus(userId, newStatus) {
 
 /**
  * Fetches the current wallet balance and account number for a user.
- * @param {string} userId - The ID of the user.
+ * @param {string} userId - The ID (National ID) of the user.
  * @returns {Promise<{balance: number, account_number: string, wallet_id: number} | null>}
  */
 async function getWalletByUserId(userId) {
     try {
+        // Since National ID is now the user ID, it is also the account number
         const [rows] = await pool.execute(
-            // 🚨 FIX: Add wallet_id to the SELECT clause
             'SELECT wallet_id, balance, account_number FROM wallets WHERE user_id = ?',
             [userId]
         );
@@ -506,7 +523,7 @@ async function getChatHistory(customerId) {
 
 /**
  * Executes an atomic wallet transaction (Deposit or Deduction).
- * @param {string} userId - The user ID.
+ * @param {string} userId - The user ID (National ID).
  * @param {number} amount - The amount to transact (positive for Deposit, negative for Deduction/Withdrawal).
  * @param {string} method - Payment method ('M-Pesa', 'Card', 'Wallet Deduction', 'Wallet Revenue').
  * @param {string} type - Transaction type ('Deposit', 'Deduction').
@@ -523,7 +540,7 @@ async function getChatHistory(customerId) {
 async function performWalletTransaction(userId, amount, method, type, externalRef, orderId = null, transactionStatus = 'Completed', description = null) {
     // 1. Setup and User ID Coercion
     const connection = await pool.getConnection();
-    const dbUserId = userId; // User ID is now a string (UUID)
+    const dbUserId = userId; // User ID is the National ID (VARCHAR(15))
     
     let wallet_id;
     let currentBalance; 
@@ -540,7 +557,8 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         
         if (walletRows.length === 0) {
             // Wallet not found, create it with a starting balance of 0
-            const accountNumber = `U${dbUserId.substring(0, 8)}`; // Use a truncated UUID part for account number
+            // 🚨 FIX: National ID is now the account_number
+            const accountNumber = dbUserId; 
             
             const [createResult] = await connection.execute(
                 'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
@@ -596,7 +614,6 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         console.error(`Database error during ${type} transaction:`, error);
         throw error;
     } finally {
-        // 8. Release Connection
         connection.release();
     }
 }
@@ -742,6 +759,5 @@ module.exports = {
     saveChatMessage, 
     getChatHistory,
     completeMpesaDeposit,
-    performWalletTransaction,
     findTransactionByRef,
 };
