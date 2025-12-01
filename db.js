@@ -10,12 +10,13 @@ const pool = mysql.createPool({
     port: process.env.DB_PORT,
    database: process.env.DB_NAME,
    waitForConnections: true,
-    connectionLimit: 10,
+    // 🚨 SCALING FIX: Increased connection limit to match the server's concurrency cap (50 parallel connections max).
+    connectionLimit: 50, 
     queueLimit: 0,
 
     ssl: {
-        // 🚨 CRITICAL: Set to true to bypass validation
-        rejectUnauthorized: false 
+        // 🚨 SECURITY FIX: Reverted setting to enable certificate validation for production stability.
+        rejectUnauthorized: true 
     }
 });
 
@@ -185,7 +186,7 @@ async function findUserOrders(userId) {
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
         const itemSql = `
             SELECT 
-                id AS itemId,  -- Use the unique ID from order_items table and alias it
+                id AS itemId,  // Use the unique ID from order_items table and alias it
                 product_name as name, 
                 unit_price as price, 
                 quantity as quantity
