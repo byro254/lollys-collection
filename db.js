@@ -16,7 +16,7 @@ const pool = mysql.createPool({
 
     ssl: {
         // 🚨 SECURITY FIX: Reverted setting to enable certificate validation for production stability.
-        rejectUnauthorized: true 
+        rejectUnauthorized: false
     }
 });
 
