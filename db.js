@@ -186,7 +186,7 @@ async function findUserOrders(userId) {
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
         const itemSql = `
             SELECT 
-                id AS itemId,  // Use the unique ID from order_items table and alias it
+                id AS itemId,  
                 product_name as name, 
                 unit_price as price, 
                 quantity as quantity
