@@ -118,6 +118,7 @@
             transform: scale(1.1);
         }
         
+        
         /* Hamburger icon for mobile */
         .hamburger-icon {
             display: none;
@@ -348,7 +349,7 @@
             display: inline-block;
         }
         
-        /* --- Order History Table (UPDATED FOR MOBILE) --- */
+        /* --- Order History Table --- */
         .order-table {
             width: 100%;
             border-collapse: collapse;
@@ -446,7 +447,8 @@
         /* --- Responsive Adjustments --- */
         @media (max-width: 900px) {
             .site-header {
-                /* Removed unnecessary flex-start/gap as the logo is on the left and icons are grouped right */
+                justify-content: flex-start;
+                gap: 15px;
             }
             .hamburger-icon {
                 display: block;
@@ -470,79 +472,8 @@
             .sidebar-close-icon {
                 display: block;
             }
-            /* Removed unnecessary logo-link margin-left */
-        }
-
-        /* 🚨 ORDER TABLE MOBILE STYLING (Max 600px) - REFINED FOR PERFECT FIT */
-        @media (max-width: 600px) {
-            .order-table thead {
-                /* Hide the header on mobile */
-                display: none;
-            }
-            
-            .order-table, .order-table tbody, .order-table tr, .order-table td {
-                /* Force table elements to be block/stack */
-                display: block;
-                width: 100%;
-            }
-            
-            .order-table tr {
-                margin-bottom: 15px;
-                border: 1px solid var(--color-border-medium);
-                border-radius: 8px;
-                overflow: hidden;
-            }
-            
-            .order-table td {
-                /* Ensure padding is uniform and border is removed (using border on TR now) */
-                padding: 8px 15px; /* Reduced vertical padding slightly */
-                text-align: right;
-                position: relative;
-                border-bottom: 1px dashed var(--color-border-medium);
-            }
-            
-            .order-table td:last-child {
-                border-bottom: 0;
-            }
-
-            .order-table td::before {
-                /* Use pseudo element to display the header label */
-                content: attr(data-label);
-                position: absolute;
-                left: 15px;
-                width: 50%; /* Increased width for label to prevent wrap on smallest devices */
-                padding-right: 10px;
-                white-space: nowrap;
-                font-weight: 600;
-                color: var(--color-pink-dark);
-                text-align: left; /* Ensure label is left-aligned */
-            }
-            
-            /* Explicitly hide the Date and Items columns to reduce vertical clutter */
-            .order-table th:nth-child(2), /* Date Header */
-            .order-table td:nth-child(2), /* Date Data */
-            .order-table th:nth-child(3), /* Items Header */
-            .order-table td:nth-child(3) /* Items Data */
-             {
-                 display: none; 
-             }
-            
-            /* Ensure the columns we keep are displayed correctly */
-            .order-table td:nth-child(1), /* ID */
-            .order-table td:nth-child(4), /* Total */
-            .order-table td:nth-child(5) /* Status */
-            {
-                 display: block; 
-            }
-            
-            /* Increase vertical spacing between rows only */
-            .order-table tr {
-                margin-bottom: 20px;
-            }
-            
-            /* Tweak padding for the main card container on small screens */
-            .card {
-                padding: 20px;
+            .logo-link {
+                margin-left: auto;
             }
         }
         
@@ -832,20 +763,14 @@
     </div>
     <!-- END MODALS -->
 
-    <!-- 🚨 HEADER (GATED - UPDATED STRUCTURE) -->
+    <!-- 🚨 HEADER (GATED) -->
     <header class="site-header gated-content disabled">
         <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
             <i class="fas fa-bars"></i>
         </button>
-        
-        <!-- Primary Logo Link -->
-        <a href="/" class="logo-link" title="Home">
-            Lolly's
-        </a>
-      
-        <!-- Auth/Cart Icons (Grouped Right) -->
+        <a href="/" class="logo-link">Lolly's </a>
+        <!-- Auth/Cart Icons -->
         <nav class="header-nav">
-             <!-- Home link is now redundant here since Lolly's is the home link -->
              <a href="/cart" class="nav-icon cart-icon-with-count" title="Cart">
                 <i class="fa-solid fa-shopping-cart"></i>
             </a>
@@ -937,8 +862,8 @@
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th class="mobile-hidden-col">Date</th>
-                                    <th class="mobile-hidden-col">Items</th>
+                                    <th>Date</th>
+                                    <th>Items</th>
                                     <th>Total</th>
                                     <th>Status</th>
                                 </tr>
@@ -1292,9 +1217,6 @@
         async function fetchAndRenderOrders() {
             if (!isUserAuthenticated) return;
             const tbody = document.getElementById('orders-tbody');
-            // Cache column names for mobile responsiveness
-            const columnNames = ['ID', 'Date', 'Items', 'Total', 'Status']; 
-            
             tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching orders...</td></tr>';
 
             try {
@@ -1313,19 +1235,14 @@
                         // Normalize status for CSS class, replacing spaces/colons
                         const statusClass = (order.status || 'Pending').replace(/[^a-zA-Z0-9]/g, '\\ ');
                         const totalItems = order.items ? order.items.length : 'N/A';
-                        const orderDate = new Date(order.date).toLocaleDateString();
-                        const orderTotal = `KES ${parseFloat(order.total || 0).toFixed(2)}`;
-                        const orderId = `#${order.orderId || '0000'}`;
-                        const orderStatus = order.status || 'Pending';
                         
-                        // Use data-label attributes for mobile view
                         const row = `
                             <tr>
-                                <td data-label="${columnNames[0]}">${orderId}</td>
-                                <td data-label="${columnNames[1]}">${orderDate}</td>
-                                <td data-label="${columnNames[2]}">${totalItems} items</td>
-                                <td data-label="${columnNames[3]}">${orderTotal}</td>
-                                <td data-label="${columnNames[4]}"><span class="status-badge ${statusClass}">${orderStatus}</span></td>
+                                <td>#${order.orderId || '0000'}</td>
+                                <td>${new Date(order.date).toLocaleDateString()}</td>
+                                <td>${totalItems} items</td>
+                                <td>KES ${parseFloat(order.total || 0).toFixed(2)}</td>
+                                <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);
@@ -1351,7 +1268,7 @@
             // Get all elements that display the account number
             const accountNoDisplays = [
                 document.getElementById('account-number-display-mpesa'),
-                // document.getElementById('account-number-display-manual') // New manual modal ID is handled by account-number-display-mpesa in the HTML
+                document.getElementById('account-number-display-manual') // New manual modal ID
             ];
 
             balanceDisplay.textContent = 'Loading...';
@@ -1386,7 +1303,6 @@
         async function fetchAndRenderPaymentHistory() {
              if (!isUserAuthenticated) return;
              const tbody = document.getElementById('payment-history-tbody');
-             
              tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
              
              try {
@@ -1406,13 +1322,12 @@
                         const amountText = `KES ${parseFloat(transaction.amount || 0).toFixed(2)}`;
                         const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
                         
-                        // Use data-label for mobile history table
                         const row = `
                             <tr>
-                                <td data-label="Date">${new Date(transaction.date).toLocaleDateString()}</td>
-                                <td data-label="Type">${transaction.type || 'Transaction'}</td>
-                                <td data-label="Amount" style="${amountStyle}">${amountText}</td>
-                                <td data-label="Status"><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
+                                <td>${new Date(transaction.date).toLocaleDateString()}</td>
+                                <td>${transaction.type || 'Transaction'}</td>
+                                <td style="${amountStyle}">${amountText}</td>
+                                <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);
