@@ -445,7 +445,9 @@
         
         /* --- Responsive Adjustments --- */
         @media (max-width: 900px) {
-           
+            .site-header {
+                /* Removed unnecessary flex-start/gap as the logo is on the left and icons are grouped right */
+            }
             .hamburger-icon {
                 display: block;
             }
@@ -471,7 +473,7 @@
             /* Removed unnecessary logo-link margin-left */
         }
 
-        /* 🚨 ORDER TABLE MOBILE STYLING (Max 600px) */
+        /* 🚨 ORDER TABLE MOBILE STYLING (Max 600px) - REFINED FOR PERFECT FIT */
         @media (max-width: 600px) {
             .order-table thead {
                 /* Hide the header on mobile */
@@ -493,7 +495,7 @@
             
             .order-table td {
                 /* Ensure padding is uniform and border is removed (using border on TR now) */
-                padding: 10px 15px;
+                padding: 8px 15px; /* Reduced vertical padding slightly */
                 text-align: right;
                 position: relative;
                 border-bottom: 1px dashed var(--color-border-medium);
@@ -508,25 +510,40 @@
                 content: attr(data-label);
                 position: absolute;
                 left: 15px;
-                width: 40%; 
+                width: 50%; /* Increased width for label to prevent wrap on smallest devices */
                 padding-right: 10px;
                 white-space: nowrap;
                 font-weight: 600;
                 color: var(--color-pink-dark);
+                text-align: left; /* Ensure label is left-aligned */
             }
-
-            /* Hide less critical columns entirely by their position/data-label if needed */
-            /* For the sake of showing all data, we will just use the labels above */
-
-            /* Hide the 'Items' and 'Date' columns from header and data if they are too noisy */
-            /* Note: We use data-label to show the content in TD, so we keep TD but hide TH */
-             .order-table th:nth-child(2), /* Date */
-             .order-table td:nth-child(2),
-             .order-table th:nth-child(3), /* Items */
-             .order-table td:nth-child(3) {
-                 /* Display block allows ::before pseudo element to work correctly */
-                 display: block; 
+            
+            /* Explicitly hide the Date and Items columns to reduce vertical clutter */
+            .order-table th:nth-child(2), /* Date Header */
+            .order-table td:nth-child(2), /* Date Data */
+            .order-table th:nth-child(3), /* Items Header */
+            .order-table td:nth-child(3) /* Items Data */
+             {
+                 display: none; 
              }
+            
+            /* Ensure the columns we keep are displayed correctly */
+            .order-table td:nth-child(1), /* ID */
+            .order-table td:nth-child(4), /* Total */
+            .order-table td:nth-child(5) /* Status */
+            {
+                 display: block; 
+            }
+            
+            /* Increase vertical spacing between rows only */
+            .order-table tr {
+                margin-bottom: 20px;
+            }
+            
+            /* Tweak padding for the main card container on small screens */
+            .card {
+                padding: 20px;
+            }
         }
         
         /* --- Modal Styles --- */
@@ -920,8 +937,8 @@
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>Date</th>
-                                    <th>Items</th>
+                                    <th class="mobile-hidden-col">Date</th>
+                                    <th class="mobile-hidden-col">Items</th>
                                     <th>Total</th>
                                     <th>Status</th>
                                 </tr>
