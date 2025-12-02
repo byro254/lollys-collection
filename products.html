@@ -23,6 +23,7 @@
 
             /* Status Colors */
             --color-danger: #dc3545;
+            --color-success: #28a745; /* Added Success color for price/stock */
 
             /* Typography */
             --font-heading: 'Playfair Display', serif;
@@ -267,37 +268,63 @@
             font-size: 1.8rem !important; 
         }
 
+        /* 🚨 START RESPONSIVE MODAL BODY CSS */
         #modal-body { 
             display: flex; 
-            flex-direction: column; 
+            flex-direction: column; /* Default: Stack vertically on mobile */
             gap: 15px; 
             text-align: left; 
         }
-        /* Modal Product Info (Reduced text size) */
+        
+        .modal-image-col {
+            flex-shrink: 0;
+            width: 100%; /* Image takes full width on mobile */
+        }
+        
+        .product-image-modal {
+            width: 100%;
+            height: auto;
+            max-height: 300px; /* Limit height on mobile */
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        
+        /* Modal Details */
         #modal-body h3 { 
             font-family: var(--font-heading); 
             font-size: 2rem; 
             color: var(--color-pink-dark); 
             margin-bottom: 5px; 
         }
+        #modal-body h4 {
+             font-size: 1.1rem; font-weight: 600; margin-top: 15px; color: var(--color-pink-accent);
+        }
+        #modal-body hr {
+            border: 0; border-top: 1px solid var(--color-border-medium); margin: 20px 0;
+        }
         #modal-body .product-price-large {
             font-size: 1.4rem; 
             color: var(--color-pink-accent); 
             margin-bottom: 10px; 
             display: block;
+            font-weight: 700;
+        }
+        .product-availability strong {
+            font-weight: 600;
+        }
+        .quantity-controls { 
+            margin-bottom: 15px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        .quantity-controls input { 
+            width: 60px; 
+            padding: 5px; 
+            border: 1px solid var(--color-border-medium); 
+            border-radius: 4px; 
         }
         
-        #modal-body .product-image-modal { 
-            max-height: 300px; 
-        }
-        .modal-image-col {
-            flex: 1; 
-            min-width: 200px; 
-        }
-        .modal-details-col {
-            flex: 2;
-        }
-
         .add-to-cart-btn {
             background-color: var(--color-pink-dark); 
             color: white; 
@@ -308,10 +335,13 @@
             border: none;
             cursor: pointer;
             transition: background-color 0.3s;
+            width: 100%; /* Full width on mobile */
+            display: block;
         }
         .add-to-cart-btn:hover {
             background-color: var(--color-pink-accent);
         }
+        /* 🚨 END RESPONSIVE MODAL BODY CSS */
 
         /* Access Required Modal Specific Styles */
         #access-required-modal .modal-content {
@@ -322,6 +352,10 @@
             font-size: 1.8rem;
             color: var(--color-danger);
             margin-top: 10px;
+        }
+        #access-required-modal .modal-content p {
+            color: var(--color-text-dark); /* Changed color for visibility */
+            margin-bottom: 15px;
         }
         #access-required-modal .modal-content button {
             background-color: var(--color-pink-accent);
@@ -368,12 +402,30 @@
             .product-card { height: 320px; }
             .product-image { height: 180px; }
             
+            /* 🚨 DESKTOP MODAL LAYOUT */
+            #modal-content { 
+                padding: 40px; /* Increase padding on desktop */
+            }
             #modal-body { 
-                flex-direction: row; 
+                flex-direction: row; /* Side-by-side layout on desktop */
                 gap: 25px; 
             }
-            .modal-image-col { min-width: 250px; }
-            .modal-details-col { flex: 2; } 
+            .modal-image-col { 
+                flex: 1; /* Equal flex space on desktop */
+                min-width: 250px; 
+                width: 40%; /* Custom width */
+            }
+            .modal-details-col { 
+                flex: 2; 
+                width: 60%; /* Custom width */
+            } 
+            .product-image-modal {
+                max-height: 500px; /* Larger image height on desktop */
+            }
+            .add-to-cart-btn {
+                width: auto; /* Auto width on desktop */
+            }
+
 
             .product-details { padding: 15px; } 
             .product-name { font-size: 1.15rem; height: 3em; } 
@@ -444,7 +496,7 @@
         <div class="modal-content">
             <i class="fa-solid fa-user-lock" style="font-size: 3rem; color: var(--color-pink-dark); margin-bottom: 10px;"></i>
             <h3>Login Required</h3>
-            <p style="color: var(--color-bg-light);">To shop and manage your cart, please log in or register.</p>
+            <p style="color: var(--color-text-dark);">To shop and manage your cart, please log in or register.</p>
             <button onclick="redirectToAuthPage()">
                 <i class="fa-solid fa-sign-in-alt"></i> Go to Login / Register
             </button>
@@ -695,9 +747,10 @@
             const stock = parseInt(product.stock, 10);
             
             const stockStatus = stock > 0 ? 
-                `<span class="stock-in" style="color: green;">In Stock (${stock} left)</span>` : 
+                `<span class="stock-in" style="color: var(--color-success);">In Stock (${stock} left)</span>` : 
                 `<span class="stock-out" style="color: var(--color-danger);">Out of Stock</span>`;
             
+            // 🚨 Re-injecting the user's snippet, now wrapped in the correct modal-body structure
             modalBody.innerHTML = `
                 <div class="modal-image-col">
                     <img src="${product.imageUrl}" alt="${product.name}" class="product-image-modal" onerror="this.onerror=null;this.src='https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys'">
