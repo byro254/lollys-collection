@@ -22,6 +22,7 @@
             --color-danger: #dc3545;
             --color-success: #28a745;
             --color-warning: #ffc107;
+            --color-mpesa-green: #37A237; /* M-Pesa Green */
 
             --font-heading: 'Playfair Display', serif;
             --font-body: 'Poppins', sans-serif;
@@ -304,6 +305,31 @@
             margin-bottom: 10px;
             color: var(--color-pink-dark); 
         }
+
+        /* 🚨 NEW: M-Pesa Info Card */
+        .mpesa-info-card {
+            background-color: var(--color-mpesa-green); 
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+            text-align: left;
+        }
+        .mpesa-info-card strong {
+            display: block;
+            font-size: 1.1rem;
+            margin-bottom: 5px;
+        }
+        .mpesa-info-card span {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            background: rgba(0, 0, 0, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
         
         /* --- Order History Table --- */
         .order-table {
@@ -578,16 +604,16 @@
         </div>
     </div>
     
-    <!-- 🚨 M-PESA DEPOSIT MODAL -->
-    <div id="mpesa-deposit-modal" class="modal">
+    <!-- 🚨 M-PESA STK PUSH DEPOSIT MODAL -->
+    <div id="mpesa-stk-modal" class="modal">
         <div class="modal-content-small">
-            <span class="close-btn" onclick="closeModal('mpesa-deposit-modal')">&times;</span>
-            <h3 id="mpesa-modal-title">Deposit via M-Pesa</h3>
-            <form id="mpesa-deposit-form">
+            <span class="close-btn" onclick="closeModal('mpesa-stk-modal')">&times;</span>
+            <h3 id="mpesa-modal-title">Deposit via M-Pesa STK Push</h3>
+            <form id="mpesa-stk-form">
                 <div class="modal-info">
                     <strong>Paybill Number:</strong>
                     <p id="paybill-number">174379 (Sandbox)</p>
-                    <strong>Account Number:</strong>
+                    <strong>Account Number (Your ID):</strong>
                     <p id="account-number-display-mpesa"></p>
                 </div>
 
@@ -602,18 +628,48 @@
                 </div>
 
                 <button type="submit" class="deposit-button" id="mpesa-deposit-btn" style="width: 100%;">
-                    Deposit Now
+                    Request STK Push
                 </button>
                 <div id="mpesa-deposit-message" style="margin-top: 10px; display: none;"></div>
             </form>
         </div>
     </div>
+    
+    <!-- 🚨 NEW MODAL: M-Pesa Manual Deposit (SIM TOOLKIT) -->
+    <div id="mpesa-manual-modal" class="modal">
+        <div class="modal-content-small">
+            <span class="close-btn" onclick="closeModal('mpesa-manual-modal')">&times;</span>
+            <h3 id="mpesa-manual-title">Lipa Na M-Pesa: Manual Payment</h3>
+            <form id="mpesa-manual-form">
+                
+                <div class="mpesa-info-card">
+                    <p style="font-size: 0.9rem; margin-bottom: 10px;">Transfer funds using M-Pesa's Paybill option (SIM Toolkit or App), then validate below.</p>
+                    <strong>Paybill: <span>714888</span></strong>
+                    <strong>Account: <span>386704</span></strong>
+                </div>
 
-    <!-- 🚨 NEW MODAL 1: M-Pesa Processing/Spinner Modal -->
+                <div class="form-group">
+                    <label for="manual-code">M-Pesa Transaction Code (e.g., TKULKBKLZD):</label>
+                    <input type="text" id="manual-code" placeholder="10-digit alphanumeric code" required pattern="^[A-Z0-9]{10}$" maxlength="10" style="text-transform: uppercase;">
+                </div>
+
+                <div class="form-group">
+                    <label for="manual-amount">Amount Paid (KES):</label>
+                    <input type="number" id="manual-amount" min="10" placeholder="Must match actual amount paid" required>
+                </div>
+
+                <button type="submit" class="deposit-button" id="mpesa-manual-btn" style="width: 100%;">
+                    Verify Payment & Credit Account
+                </button>
+                <div id="mpesa-manual-message" class="message" style="margin-top: 10px; display: none;"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 🚨 M-Pesa Processing/Spinner Modal (Used by STK Push) -->
     <div id="deposit-processing-modal" class="modal">
         <div class="modal-content-small">
             <div class="spinner-container">
-                <!-- Using Font Awesome spinner for better compatibility -->
                 <i class="fas fa-mobile-alt" style="font-size: 3rem; color: var(--color-pink-accent); margin-bottom: 15px;"></i>
                 <div class="spinner-text">
                     Waiting for M-Pesa PIN...
@@ -634,7 +690,7 @@
         </div>
     </div>
 
-    <!-- 🚨 NEW MODAL 2: M-Pesa Success Modal -->
+    <!-- 🚨 M-Pesa Success Modal -->
     <div id="deposit-success-modal" class="modal">
         <div class="modal-content-small">
             <h3 style="display: flex; align-items: center; justify-content: center;">
@@ -654,11 +710,11 @@
         </div>
     </div>
 
-    <!-- 🚨 CARD DEPOSIT MODAL (Unchanged) -->
+    <!-- 🚨 DEBIT/CREDIT CARD MODAL (Simulated, retained for generic payments) -->
     <div id="card-deposit-modal" class="modal">
         <div class="modal-content-small">
             <span class="close-btn" onclick="closeModal('card-deposit-modal')">&times;</span>
-            <h3 id="card-modal-title">Deposit via Card (Simulated)</h3>
+            <h3 id="card-modal-title">Deposit via Debit / Credit Card</h3>
             <form id="card-deposit-form">
                 <div class="form-group">
                     <label for="card-number">Card Number:</label>
@@ -814,21 +870,28 @@
                     </div>
                     
                     <h3>Payment Methods</h3>
-                    <p style="color: var(--color-text-subtle);">Select a method to deposit funds into your wallet.</p>
+                    <p style="color: var(--color-text-subtle);">Select a method or verify a payment to deposit funds into your wallet.</p>
                     
                     <div class="payment-method-grid">
-                        <div class="method-card" onclick="openDepositModal('M-Pesa')">
+                        
+                        <!-- 🚨 M-PESA STK PUSH -->
+                        <div class="method-card" onclick="openDepositModal('M-Pesa STK')">
                             <i class="fas fa-mobile-alt"></i>
-                            <p>M-Pesa</p>
+                            <p>M-Pesa STK Push</p>
                         </div>
-                        <div class="method-card" onclick="openDepositModal('Visa / Mastercard')">
-                            <i class="fab fa-cc-visa"></i>
-                            <p>Visa / Card</p>
+
+                        <!-- 🚨 M-PESA MANUAL (SIM TOOLKIT) -->
+                        <div class="method-card" onclick="openDepositModal('M-Pesa Manual')">
+                            <i class="fas fa-key"></i>
+                            <p>M-Pesa Manual Verify</p>
                         </div>
-                        <div class="method-card" onclick="openDepositModal('PayPal')">
-                            <i class="fab fa-paypal"></i>
-                            <p>PayPal</p>
+
+                        <!-- 🚨 DEBIT / CREDIT CARD (Simulated) -->
+                        <div class="method-card" onclick="openDepositModal('Card')">
+                            <i class="fas fa-credit-card"></i>
+                            <p>Debit / Credit Card</p>
                         </div>
+                        
                     </div>
                 </div>
             </section>
@@ -875,6 +938,8 @@
         
         // 🚨 NEW: M-Pesa Status Query Endpoint
         const MPESA_STATUS_QUERY_API_URL = '/api/wallet/deposit/status'; 
+        // 🚨 NEW: Manual M-Pesa Verification Endpoint
+        const MPESA_MANUAL_API_URL = '/api/wallet/deposit/mpesa-manual';
 
         const REFRESH_INTERVAL_MS = 1800000; // 30 minutes
         const POLLING_INTERVAL_MS = 3000; // Check status every 3 seconds
@@ -910,7 +975,8 @@
         function showModalMessage(id, message, type) {
             const messageEl = document.getElementById(id);
             messageEl.textContent = message;
-            messageEl.style.color = type === 'success' ? 'var(--color-success)' : 'var(--color-danger)';
+            // Use existing CSS for styling messages
+            messageEl.className = type === 'success' ? 'message success' : 'message error';
             messageEl.style.display = 'block';
             setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
         }
@@ -1087,7 +1153,7 @@
         }
 
         function populateForm(data) {
-            renderProfilePicture(data.profilePictureUrl, 'current-profile-picture');
+            // FIX: Use data.name which is now the username
             document.getElementById('full-name').value = data.name || '';
             document.getElementById('email').value = data.email || '';
             document.getElementById('phone-number').value = data.phoneNumber || '';
@@ -1180,10 +1246,15 @@
         async function fetchAndRenderWallet() {
             if (!isUserAuthenticated) return;
             const balanceDisplay = document.getElementById('wallet-balance-display');
-            const accountNoDisplayMpesa = document.getElementById('account-number-display-mpesa');
             
+            // Get all elements that display the account number
+            const accountNoDisplays = [
+                document.getElementById('account-number-display-mpesa'),
+                document.getElementById('account-number-display-manual') // New manual modal ID
+            ];
+
             balanceDisplay.textContent = 'Loading...';
-            if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'Loading...';
+            accountNoDisplays.forEach(el => { if (el) el.textContent = 'Loading...'; });
 
             try {
                 const response = await fetch(WALLET_BALANCE_API_URL);
@@ -1193,17 +1264,17 @@
                     
                     balanceDisplay.textContent = `KES ${parseFloat(walletData.balance || 0).toFixed(2)}`;
                     
-                    if (accountNoDisplayMpesa) {
-                        accountNoDisplayMpesa.textContent = walletData.account_number || 'N/A';
-                    }
+                    accountNoDisplays.forEach(el => {
+                        if (el) el.textContent = walletData.account_number || 'N/A';
+                    });
                 } else {
                     balanceDisplay.textContent = `KES 0.00`;
-                    if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'N/A';
+                    accountNoDisplays.forEach(el => { if (el) el.textContent = 'N/A'; });
                 }
 
             } catch (error) {
                 balanceDisplay.textContent = `KES 0.00`;
-                if (accountNoDisplayMpesa) accountNoDisplayMpesa.textContent = 'N/A';
+                accountNoDisplays.forEach(el => { if (el) el.textContent = 'N/A'; });
                 console.error('Error fetching wallet:', error);
             }
         }
@@ -1336,9 +1407,9 @@
                 document.getElementById('deposit-success-modal').style.display = 'flex';
                 
             } else {
-                // Show failure message in the original deposit modal or a new general modal
+                // Show failure message in the STK modal
                 showModalMessage('mpesa-deposit-message', `Transaction ${result.status.toUpperCase()}: ${result.message}`, 'error');
-                document.getElementById('mpesa-deposit-modal').style.display = 'flex';
+                document.getElementById('mpesa-stk-modal').style.display = 'flex';
             }
         }
 
@@ -1346,9 +1417,9 @@
             if (pollingIntervalId) clearInterval(pollingIntervalId);
             closeModal('deposit-processing-modal');
             
-            // Optionally: Notify the server that the client cancelled (for logging)
+            // Notify the user that tracking was cancelled
             showModalMessage('mpesa-deposit-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
-            document.getElementById('mpesa-deposit-modal').style.display = 'flex';
+            document.getElementById('mpesa-stk-modal').style.display = 'flex';
         }
 
         window.closeSuccessModal = function() {
@@ -1359,24 +1430,29 @@
         // --- Payment Modals and Handlers ---
 
         window.openDepositModal = function(method) {
-            closeModal('mpesa-deposit-modal');
+            // Close all related modals first
+            closeModal('mpesa-stk-modal');
+            closeModal('mpesa-manual-modal');
             closeModal('card-deposit-modal');
             
-            if (method === 'M-Pesa') {
+            if (method === 'M-Pesa STK') {
                 fetchAndRenderWallet(); // To get the latest account number
-                document.getElementById('mpesa-deposit-modal').style.display = 'flex';
-                // Clear old messages when opening
+                document.getElementById('mpesa-stk-modal').style.display = 'flex';
                 document.getElementById('mpesa-deposit-message').style.display = 'none';
                 
-            } else if (method === 'Visa / Mastercard') {
+            } else if (method === 'M-Pesa Manual') {
+                fetchAndRenderWallet(); 
+                document.getElementById('mpesa-manual-modal').style.display = 'flex';
+                document.getElementById('mpesa-manual-message').style.display = 'none';
+                
+            } else if (method === 'Card') {
                 document.getElementById('card-deposit-modal').style.display = 'flex';
-            } else if (method === 'PayPal') {
-                // Simulate redirection to PayPal official page
-                window.location.href = 'https://www.paypal.com/signin?simulated=true';
+                document.getElementById('card-deposit-message').style.display = 'none';
             }
         }
         
-        document.getElementById('mpesa-deposit-form').addEventListener('submit', async function(e) {
+        // 1. M-PESA STK PUSH HANDLER
+        document.getElementById('mpesa-stk-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const phone = document.getElementById('mpesa-phone').value;
             const amount = document.getElementById('mpesa-amount').value;
@@ -1386,7 +1462,6 @@
             const btn = document.getElementById('mpesa-deposit-btn');
             const originalBtnHtml = btn.innerHTML;
             
-            // 1. Initial State: Disable button and show processing
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending STK Push...';
 
@@ -1400,8 +1475,8 @@
                 if (response.ok) {
                     const result = await response.json();
                     
-                    // 2. Success: Close deposit modal, open processing modal, and start polling
-                    closeModal('mpesa-deposit-modal');
+                    // Success: Close deposit modal, open processing modal, and start polling
+                    closeModal('mpesa-stk-modal');
                     
                     document.getElementById('processing-checkout-id').textContent = result.transactionRef;
                     document.getElementById('deposit-processing-modal').style.display = 'flex';
@@ -1409,7 +1484,7 @@
                     startPolling(result.transactionRef);
                     
                 } else {
-                    // 3. Failure (API side error): Stay on deposit modal, show error
+                    // Failure (API side error): Stay on deposit modal, show error
                     const result = await response.json();
                     showModalMessage('mpesa-deposit-message', result.message || 'Deposit failed. Check details.', 'error');
                 }
@@ -1417,18 +1492,65 @@
                 console.error('M-Pesa deposit error:', error);
                 showModalMessage('mpesa-deposit-message', 'Network error during STK Push request.', 'error');
             } finally {
-                // 4. Restore button state
                 btn.disabled = false;
                 btn.innerHTML = originalBtnHtml;
             }
         });
         
+        // 2. 🚨 NEW: M-PESA MANUAL VERIFICATION HANDLER
+        document.getElementById('mpesa-manual-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const transactionCode = document.getElementById('manual-code').value.toUpperCase();
+            const amount = document.getElementById('manual-amount').value;
+            depositAmount = parseFloat(amount);
+            
+            const btn = document.getElementById('mpesa-manual-btn');
+            const originalBtnHtml = btn.innerHTML;
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying Code...';
+
+            try {
+                const response = await fetch(MPESA_MANUAL_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transactionCode, amount })
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Success: Close manual modal, show success modal
+                    closeModal('mpesa-manual-modal');
+                    
+                    document.getElementById('success-amount').textContent = `KES ${depositAmount.toFixed(2)}`;
+                    document.getElementById('success-mpesa-ref').textContent = result.mpesaRef || transactionCode;
+                    document.getElementById('deposit-success-modal').style.display = 'flex';
+                    
+                } else {
+                    // Failure: Stay on manual modal, show error
+                    const result = await response.json();
+                    showModalMessage('mpesa-manual-message', result.message || 'Verification failed.', 'error');
+                }
+            } catch (error) {
+                console.error('Manual verification error:', error);
+                showModalMessage('mpesa-manual-message', 'Network error during payment verification.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalBtnHtml;
+                refreshDynamicData('wallet');
+            }
+        });
+
+        // 3. DEBIT/CREDIT CARD HANDLER
         document.getElementById('card-deposit-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const cardNumber = document.getElementById('card-number').value;
             const expiry = document.getElementById('expiry').value;
             const cvv = document.getElementById('cvv').value;
             const amount = document.getElementById('card-amount').value;
+            depositAmount = parseFloat(amount); // Store amount for success modal
+            
             const btn = document.getElementById('card-deposit-btn');
             const originalBtnHtml = btn.innerHTML;
             
@@ -1436,7 +1558,6 @@
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
             
             try {
-                // In a real app, this would use a secure payment gateway SDK, not a direct POST to your API.
                 const response = await fetch(CARD_DEPOSIT_API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1444,9 +1565,17 @@
                 });
 
                 if (response.ok) {
+                    const result = await response.json();
+                    
                     showModalMessage('card-deposit-message', 'Card payment successful! Funds are now available.', 'success');
+                    
+                    // Show success modal instead of just hiding
+                    closeModal('card-deposit-modal');
+                    document.getElementById('success-amount').textContent = `KES ${depositAmount.toFixed(2)}`;
+                    document.getElementById('success-mpesa-ref').textContent = result.transactionRef; // Use the simulated ref
+                    document.getElementById('deposit-success-modal').style.display = 'flex';
+
                     this.reset();
-                    setTimeout(() => closeModal('card-deposit-modal'), 2000);
                 } else {
                     const result = await response.json();
                     showModalMessage('card-deposit-message', result.message || 'Card payment failed. Please check details.', 'error');
