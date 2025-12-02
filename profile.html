@@ -79,7 +79,7 @@
             opacity: 0.7;
         }
 
-        /* --- HEADER & NAVIGATION --- */
+        /* --- HEADER & NAVIGATION (UPDATED) --- */
         .site-header {
             background-color: lightpink;
             box-shadow: 0 2px 4px var(--color-shadow);
@@ -93,12 +93,29 @@
         }
         .logo-link {
             font-family: var(--font-heading);
-            font-size: 1.2em;
+            font-size: 1.6em; /* Slightly larger logo */
             font-weight: 700;
             color: var(--color-pink-dark);
             text-decoration: none;
             flex-shrink: 0; 
             margin-right: 15px;
+        }
+        
+        /* New Nav Icon Styling */
+        .header-nav {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .nav-icon {
+            color: var(--color-pink-dark);
+            font-size: 1.2rem;
+            padding: 5px;
+            transition: color 0.3s, transform 0.2s;
+        }
+        .nav-icon:hover {
+            color: var(--color-pink-accent);
+            transform: scale(1.1);
         }
         
         /* Hamburger icon for mobile */
@@ -331,7 +348,7 @@
             display: inline-block;
         }
         
-        /* --- Order History Table --- */
+        /* --- Order History Table (UPDATED FOR MOBILE) --- */
         .order-table {
             width: 100%;
             border-collapse: collapse;
@@ -428,10 +445,7 @@
         
         /* --- Responsive Adjustments --- */
         @media (max-width: 900px) {
-            .site-header {
-                justify-content: flex-start;
-                gap: 15px;
-            }
+           
             .hamburger-icon {
                 display: block;
             }
@@ -454,9 +468,65 @@
             .sidebar-close-icon {
                 display: block;
             }
-            .logo-link {
-                margin-left: auto;
+            /* Removed unnecessary logo-link margin-left */
+        }
+
+        /* 🚨 ORDER TABLE MOBILE STYLING (Max 600px) */
+        @media (max-width: 600px) {
+            .order-table thead {
+                /* Hide the header on mobile */
+                display: none;
             }
+            
+            .order-table, .order-table tbody, .order-table tr, .order-table td {
+                /* Force table elements to be block/stack */
+                display: block;
+                width: 100%;
+            }
+            
+            .order-table tr {
+                margin-bottom: 15px;
+                border: 1px solid var(--color-border-medium);
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            
+            .order-table td {
+                /* Ensure padding is uniform and border is removed (using border on TR now) */
+                padding: 10px 15px;
+                text-align: right;
+                position: relative;
+                border-bottom: 1px dashed var(--color-border-medium);
+            }
+            
+            .order-table td:last-child {
+                border-bottom: 0;
+            }
+
+            .order-table td::before {
+                /* Use pseudo element to display the header label */
+                content: attr(data-label);
+                position: absolute;
+                left: 15px;
+                width: 40%; 
+                padding-right: 10px;
+                white-space: nowrap;
+                font-weight: 600;
+                color: var(--color-pink-dark);
+            }
+
+            /* Hide less critical columns entirely by their position/data-label if needed */
+            /* For the sake of showing all data, we will just use the labels above */
+
+            /* Hide the 'Items' and 'Date' columns from header and data if they are too noisy */
+            /* Note: We use data-label to show the content in TD, so we keep TD but hide TH */
+             .order-table th:nth-child(2), /* Date */
+             .order-table td:nth-child(2),
+             .order-table th:nth-child(3), /* Items */
+             .order-table td:nth-child(3) {
+                 /* Display block allows ::before pseudo element to work correctly */
+                 display: block; 
+             }
         }
         
         /* --- Modal Styles --- */
@@ -745,22 +815,25 @@
     </div>
     <!-- END MODALS -->
 
-    <!-- 🚨 HEADER (GATED) -->
+    <!-- 🚨 HEADER (GATED - UPDATED STRUCTURE) -->
     <header class="site-header gated-content disabled">
         <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
             <i class="fas fa-bars"></i>
         </button>
+        
+        <!-- Primary Logo Link -->
+        <a href="/" class="logo-link" title="Home">
+            Lolly's
+        </a>
       
-        <!-- Auth/Cart Icons -->
+        <!-- Auth/Cart Icons (Grouped Right) -->
         <nav class="header-nav">
+             <!-- Home link is now redundant here since Lolly's is the home link -->
              <a href="/cart" class="nav-icon cart-icon-with-count" title="Cart">
                 <i class="fa-solid fa-shopping-cart"></i>
             </a>
             <a href="#" class="nav-icon" id="logout-link" title="Logout">
                 <i class="fas fa-sign-out-alt"></i>
-            </a>
-            <a href="/" class="nav-icon logo-link" title="Home">
-               <i class="fas fa-home"></i> 
             </a>
         </nav>
     </header>
@@ -1202,6 +1275,9 @@
         async function fetchAndRenderOrders() {
             if (!isUserAuthenticated) return;
             const tbody = document.getElementById('orders-tbody');
+            // Cache column names for mobile responsiveness
+            const columnNames = ['ID', 'Date', 'Items', 'Total', 'Status']; 
+            
             tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching orders...</td></tr>';
 
             try {
@@ -1220,14 +1296,19 @@
                         // Normalize status for CSS class, replacing spaces/colons
                         const statusClass = (order.status || 'Pending').replace(/[^a-zA-Z0-9]/g, '\\ ');
                         const totalItems = order.items ? order.items.length : 'N/A';
+                        const orderDate = new Date(order.date).toLocaleDateString();
+                        const orderTotal = `KES ${parseFloat(order.total || 0).toFixed(2)}`;
+                        const orderId = `#${order.orderId || '0000'}`;
+                        const orderStatus = order.status || 'Pending';
                         
+                        // Use data-label attributes for mobile view
                         const row = `
                             <tr>
-                                <td>#${order.orderId || '0000'}</td>
-                                <td>${new Date(order.date).toLocaleDateString()}</td>
-                                <td>${totalItems} items</td>
-                                <td>KES ${parseFloat(order.total || 0).toFixed(2)}</td>
-                                <td><span class="status-badge ${statusClass}">${order.status || 'Pending'}</span></td>
+                                <td data-label="${columnNames[0]}">${orderId}</td>
+                                <td data-label="${columnNames[1]}">${orderDate}</td>
+                                <td data-label="${columnNames[2]}">${totalItems} items</td>
+                                <td data-label="${columnNames[3]}">${orderTotal}</td>
+                                <td data-label="${columnNames[4]}"><span class="status-badge ${statusClass}">${orderStatus}</span></td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);
@@ -1253,7 +1334,7 @@
             // Get all elements that display the account number
             const accountNoDisplays = [
                 document.getElementById('account-number-display-mpesa'),
-                document.getElementById('account-number-display-manual') // New manual modal ID
+                // document.getElementById('account-number-display-manual') // New manual modal ID is handled by account-number-display-mpesa in the HTML
             ];
 
             balanceDisplay.textContent = 'Loading...';
@@ -1288,6 +1369,7 @@
         async function fetchAndRenderPaymentHistory() {
              if (!isUserAuthenticated) return;
              const tbody = document.getElementById('payment-history-tbody');
+             
              tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
              
              try {
@@ -1307,12 +1389,13 @@
                         const amountText = `KES ${parseFloat(transaction.amount || 0).toFixed(2)}`;
                         const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
                         
+                        // Use data-label for mobile history table
                         const row = `
                             <tr>
-                                <td>${new Date(transaction.date).toLocaleDateString()}</td>
-                                <td>${transaction.type || 'Transaction'}</td>
-                                <td style="${amountStyle}">${amountText}</td>
-                                <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
+                                <td data-label="Date">${new Date(transaction.date).toLocaleDateString()}</td>
+                                <td data-label="Type">${transaction.type || 'Transaction'}</td>
+                                <td data-label="Amount" style="${amountStyle}">${amountText}</td>
+                                <td data-label="Status"><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);

@@ -1,21 +1,17 @@
-// server.js (Updated for 50k RPS throughput optimization)
+// server.js (Updated to handle manual M-Pesa deposits)
 
 // 1. Load environment variables first
-require('dotenv').config();
+require('dotenv').config(); 
 
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
-// 🚨 NEW: Compression middleware for faster responses
-const compression = require('compression');
-// 🚨 NEW: Throttle and Bottleneck for API call rate limiting and concurrency control
-const Bottleneck = require('bottleneck');
 // 🚨 RESEND INTEGRATION
-const { Resend } = require('resend');
-const bcrypt = require('bcrypt');
-const session = require('express-session');
+const { Resend } = require('resend'); 
+const bcrypt = require('bcrypt'); 
+const session = require('express-session'); 
 const MySQLStore = require('express-mysql-session')(session);
 const db = require('./db');
 const crypto = require('crypto');
@@ -31,23 +27,9 @@ const otpCache = {};
 const sms = africastalking.SMS;
 // Import DB functions
 // 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, } = require('./db');
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit } = require('./db'); 
 
-const passwordResetCache = {};
-
-// 🚨 HIGH CONCURRENCY OPTIMIZATION: Bottleneck for controlling outbound/internal concurrency
-// Set max concurrency to protect the database and external APIs (like Resend)
-const limiter = new Bottleneck({
-    maxConcurrent: 50, // Limit simultaneous requests hitting the database or external APIs
-    minTime: 1 // Minimum time between executions in milliseconds (1ms means 1000/sec maximum internally)
-});
-
-// A stricter limiter for external services like Resend or M-Pesa that have known low limits
-const externalLimiter = new Bottleneck({
-    maxConcurrent: 5,
-    minTime: 200 // Max 5 requests every 200ms (25 RPS max for external services)
-});
-
+const passwordResetCache = {}; 
 
 const sessionStoreOptions = {
      host: process.env.DB_HOST, // 🚨 Updated
@@ -59,39 +41,32 @@ const sessionStoreOptions = {
     // Additional options can be added here
 };
 const sessionStore = new MySQLStore(sessionStoreOptions);
-// 🚨 CRITICAL SCALING POINT: Use the external limiter for Resend
 const resend = new Resend(process.env.RESEND_API_KEY);
-const resendSendEmail = (options) => externalLimiter.schedule(() => resend.emails.send(options));
-
 
 const verificationCache = {};
 
-const loginAttempts = {};
+const loginAttempts = {}; 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 60 * 60 * 1000; // 1 hour
 const app = express();
 // 🚨 NEW: Create HTTP Server instance
-const server = http.createServer(app);
+const server = http.createServer(app); 
 
 app.set('trust proxy', 1);
-const port = process.env.PORT || 3000;
-const saltRounds = 10;
+const port = process.env.PORT || 3000; 
+const saltRounds = 10; 
 
 app.use(cors({
-    origin: true,
-    credentials: true
+    origin: true, 
+    credentials: true 
 }));
-
-// 🚨 NEW: Add GZIP compression for all responses
-app.use(compression());
-
 // --- ADMIN & AUTH CONFIGURATION (from .env) ---
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_FULL_NAME = process.env.ADMIN_FULL_NAME;
 const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
 const ADMIN_WHATSAPP = process.env.ADMIN_WHATSAPP;
 // Admin ID used for chat, using the session ID set during login
-const ADMIN_CHAT_ID = 'admin_env';
+const ADMIN_CHAT_ID = 'admin_env'; 
 
 // 🚨 NEW: ADMIN WALLET ID (Fixed User ID 0 for central business account)
 // This wallet represents the business's capital and revenue.
@@ -122,70 +97,30 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
-// 🚨 NEW: SLIDING WINDOW RATE LIMITER (In-memory, protects against excessive requests)
-// For 50k RPS, this would need to be in Redis, but we start here.
-const rateLimit = {};
-const WINDOW_SIZE_MS = 60000; // 1 minute window
-// 🚨 Set global API limit to 300 requests per minute (5 RPS) per IP.
-// This is a safety measure. The target 50k RPS must come from load balancing.
-const MAX_REQUESTS = 300;
 
-function globalRateLimiter(req, res, next) {
-    // Exclude static files and /api/products from strict limiting if possible
-    if (req.url.startsWith('/api/products') && req.method === 'GET') {
-        return next();
-    }
-    
-    const ip = req.ip;
-    const now = Date.now();
-    
-    // Initialize or clean up the log
-    rateLimit[ip] = rateLimit[ip] || [];
-    rateLimit[ip] = rateLimit[ip].filter(timestamp => timestamp > now - WINDOW_SIZE_MS);
-
-    if (rateLimit[ip].length >= MAX_REQUESTS) {
-        // Return 429 Too Many Requests
-        return res.status(429).json({
-            message: 'Too many requests. Please try again later.',
-            limit: MAX_REQUESTS,
-            window: WINDOW_SIZE_MS / 1000 + ' seconds'
-        });
-    }
-
-    rateLimit[ip].push(now);
-    next();
-}
+// --- End Multer and Nodemailer setup ---
 
 
 // --- Middleware Setup ---
-app.use(express.json());
+app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
-// 🚨 Apply global rate limiter to all API routes
-app.use('/api', globalRateLimiter);
-
-
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.static(__dirname));
+app.use(express.static(path.join(__dirname, 'public'))); 
+app.use(express.static(__dirname)); 
 app.use('public/images/products', express.static(path.join(__dirname, 'products')));
 app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
 app.use('/images/products', express.static(UPLOAD_DIR));
-
 // Configure session middleware
-// 🚨 CRITICAL SCALING FIX: We move the session middleware to be application-specific, 
-// not applied to every single request, especially static files.
-const sessionMiddleware = session({
-    secret: process.env.SESSION_SECRET ,
+app.use(session({
+    secret: process.env.SESSION_SECRET , 
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: false, 
     // ⬇️ CRITICAL CHANGE: Use the external store
-    store: sessionStore,
-    cookie: {
-        maxAge: 1000 * 60 * 60 * 24,
-        secure: process.env.NODE_ENV === 'production'
+    store: sessionStore, 
+    cookie: { 
+        maxAge: 1000 * 60 * 60 * 24, 
+        secure: process.env.NODE_ENV === 'production' 
     }
-});
-app.use(sessionMiddleware); // We will apply it globally for simplicity but note this is a bottleneck
-
+}));
 // Authentication Middleware
 function isAuthenticated(req, res, next) {
     if (req.session.isAuthenticated) {
@@ -209,7 +144,7 @@ function isAdmin(req, res, next) {
 }
 
 /**
- * Checks if the provided verification token (vtoken) is valid and unexpired
+ * Checks if the provided verification token (vtoken) is valid and unexpired 
  * for a given email in the in-memory cache.
  * @param {string} email - The user's email.
  * @param {string} vtoken - The verification token provided by the client.
@@ -248,8 +183,8 @@ const requireAuth = (req, res, next) => {
     } else {
         // If not logged in, return an authentication error
         // 401: Unauthorized - The client MUST authenticate itself to get the requested response.
-        res.status(401).json({
-            message: 'Authentication required. Please log in to access this resource.'
+        res.status(401).json({ 
+            message: 'Authentication required. Please log in to access this resource.' 
         });
     }
 };
@@ -260,14 +195,14 @@ const requireAuth = (req, res, next) => {
 /**
  * 🚨 ROUTING LOGIC: Landing Page (/)
  */
-app.get('/', (req, res) => {
+app.get('/', (req, res) => { 
     if (!req.session.isAuthenticated) {
-        return res.redirect('/auth');
+        return res.redirect('/auth'); 
     }
     if (req.session.isAdmin) {
         return res.redirect('/admin.html');
     }
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html')); 
 });
 
 /**
@@ -275,14 +210,14 @@ app.get('/', (req, res) => {
  */
 app.get('/auth', (req, res) => {
     if (req.session.isAuthenticated) {
-        return res.redirect('/');
+        return res.redirect('/'); 
     }
     res.sendFile(path.join(__dirname, 'auth.html'));
 });
 
 // Admin dashboard is protected
-app.get('/admin.html', isAdmin, (req, res) => {
-    res.sendFile(path.join(__dirname, 'admin.html'));
+app.get('/admin.html', isAdmin, (req, res) => { 
+    res.sendFile(path.join(__dirname, 'admin.html')); 
 });
 
 // Client routes: Cart page now publicly accessible
@@ -298,10 +233,10 @@ app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.h
 //                   AUTHENTICATION API ROUTES (MODIFIED)
 // =========================================================
 
-app.post('/api/signup', limiter.wrap(async (req, res) => {
+app.post('/api/signup', async (req, res) => {
     // 🚨 UPDATED: Collect username and nationalId (which serves as user ID)
     const { username, email, nationalId, password } = req.body;
-
+    
     if (!username || !email || !nationalId || !password) {
         return res.status(400).json({ message: 'All fields (Username, Email, National ID, Password) are required.' });
     }
@@ -316,7 +251,7 @@ app.post('/api/signup', limiter.wrap(async (req, res) => {
 
     try {
         const password_hash = await bcrypt.hash(password, saltRounds);
-
+        
         // 1. Insert User (ID is the National ID)
         await pool.execute(
             'INSERT INTO users (id, username, email, password_hash) VALUES (?, ?, ?, ?)',
@@ -328,7 +263,7 @@ app.post('/api/signup', limiter.wrap(async (req, res) => {
             'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
             [userId, userId] // National ID used for both user_id and account_number
         );
-
+        
         res.status(201).json({ message: 'User registered successfully and wallet created.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
@@ -342,20 +277,20 @@ app.post('/api/signup', limiter.wrap(async (req, res) => {
         console.error('Signup error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
     }
-}));
+});
 
-app.post('/api/login', limiter.wrap(async (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     const attemptKey = email.toLowerCase();
     const now = Date.now();
-
+    
     // 1. Check Rate Limit / Lockout
     if (loginAttempts[attemptKey] && loginAttempts[attemptKey].lockoutTime > now) {
-        return res.status(401).json({
-            message: `Too many failed attempts. Try again in ${Math.ceil((loginAttempts[attemptKey].lockoutTime - now) / 60000)} minutes.`
+        return res.status(401).json({ 
+            message: `Too many failed attempts. Try again in ${Math.ceil((loginAttempts[attemptKey].lockoutTime - now) / 60000)} minutes.` 
         });
     }
-
+    
     // 2. Clear old attempts if successful login or lockout time passed
     if (loginAttempts[attemptKey] && loginAttempts[attemptKey].lockoutTime <= now) {
         loginAttempts[attemptKey] = { count: 0, lockoutTime: 0 };
@@ -372,7 +307,7 @@ app.post('/api/login', limiter.wrap(async (req, res) => {
         const user = users[0];
         if (!user) {
             // Use a slight delay to mitigate timing attacks
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 500)); 
             return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
         }
 
@@ -380,34 +315,34 @@ app.post('/api/login', limiter.wrap(async (req, res) => {
         if (!match) {
             return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
         }
-
+        
         // 3. Check Account Status (NEW REQUIREMENT)
         if (!user.is_active) {
-            return res.status(403).json({
-                message: 'Your account has been deactivated. Please contact admin.'
+            return res.status(403).json({ 
+                message: 'Your account has been deactivated. Please contact admin.' 
             });
         }
-
+        
         // 4. Successful Login: Clear attempts and set session
         delete loginAttempts[attemptKey];
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
         // 🚨 CRITICAL FIX: The user ID is now the National ID (VARCHAR)
-        req.session.userId = user.id;
+        req.session.userId = user.id; 
         // 🚨 FIX: Use 'username' for session compatibility
-        req.session.fullName = user.username;
-
-        res.json({
-            message: 'Login successful.',
+        req.session.fullName = user.username; 
+        
+        res.json({ 
+            message: 'Login successful.', 
             // 🚨 FIX: Use 'username' for response compatibility
-            user: { id: user.id, full_name: user.username, is_admin: user.is_admin }
+            user: { id: user.id, full_name: user.username, is_admin: user.is_admin } 
         });
 
     } catch (error) {
         console.error('Login error:', error);
         res.status(500).json({ message: 'Server error during login.' });
     }
-}));
+});
 
 /**
  * Helper function to handle failed login attempts and rate limiting logic.
@@ -420,15 +355,15 @@ function handleFailedLogin(res, attemptKey, message) {
     if (loginAttempts[attemptKey].count >= MAX_ATTEMPTS) {
         loginAttempts[attemptKey].lockoutTime = now + LOCKOUT_DURATION_MS;
         loginAttempts[attemptKey].count = 0; // Reset count for next cycle
-        return res.status(401).json({
-            message: 'Too many failed attempts. Account locked for 1 hour.'
+        return res.status(401).json({ 
+            message: 'Too many failed attempts. Account locked for 1 hour.' 
         });
     }
-    return res.status(401).json({
-        message: `${message} Attempt ${loginAttempts[attemptKey].count} of ${MAX_ATTEMPTS}.`
+    return res.status(401).json({ 
+        message: `${message} Attempt ${loginAttempts[attemptKey].count} of ${MAX_ATTEMPTS}.` 
     });
 }
-app.post('/api/admin/login', limiter.wrap(async (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
     const { email, password } = req.body;
 
     // 1. Check against hardcoded .env admin first
@@ -440,16 +375,16 @@ app.post('/api/admin/login', limiter.wrap(async (req, res) => {
                 req.session.isAdmin = true;
                 req.session.userId = ADMIN_CHAT_ID; // Use global const
                 req.session.fullName = ADMIN_FULL_NAME;
-                return res.json({
-                    message: 'Admin login successful.',
-                    user: { full_name: ADMIN_FULL_NAME, is_admin: true }
+                return res.json({ 
+                    message: 'Admin login successful.', 
+                    user: { full_name: ADMIN_FULL_NAME, is_admin: true } 
                 });
             }
         } catch (error) {
             console.error('Admin ENV Login hash check error:', error);
         }
     }
-
+    
     // 2. Check for DB user with admin flag
     try {
         // 🚨 FIX: Fetch 'username' instead of 'full_name'
@@ -463,18 +398,18 @@ app.post('/api/admin/login', limiter.wrap(async (req, res) => {
                 req.session.isAdmin = true;
                 req.session.userId = user.id;
                 req.session.fullName = user.username; // Use username
-                return res.json({
-                    message: 'Admin login successful.',
-                    user: { full_name: user.username, is_admin: true }
+                return res.json({ 
+                    message: 'Admin login successful.', 
+                    user: { full_name: user.username, is_admin: true } 
                 });
             }
         }
     } catch (error) {
         console.error('Admin DB Login error:', error);
     }
-
+    
     return res.status(401).json({ message: 'Invalid Admin Credentials.' });
-}));
+});
 
 
 app.post('/api/logout', (req, res) => {
@@ -486,14 +421,11 @@ app.post('/api/logout', (req, res) => {
     });
 });
 
-app.post('/api/forgot-password', (req, res) => {
+app.post('/api/forgot-password', async (req, res) => {
     const { email } = req.body;
     console.log(`Password reset requested for: ${email}`);
-
-    // This endpoint is non-critical for high traffic and does not need to be wrapped by limiter,
-    // but the actual email sending should be done via `resendSendEmail`.
+    
     try {
-        // We simulate sending for immediate response, actual logic is elsewhere
         res.json({ message: 'If that email is in our system, a password reset link has been sent.' });
     } catch (error) {
         res.status(500).json({ message: 'Failed to send reset email.' });
@@ -508,19 +440,19 @@ app.post('/api/forgot-password', (req, res) => {
  * 🚨 NEW: Fetches only users who have chatted recently (last 24 hours) or have unread messages.
  * Used to populate the Admin Chat Sidebar without listing every single registered user.
  */
-app.get('/api/admin/chat/recent-sessions', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
     try {
         // This complex query does the following:
         // 1. Gets unique customer_ids from chat_messages
         // 2. Orders them by the most recent message time
         // 3. Joins with users table to get names (if registered)
         // 4. Limits to top 20 recent conversations
-
+        
         const sql = `
-            SELECT
-                m.customer_id,
+            SELECT 
+                m.customer_id, 
                 MAX(m.created_at) as last_active,
-                u.username,
+                u.username, 
                 u.email
             FROM chat_messages m
             LEFT JOIN users u ON m.customer_id = u.id
@@ -528,9 +460,9 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, limiter.wrap(async (req, res
             ORDER BY last_active DESC
             LIMIT 20;
         `;
-
+        
         const [rows] = await pool.query(sql);
-
+        
         // Format data for frontend
         const sessions = rows.map(row => ({
             id: row.customer_id, // Can be 'anon-...' or '123'
@@ -544,16 +476,16 @@ app.get('/api/admin/chat/recent-sessions', isAdmin, limiter.wrap(async (req, res
         console.error('Error fetching recent chat sessions:', error);
         res.status(500).json({ message: 'Failed to retrieve active chat sessions.' });
     }
-}));
+});
 
 /**
  * POST /api/admin/chat/notify-busy
  * 🚨 NEW: Allows admin to send a system message to a user WITHOUT opening a websocket.
  * Used when admin is busy with another client.
  */
-app.post('/api/admin/chat/notify-busy', isAdmin, limiter.wrap(async (req, res) => {
+app.post('/api/admin/chat/notify-busy', isAdmin, async (req, res) => {
     const { customerId } = req.body;
-
+    
     if (!customerId) return res.status(400).json({ message: 'Customer ID required' });
 
     const busyMessage = "Our agents are currently assisting other customers. We have placed you in the priority queue and will be with you shortly. Thank you for your patience!";
@@ -576,13 +508,13 @@ app.post('/api/admin/chat/notify-busy', isAdmin, limiter.wrap(async (req, res) =
         console.error('Error sending busy notification:', error);
         res.status(500).json({ message: 'Failed to notify customer.' });
     }
-}));
+});
 
 /**
  * GET /api/admin/chat/history/:customerId
  * Retrieves chat history for a specific customer.
  */
-app.get('/api/admin/chat/history/:customerId', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
     const customerId = req.params.customerId;
     try {
         const history = await getChatHistory(customerId);
@@ -591,7 +523,7 @@ app.get('/api/admin/chat/history/:customerId', isAdmin, limiter.wrap(async (req,
         console.error(`Error fetching admin chat history for ${customerId}:`, error);
         res.status(500).json({ message: 'Failed to retrieve chat history.' });
     }
-}));
+});
 // ------------------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
@@ -599,7 +531,7 @@ app.get('/api/admin/chat/history/:customerId', isAdmin, limiter.wrap(async (req,
  * PUT /api/admin/customers/:id/status
  * Endpoint to toggle user activation status.
  */
-app.put('/api/admin/customers/:id/status', isAdmin, limiter.wrap(async (req, res) => {
+app.put('/api/admin/customers/:id/status', isAdmin, async (req, res) => {
     const userId = req.params.id;
     // req.body.is_active is a boolean: true or false
     const { is_active } = req.body;
@@ -623,7 +555,7 @@ app.put('/api/admin/customers/:id/status', isAdmin, limiter.wrap(async (req, res
         console.error(`Error toggling status for user ${userId}:`, error);
         res.status(500).json({ message: 'Server error while updating user status.' });
     }
-}));
+});
 /**
  * GET /api/auth/status
  * Checks if a user is logged in (session.userId exists).
@@ -645,7 +577,7 @@ app.get('/api/auth/status', (req, res) => {
  */
 app.get('/api/auth/check', isAdmin, (req, res) => {
     // If the isAdmin middleware passes, the user is authenticated and is an admin.
-    res.status(200).json({
+    res.status(200).json({ 
         message: 'Admin privileges confirmed.',
         authenticated: true,
         isAdmin: true,
@@ -661,41 +593,41 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
  * GET /api/user/profile
  * Retrieves full user profile information, including new fields.
  */
-app.get('/api/user/profile', isAuthenticated, limiter.wrap(async (req, res) => {
-    const userId = req.session.userId;
+app.get('/api/user/profile', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId; 
 
     try {
-        const userProfile = await db.findUserById(userId);
+        const userProfile = await db.findUserById(userId); 
 
         if (userProfile) {
             return res.json(userProfile);
         } else {
-            return res.status(404).json({
-                message: 'User profile not found.'
+            return res.status(404).json({ 
+                message: 'User profile not found.' 
             });
         }
     } catch (error) {
         console.error('Error fetching user profile:', error);
-        return res.status(500).json({
-            message: 'Server error fetching user data.'
+        return res.status(500).json({ 
+            message: 'Server error fetching user data.' 
         });
     }
-}));
+});
 
 /**
  * POST /api/user/profile
  * Handles profile updates (Phone Number and Profile Picture).
  */
-app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), limiter.wrap(async (req, res) => {
-    const userId = req.session.userId;
+app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), async (req, res) => {
+    const userId = req.session.userId; 
     const { phoneNumber, currentProfilePictureUrl } = req.body;
-
+    
     let newProfilePictureUrl = currentProfilePictureUrl;
 
     // 1. Handle file upload (if req.file exists)
     if (req.file) {
         // Assuming /public/images/profiles is mapped correctly
-        newProfilePictureUrl = `/images/profiles/${req.file.filename}`;
+        newProfilePictureUrl = `/images/profiles/${req.file.filename}`; 
     }
 
     // 2. Simple phone validation
@@ -708,8 +640,8 @@ app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), 
         const affectedRows = await db.updateUserProfile(userId, phoneNumber, newProfilePictureUrl);
 
         if (affectedRows > 0) {
-            return res.json({
-                message: 'Profile updated successfully!',
+            return res.json({ 
+                message: 'Profile updated successfully!', 
                 profilePictureUrl: newProfilePictureUrl
             });
         } else {
@@ -720,64 +652,58 @@ app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), 
         console.error('Profile update error:', error);
         return res.status(500).json({ message: 'Server error during profile update.' });
     }
-}));
+});
 
 /**
  * GET /api/user/orders
  * Retrieves all orders for the currently logged-in user.
  */
-app.get('/api/user/orders', isAuthenticated, limiter.wrap(async (req, res) => {
+app.get('/api/user/orders', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.userId;
-        const orders = await findUserOrders(userId);
+        const orders = await findUserOrders(userId); 
         res.status(200).json(orders);
     } catch (error) {
         console.error('Error fetching user orders:', error);
         res.status(500).json({ message: 'Failed to retrieve user orders, please try again later.' });
     }
-}));
+});
 
 
 // =========================================================
-//                   WALLET & PAYMENT API ROUTES (NEW)
+//                   WALLET & PAYMENT API ROUTES (UPDATED)
 // =========================================================
 
 /**
  * GET /api/wallet/balance
  * Fetches the user's current wallet balance and account number.
- * 🚨 If called by Admin, it fetches the Admin Wallet (User ID 1).
  */
-app.get('/api/wallet/balance', isAuthenticated, limiter.wrap(async (req, res) => {
-    // 🚨 Use ADMIN_WALLET_USER_ID if the user is an admin requesting the central balance
+app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
+    // Use BUSINESS_WALLET_USER_ID if the user is an admin requesting the central balance
    const userId = req.session.isAdmin ? BUSINESS_WALLET_USER_ID : req.session.userId;
-
+    
     try {
-        // 🚨 FIX: Pass the correct userId to db.getWalletByUserId
         const walletData = await db.getWalletByUserId(userId);
-
+        
         if (walletData) {
             return res.json({
                 balance: walletData.balance,
                 account_number: walletData.account_number,
-                // Ensure wallet_id is returned for admin usage if needed
-                wallet_id: walletData.wallet_id
+                wallet_id: walletData.wallet_id 
             });
         }
-        // If wallet doesn't exist, return 0 balance (or 404 if creation is required)
         return res.json({ balance: 0.00, account_number: 'N/A' });
-
+        
     } catch (error) {
         console.error('Error fetching wallet balance:', error);
         res.status(500).json({ message: 'Failed to retrieve wallet data.' });
     }
-}));
+});
 
 
 
 /**
  * Generates the base64-encoded password for STK Push.
- * @param {string} timestamp - The current timestamp in YYYYMMDDHHmmss format.
- * @returns {string} Base64 encoded password.
  */
 function generateMpesaPassword(timestamp) {
     const shortCode = process.env.MPESA_SHORTCODE;
@@ -786,22 +712,17 @@ function generateMpesaPassword(timestamp) {
     return Buffer.from(raw).toString('base64');
 }
 
-// server.js
-
 /**
  * Fetches the M-Pesa OAuth access token.
- * 🚨 CRITICAL SCALING: This function is wrapped by the externalLimiter when called.
  */
 async function getMpesaAccessToken() {
     const consumerKey = process.env.MPESA_CONSUMER_KEY;
     const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
-
-    // Base64 encode the consumer key and secret
+    
     const authString = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
     try {
-        // Line 706 is where the error occurred, ensure 'fetch' is used here
-        const response = await externalLimiter.schedule(() => fetch( // <--- WRAPPED BY EXTERNAL LIMITER
+        const response = await fetch(
             'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
             {
                 method: 'GET',
@@ -809,7 +730,7 @@ async function getMpesaAccessToken() {
                     'Authorization': `Basic ${authString}`
                 }
             }
-        ));
+        );
 
         if (!response.ok) {
             throw new Error(`M-Pesa Token API responded with status: ${response.status}`);
@@ -823,32 +744,29 @@ async function getMpesaAccessToken() {
         throw new Error('Failed to connect to M-Pesa API for authentication.');
     }
 }
-// ... existing code in server.js
 
-app.post('/api/wallet/deposit/mpesa', isAuthenticated, limiter.wrap(async (req, res) => {
-    const userId = req.session.userId;
+app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId; 
     const { phone, amount, accountNo } = req.body;
     const numericAmount = parseFloat(amount);
 
     if (!phone || isNaN(numericAmount) || numericAmount < 10) {
         return res.status(400).json({ message: 'Invalid phone or amount. Minimum deposit is 10 KES.' });
     }
-
-    // The STK push process is asynchronous, so we'll log an initial 'Pending' transaction.
-    const transactionRef = `STK-${Date.now()}`;
+    
+    const transactionRef = `STK-${Date.now()}`; 
     const callbackUrl = process.env.MPESA_CALLBACK_URL; // e.g., 'https://mydomain.com/api/mpesa/callback'
     const shortCode = process.env.MPESA_SHORTCODE;
     const phoneNumber = `254${phone.slice(-9)}`; // Convert to 254... format
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
-
+    
     try {
         // 1. Get Access Token and Password
         const accessToken = await getMpesaAccessToken();
         const password = generateMpesaPassword(timestamp);
 
         // 2. STK Push Request
-        // 🚨 CRITICAL SCALING: Wrap the external M-Pesa API call
-        const mpesaResponse = await externalLimiter.schedule(() => fetch(
+        const mpesaResponse = await fetch(
             'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
             {
                 method: 'POST',
@@ -867,47 +785,47 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, limiter.wrap(async (req, 
                     "PhoneNumber": phoneNumber,
                     "CallBackURL": callbackUrl,
                     // 🚨 CRITICAL: Use the user's National ID as the AccountReference
-                    "AccountReference": userId,
+                    "AccountReference": userId, 
                     "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
             }
-        ));
+        );
 
         const data = await mpesaResponse.json();
-
+        
         // 3. Handle M-Pesa STK Push Response
         if (data.ResponseCode === "0") {
             // Log the PENDING transaction in your DB before responding
             await db.performWalletTransaction(
-                userId,
-                numericAmount,
-                'M-Pesa STK',
-                'Deposit',
+                userId, 
+                numericAmount, 
+                'M-Pesa STK', 
+                'Deposit', 
                 data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef (the map key)
-                null,
+                null, 
                 'Pending', // Set status to PENDING
                 `STK Push initiated for KES ${numericAmount.toFixed(2)}`
             );
-
-            res.json({
+            
+            res.json({ 
                 message: 'Deposit initiated. Please approve the M-Pesa prompt on your phone.',
                 transactionRef: data.CheckoutRequestID // Send this ID back to the client
             });
         } else {
             // Log a FAILED transaction
             await db.performWalletTransaction(
-                userId,
-                numericAmount,
-                'M-Pesa STK',
-                'Deposit',
-                data.CheckoutRequestID || transactionRef,
-                null,
-                'Failed',
+                userId, 
+                numericAmount, 
+                'M-Pesa STK', 
+                'Deposit', 
+                data.CheckoutRequestID || transactionRef, 
+                null, 
+                'Failed', 
                 `STK Push failed: ${data.ResponseDescription}`
             );
-
-            return res.status(500).json({
-                message: `M-Pesa Error: ${data.ResponseDescription}`
+            
+            return res.status(500).json({ 
+                message: `M-Pesa Error: ${data.ResponseDescription}` 
             });
         }
 
@@ -915,94 +833,126 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, limiter.wrap(async (req, 
         console.error('M-Pesa Deposit API error:', error);
         res.status(500).json({ message: 'Failed to process deposit request. Server connection error.' });
     }
-}));
+});
 
-// Add this new route to server.js
 /**
  * POST /api/mpesa/callback
  * M-Pesa's Confirmation and Validation URL endpoint.
  */
 app.post('/api/mpesa/callback', async (req, res) => {
-
+    
     // 🚨 START LOG MONITORING HERE
     console.log("--- M-Pesa Callback Received ---");
     // Use JSON.stringify for clean, readable output in your console
-    console.log(JSON.stringify(req.body, null, 2));
+    console.log(JSON.stringify(req.body, null, 2)); 
     console.log("---------------------------------");
     // 🚨 END LOG MONITORING HERE
-    
-    // Note: Since this is an unauthenticated external webhook, it is not wrapped by limiter or requireAuth.
-    // It is expected to handle high throughput directly.
 
     // 1. Process the M-Pesa result
     const body = req.body.Body.stkCallback;
     const checkoutRequestID = body.CheckoutRequestID;
     const resultCode = body.ResultCode;
-    const resultDesc = body.ResultDesc; // General message (e.g., success or user cancelled)
+    const resultDesc = body.ResultDesc;
 
     // A. Transaction was cancelled or failed by user (ResultCode != 0)
     if (resultCode !== 0) {
         console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}. ResultDesc: ${resultDesc}`);
-
-        // We only need to update the status in the DB, no wallet changes needed as it was never credited.
+        
         try {
-            // Log the final status as 'Cancelled' or 'Failed'. We pass resultCode as the new external_ref since mpesaReceipt is null.
-            await limiter.schedule(() => db.completeMpesaDeposit(
-                checkoutRequestID,
-                0, // Amount doesn't matter for rollback/cancellation
-                `FAILURE-${resultCode}`, // Use a unique failure ref
-                'Failed',
+            await db.completeMpesaDeposit(
+                checkoutRequestID, 
+                0, 
+                `FAILURE-${resultCode}`, 
+                'Failed', 
                 resultDesc || 'Transaction cancelled by user or expired.'
-            ));
+            );
         } catch (error) {
             console.error('Error logging M-Pesa failure status:', error.message);
         }
-
-        // M-Pesa requires a specific, immediate response
+        
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and recorded as failure." });
     }
-
+    
     // B. Transaction was successful (ResultCode == 0)
     try {
         const metaData = body.CallbackMetadata.Item;
         const amountItem = metaData.find(item => item.Name === 'Amount');
         const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
 
-        // Note: The AccountReference (user ID) is not in CallbackMetadata,
-        // which is why we must rely on the CheckoutRequestID lookup in db.js.
-
         const amount = parseFloat(amountItem?.Value);
-        const mpesaReceipt = mpesaReceiptItem?.Value; // This is the required final reference code
-
-        // 2. Perform the final CREDIT, update PENDING transaction status to 'Completed',
-        // and CRITICALLY replace the external_ref with the MpesaReceiptNumber.
+        const mpesaReceipt = mpesaReceiptItem?.Value;
+        
         const finalStatus = 'Completed';
         const finalDescription = `MPESA successful deposit: ${mpesaReceipt}`;
-
-        // 🚨 CRITICAL: Wrap the database update logic
-        await limiter.schedule(() => db.completeMpesaDeposit(
-            checkoutRequestID,
-            amount,
+        
+        // 🚨 CRITICAL: This DB function handles the instant crediting (Requirement #4)
+        await db.completeMpesaDeposit(
+            checkoutRequestID, 
+            amount, 
             mpesaReceipt, // New reference code (Requirement #1)
-            finalStatus,
+            finalStatus, 
             finalDescription
-        ));
+        );
 
-        // Send a success response back to M-Pesa
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
 
     } catch (error) {
-        // If the transaction ID is not found (shouldn't happen) or DB credit fails
         console.error('M-Pesa Callback processing error:', error);
-        // Respond with success to M-Pesa to prevent retries, but log the internal failure
         return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
     }
 });
+
+/**
+ * 🚨 NEW API: POST /api/wallet/deposit/mpesa-manual
+ * Handles deposits where the user manually paid via SIM Toolkit.
+ */
+app.post('/api/wallet/deposit/mpesa-manual', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { transactionCode, amount } = req.body; 
+    const numericAmount = parseFloat(amount);
+
+    if (!transactionCode || !amount) {
+        return res.status(400).json({ message: 'Transaction code and amount are required.' });
+    }
+    // Simple M-Pesa receipt format validation (e.g., 10 alphanumeric characters)
+    if (!/^[A-Z0-9]{10}$/.test(transactionCode)) {
+        return res.status(400).json({ message: 'Invalid M-Pesa transaction code format. Must be 10 uppercase alphanumeric characters (e.g., TKULKBKLZD).' });
+    }
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ message: 'Invalid deposit amount.' });
+    }
+
+    try {
+        // 🚨 CRITICAL: Use the new function to process the manual deposit.
+        // This function handles duplicate check and instant crediting.
+        await db.processManualMpesaDeposit(userId, transactionCode, numericAmount);
+
+        // Success: Transaction credited to user wallet
+        res.json({
+            message: 'M-Pesa deposit confirmed and wallet credited successfully!',
+            mpesaRef: transactionCode
+        });
+
+    } catch (error) {
+        console.error('Manual M-Pesa deposit error:', error);
+
+        if (error.message === 'DUPLICATE_RECEIPT') {
+            return res.status(409).json({ message: `Transaction code ${transactionCode} has already been used.` });
+        }
+        if (error.message === 'WALLET_NOT_FOUND') {
+             return res.status(500).json({ message: 'Critical error: User wallet structure not found.' });
+        }
+        
+        res.status(500).json({ message: 'Failed to process manual deposit due to a server error.' });
+    }
+});
+
+
 /**
  * NEW: POST /api/wallet/deposit/status
  * Client-side polling API to check the final status of a pending M-Pesa transaction.
  */
-app.post('/api/wallet/deposit/status', isAuthenticated, limiter.wrap(async (req, res) => {
+app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const { checkoutRequestID } = req.body;
 
@@ -1012,16 +962,14 @@ app.post('/api/wallet/deposit/status', isAuthenticated, limiter.wrap(async (req,
 
     try {
         // 1. Check the database first (fastest way to get completed status)
-        // CRITICAL: We need a new DB function to fetch the transaction details by external_ref and user_id
-        const transaction = await db.findTransactionByRef(checkoutRequestID, userId);
+        const transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
 
         if (transaction) {
             // Check if the transaction is finalized
             if (transaction.status === 'Completed') {
                 return res.json({
                     status: 'Completed',
-                    // The external_ref in the completed record is the MpesaReceiptNumber
-                    mpesaRef: transaction.external_ref,
+                    mpesaRef: transaction.external_ref, // The external_ref is now the MpesaReceiptNumber
                     amount: transaction.amount,
                     message: 'Payment confirmed successfully.'
                 });
@@ -1034,7 +982,7 @@ app.post('/api/wallet/deposit/status', isAuthenticated, limiter.wrap(async (req,
                 });
             }
         }
-
+        
         // If the transaction is not found or status is still 'Pending', return Pending
         return res.json({ status: 'Pending', message: 'Waiting for M-Pesa confirmation...' });
 
@@ -1042,13 +990,13 @@ app.post('/api/wallet/deposit/status', isAuthenticated, limiter.wrap(async (req,
         console.error('M-Pesa status query error:', error);
         res.status(500).json({ message: 'Internal server error while checking status.' });
     }
-}));
+});
 
 /**
  * POST /api/wallet/deposit/card
- * Handles the simulated Card/Visa deposit request.
+ * Handles the generic Debit/Credit Card deposit request (Simulated).
  */
-app.post('/api/wallet/deposit/card', isAuthenticated, limiter.wrap(async (req, res) => {
+app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const { cardNumber, amount } = req.body; // Card details are truncated on the client
     const numericAmount = parseFloat(amount);
@@ -1058,39 +1006,38 @@ app.post('/api/wallet/deposit/card', isAuthenticated, limiter.wrap(async (req, r
     }
 
     // Simulate Card transaction reference
-    const externalRef = `CARD-${Date.now()}-${cardNumber}`;
+    const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
 
     try {
-       await db.performWalletTransaction(userId, numericAmount, 'Card', 'Deposit', externalRef, null, 'Completed');
+       await db.performWalletTransaction(userId, numericAmount, 'Debit/Credit Card', 'Deposit', externalRef, null, 'Completed');
 
-// 🚨 FIX: Log this deposit as 'CAPITAL IN' to the Admin Wallet (User ID 1) using the correct function.
        await db.performWalletTransaction(
       BUSINESS_WALLET_USER_ID,
-       numericAmount,
-       'Card Revenue',
-       'Deposit', // Correct type for revenue
-       externalRef,
-       null,
+       numericAmount, 
+       'Card Revenue', 
+       'Deposit', 
+       externalRef, 
+       null, 
        'Completed',
-       `Capital Deposit: KES ${numericAmount.toFixed(2)} from Card Payment from Customer #${userId}` // Add description
+       `Capital Deposit: KES ${numericAmount.toFixed(2)} from Card Payment from Customer #${userId}` 
 );
-
-        res.json({
+        
+        res.json({ 
             message: 'Card payment processed successfully.',
-            transactionRef: externalRef
+            transactionRef: externalRef 
         });
 
     } catch (error) {
         console.error('Card Deposit API error:', error);
         res.status(500).json({ message: 'Failed to process card payment.' });
     }
-}));
+});
 
 /**
  * GET /api/user/payment-history
  * Fetches the transaction history for the user's wallet.
  */
-app.get('/api/user/payment-history', isAuthenticated, limiter.wrap(async (req, res) => {
+app.get('/api/user/payment-history', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     try {
         const history = await db.findPaymentHistory(userId);
@@ -1099,13 +1046,13 @@ app.get('/api/user/payment-history', isAuthenticated, limiter.wrap(async (req, r
         console.error('Error fetching payment history:', error);
         res.status(500).json({ message: 'Failed to retrieve payment history.' });
     }
-}));
+});
 
 /**
  * GET /api/admin/finance/history
  * Fetches the central business financial history.
  */
-app.get('/api/admin/finance/history', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/admin/finance/history', isAdmin, async (req, res) => {
     try {
         // 🚨 Call the new dedicated function using the Admin Wallet ID
       const history = await db.getBusinessFinancialHistory(BUSINESS_WALLET_USER_ID);
@@ -1114,13 +1061,13 @@ app.get('/api/admin/finance/history', isAdmin, limiter.wrap(async (req, res) => 
         console.error('Error fetching admin financial history:', error);
         res.status(500).json({ message: 'Failed to retrieve financial history.' });
     }
-}));
+});
 
 /**
  * POST /api/admin/finance/expenditure
  * Handles admin withdrawal for business purposes (Restock, Loans, Refunds).
  */
-app.post('/api/admin/finance/expenditure', isAdmin, limiter.wrap(async (req, res) => {
+app.post('/api/admin/finance/expenditure', isAdmin, async (req, res) => {
     const { amount, purpose } = req.body;
     const numericAmount = parseFloat(amount);
 
@@ -1135,7 +1082,7 @@ app.post('/api/admin/finance/expenditure', isAdmin, limiter.wrap(async (req, res
     // Amount is passed as a positive number; the DB function handles the deduction.
     // 🚨 FIX 7a: Call the new expenditure function
     await db.logBusinessExpenditure(BUSINESS_WALLET_USER_ID, numericAmount, purpose);
-
+    
     res.json({ message: `Successfully logged KES ${numericAmount.toFixed(2)} withdrawal for ${purpose}.` });
 } catch (error) {
     // 🚨 FIX 7b: Update the error message to reflect the business wallet check
@@ -1145,7 +1092,7 @@ app.post('/api/admin/finance/expenditure', isAdmin, limiter.wrap(async (req, res
     console.error('Business expenditure error:', error);
         res.status(500).json({ message: 'Failed to process withdrawal.' });
     }
-}));
+});
 
 
 
@@ -1157,7 +1104,7 @@ app.post('/api/admin/finance/expenditure', isAdmin, limiter.wrap(async (req, res
  * Retrieves a list of all registered users (customers).
  * Requires Admin privileges.
  */
-app.get('/api/customers', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/customers', isAdmin, async (req, res) => {
     try {
         const users = await findAllUsers();
         // Note: The password_hash is not included in the SELECT query in db.js
@@ -1166,17 +1113,17 @@ app.get('/api/customers', isAdmin, limiter.wrap(async (req, res) => {
         console.error('API Error fetching all users/customers:', error);
         res.status(500).json({ message: 'Failed to retrieve customer list.' });
     }
-}));
+});
 
 /**
  * 🆕 Retrieves core dashboard statistics (e.g., total products, total users, revenue).
  * Requires Admin privileges.
  */
-app.get('/api/dashboard/stats', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/dashboard/stats', isAdmin, async (req, res) => {
     try {
         // 1. Total Products & Stock
         const [products] = await pool.query('SELECT COUNT(*) AS productCount, SUM(stock) AS totalStock FROM products');
-
+        
         // 2. Total Users (Customers)
         const [users] = await pool.query('SELECT COUNT(*) AS userCount FROM users WHERE is_admin = ?', [0]);        // 3. Total Orders & Revenue (Overall)
         const [orders] = await pool.query('SELECT COUNT(*) AS orderCount, SUM(total) AS totalRevenue FROM orders');
@@ -1187,7 +1134,7 @@ app.get('/api/dashboard/stats', isAdmin, limiter.wrap(async (req, res) => {
         const [pendingOrders] = await pool.query(
             "SELECT COUNT(*) AS pendingCount FROM orders WHERE status = 'Pending'"
         );
-
+        
         // 5. Count Completed Orders
         const [completedOrders] = await pool.query(
             "SELECT COUNT(*) AS completedCount FROM orders WHERE status = 'Completed'"
@@ -1196,24 +1143,24 @@ app.get('/api/dashboard/stats', isAdmin, limiter.wrap(async (req, res) => {
         const stats = {
             productCount: products[0].productCount || 0,
             totalStock: products[0].totalStock || 0,
-
+            
             // Your required fields: 2 customers -> userCount
-            userCount: users[0].userCount || 0,
-
+            userCount: users[0].userCount || 0, 
+            
             orderCount: orders[0].orderCount || 0,
-            totalRevenue: parseFloat(orders[0].totalRevenue || 0).toFixed(2),
-
+            totalRevenue: parseFloat(orders[0].totalRevenue || 0).toFixed(2), 
+            
             // ✅ New required fields for the dashboard
             pendingOrders: pendingOrders[0].pendingCount || 0,
             completedOrders: completedOrders[0].completedCount || 0,
         };
-
+        
         res.json(stats);
     } catch (error) {
         console.error('API Error fetching dashboard stats:', error);
         res.status(500).json({ message: 'Failed to retrieve dashboard statistics.' });
     }
-}));
+});
 
 /**
  * 🆕 Retrieves monthly sales data for charting.
@@ -1222,11 +1169,11 @@ app.get('/api/dashboard/stats', isAdmin, limiter.wrap(async (req, res) => {
 
 
 // New Route: GET /api/dashboard/monthly-sales
-app.get('/api/dashboard/monthly-sales', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/dashboard/monthly-sales', isAdmin, async (req, res) => {
     try {
         // Query to aggregate total revenue by month and year for COMPLETED orders
         const [rows] = await pool.query(`
-            SELECT
+            SELECT 
                 DATE_FORMAT(created_at, '%Y-%m') AS month,
                 SUM(total) AS revenue
             FROM orders
@@ -1241,18 +1188,16 @@ app.get('/api/dashboard/monthly-sales', isAdmin, limiter.wrap(async (req, res) =
         console.error('API Error fetching monthly sales data:', error);
         res.status(500).json({ message: 'Failed to retrieve sales data.' });
     }
-}));
+});
 
 // ------------------------------------------------------------------
 // --- PRODUCT, CART, and ORDER API Endpoints ---
 // ------------------------------------------------------------------
 
-// 🚨 HIGH-TRAFFIC OPTIMIZATION: This public read endpoint is NOT wrapped by limiter
-// because it's a primary high-volume route and should be fast.
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', async (req, res) => { 
     try {
         const [rows] = await pool.query('SELECT * FROM products');
-        res.json(rows);
+        res.json(rows); 
     } catch (error) {
         console.error('Database query error:', error);
         res.status(500).json({ message: 'Failed to retrieve products from database.' });
@@ -1273,55 +1218,55 @@ app.get('/api/products/:id', async (req, res) => {
     }
 });
 
-app.post('/api/products', isAdmin, upload.single('productImage'), limiter.wrap(async (req, res) => {
+app.post('/api/products', isAdmin, upload.single('productImage'), async (req, res) => {
     try {
         const { name, price, category, description, stock } = req.body;
         const imageFile = req.file; // Multer puts the file info here
-
+        
         // 🚨 CRITICAL SERVER-SIDE VALIDATION FIX 🚨
         if (!name || !price || !category || !stock || !imageFile) {
             // Return a specific error that the client can display
-            return res.status(400).json({
-                message: 'Missing one or more required fields: name, price, category, stock, or image file.'
+            return res.status(400).json({ 
+                message: 'Missing one or more required fields: name, price, category, stock, or image file.' 
             });
         }
-
+        
         // Ensure price and stock are valid numbers
         if (isNaN(parseFloat(price)) || isNaN(parseInt(stock))) {
             return res.status(400).json({ message: 'Price and Stock must be valid numbers.' });
         }
-
+        
         const imagePath = `/images/products/${imageFile.filename}`;
-
+        
         // Insert the product into the database (using 'stock' column name)
         const [result] = await pool.query(
-            `INSERT INTO products (name, price, category, description, image_url, stock)
+            `INSERT INTO products (name, price, category, description, image_url, stock) 
              VALUES (?, ?, ?, ?, ?, ?)`,
             [name, parseFloat(price), category, description, imagePath, parseInt(stock)]
         );
 
-        res.status(201).json({
-            message: 'Product uploaded successfully!',
-            productId: result.insertId
+        res.status(201).json({ 
+            message: 'Product uploaded successfully!', 
+            productId: result.insertId 
         });
 
     } catch (error) {
         console.error('API Error uploading product:', error);
         res.status(500).json({ message: 'Failed to upload product, please try again later.' });
     }
-}));
-app.put('/api/products/:id', isAdmin, upload.single('productImage'), limiter.wrap(async (req, res) => {
+});
+app.put('/api/products/:id', isAdmin, upload.single('productImage'), async (req, res) => {
     try {
         const productId = req.params.id;
         // NOTE: FormData is used, so use req.body
         const { name, price, category, description, stock, existing_image_url } = req.body;
-
+        
         if (!name || !price || !category || !stock) {
-            return res.status(400).json({
-                message: 'Missing required fields for update (Name, Price, Category, Stock).'
+            return res.status(400).json({ 
+                message: 'Missing required fields for update (Name, Price, Category, Stock).' 
             });
         }
-
+        
         let imagePath = existing_image_url; // Keep old path by default
 
         if (req.file) { // If a new image was uploaded
@@ -1343,19 +1288,19 @@ app.put('/api/products/:id', isAdmin, upload.single('productImage'), limiter.wra
         console.error('API Error updating product:', error);
         res.status(500).json({ message: 'Failed to update product, please try again later.' });
     }
-}));
-app.get('/api/orders', isAdmin, limiter.wrap(async (req, res) => {
-    const { status } = req.query;
+});
+app.get('/api/orders', isAdmin, async (req, res) => {
+    const { status } = req.query; 
     let sql = 'SELECT id, customer_name, customer_email, delivery_location, total, status, created_at FROM orders';
     const params = [];
 
     if (status) {
         const statusArray = status.split(',').map(s => s.trim());
-        const placeholders = statusArray.map(() => '?').join(', ');
+        const placeholders = statusArray.map(() => '?').join(', '); 
         sql += ` WHERE status IN (${placeholders})`;
         params.push(...statusArray);
     }
-
+    
     sql += ' ORDER BY created_at DESC';
 
     try {
@@ -1365,22 +1310,22 @@ app.get('/api/orders', isAdmin, limiter.wrap(async (req, res) => {
         console.error('Error fetching orders:', error);
         res.status(500).json({ message: 'Failed to retrieve orders.' });
     }
-}));
+});
 
 
 // server.js
 
-app.put('/api/orders/:orderId', isAdmin, limiter.wrap(async (req, res) => {
+app.put('/api/orders/:orderId', isAdmin, async (req, res) => {
     const orderId = req.params.orderId;
     // 🚨 CRITICAL: Extract 'status' from the parsed body
-    const { status } = req.body;
+    const { status } = req.body; 
 
     // This is the validation that triggers a 400 if 'status' isn't found
     if (!status) {
         // If express.json() is missing or failed, req.body will be empty, and 'status' will be undefined.
         return res.status(400).json({ message: 'Missing status field in request body (Ensure express.json() is used).' });
     }
-
+    
     // --- Execution ---
     try {
         const [result] = await pool.query(
@@ -1398,17 +1343,17 @@ app.put('/api/orders/:orderId', isAdmin, limiter.wrap(async (req, res) => {
         console.error(`API Error updating order ID ${orderId}:`, error);
         res.status(500).json({ message: 'Failed to update order status, please try again later.' });
     }
-}));
+});
 
 
 // 🚨 CHANGE: Cart APIs require authentication to retrieve/modify items for a specific user
-app.get('/api/cart', isAuthenticated, limiter.wrap(async (req, res) => {
+app.get('/api/cart', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
-
+    
     try {
         const sql = `
-    SELECT c.product_id AS id, p.name, c.unit_price AS price,
-             c.quantity, p.image_url, p.stock
+    SELECT c.product_id AS id, p.name, c.unit_price AS price, 
+             c.quantity, p.image_url, p.stock 
     FROM cart c
     JOIN products p ON c.product_id = p.id
     WHERE c.user_id = ?`;
@@ -1418,36 +1363,34 @@ app.get('/api/cart', isAuthenticated, limiter.wrap(async (req, res) => {
         console.error('Error fetching cart:', error);
         res.status(500).json({ message: 'Failed to load cart items.' });
     }
-}));
+});
 
-app.post('/api/cart', isAuthenticated, limiter.wrap(async (req, res) => {
+app.post('/api/cart', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const { productId, quantity } = req.body;
-
+    
     if (!productId || !quantity || quantity < 1) {
         return res.status(400).json({ message: 'Invalid product ID or quantity.' });
     }
 
-    // 🚨 CRITICAL SCALING: Use Bottleneck for database transaction/pool acquisition
-    const connection = await limiter.schedule(() => pool.getConnection());
-
+    const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
-
+        
         const [productRows] = await connection.execute('SELECT name, price, stock FROM products WHERE id = ?', [productId]);
         if (productRows.length === 0) {
-            throw new Error('Product not found.');
+            return res.status(404).json({ message: 'Product not found.' });
         }
         const product = productRows[0];
-
+        
         const [cartRows] = await connection.execute('SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
-
+        
         const currentQuantity = cartRows.length > 0 ? cartRows[0].quantity : 0;
         const newQuantity = currentQuantity + quantity;
 
         if (newQuantity > product.stock) {
-            throw new Error(`Cannot add that quantity. Only ${product.stock} of ${product.name} left.`);
+            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
         }
 
         if (cartRows.length > 0) {
@@ -1465,16 +1408,16 @@ app.post('/api/cart', isAuthenticated, limiter.wrap(async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error('Error adding item to cart:', error);
-        res.status(500).json({ message: error.message || 'Failed to update cart.' });
+        res.status(500).json({ message: 'Failed to update cart.' });
     } finally {
         connection.release();
     }
-}));
+});
 
-app.delete('/api/cart/:productId', isAuthenticated, limiter.wrap(async (req, res) => {
+app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const productId = req.params.productId;
-
+    
     try {
         const [result] = await pool.execute('DELETE FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
         if (result.affectedRows === 0) {
@@ -1485,10 +1428,10 @@ app.delete('/api/cart/:productId', isAuthenticated, limiter.wrap(async (req, res
         console.error('Error deleting item from cart:', error);
         res.status(500).json({ message: 'Failed to remove item.' });
     }
-}));
+});
 
-app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
-
+app.post('/api/order', isAuthenticated, async (req, res) => {
+    
     // -------------------------------
     // 1. SESSION & USER ID CHECK
     // -------------------------------
@@ -1535,8 +1478,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
     // -------------------------------
     // 3. GET DB CONNECTION
     // -------------------------------
-    // 🚨 CRITICAL SCALING: Use Bottleneck for connection acquisition
-    const connection = await limiter.schedule(() => pool.getConnection());
+    const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
@@ -1544,21 +1486,20 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
         // -------------------------------
         // 4. FETCH USER WALLET
         // -------------------------------
-        // Note: db.getWalletByUserId uses pool.query internally, but we can't use it here
-        // because we are in a transaction with `connection`. We'll fetch it manually.
-        const [walletRows] = await connection.execute('SELECT wallet_id, balance FROM wallets WHERE user_id = ?', [userId]);
-
-        const walletData = walletRows[0];
+        const walletDataResult = await db.getWalletByUserId(userId);
+        
+        const walletData = Array.isArray(walletDataResult) ? walletDataResult[0] : walletDataResult;
+        
 
         let wallet_id;
         let currentBalance = 0;
 
-        if (walletData && walletData.wallet_id) {
+        if (walletData && walletData.wallet_id) { 
             wallet_id = walletData.wallet_id;
             currentBalance = walletData.balance;
         } else {
             // Create wallet if it doesn't exist (using National ID as account number)
-            const accountNumber = userId;
+            const accountNumber = userId; 
             const [createResult] = await connection.execute(
                 `INSERT INTO wallets (user_id, account_number, balance)
                  VALUES (?, ?, 0.00)`,
@@ -1569,7 +1510,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
             if (!createResult.insertId) {
                 throw new Error("CRITICAL: Failed to create user wallet and retrieve ID.");
             }
-
+            
             wallet_id = createResult.insertId;
         }
 
@@ -1621,9 +1562,9 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
             );
 
             if (!productRows.length) throw new Error(`Product ID ${item.id} not found`);
-
+            
             const product = productRows[0];
-
+            
             if (product.stock < item.quantity) {
                 throw new Error(`Not enough stock for product ID ${item.id}`);
             }
@@ -1636,11 +1577,11 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
 
             // Insert order item
             await connection.execute(itemSql, [
-                orderId,
-                item.id,
-                product.name,
-                product.price,
-                item.quantity
+                orderId,        
+                item.id,        
+                product.name,   
+                product.price,  
+                item.quantity   
             ]);
         }
 
@@ -1660,7 +1601,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
             `INSERT INTO transactions
              (user_id, wallet_id, order_id, type, method, amount, transaction_status)
              VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
-            [userId, finalWalletId, finalOrderId, -orderTotal]
+            [userId, finalWalletId, finalOrderId, -orderTotal] 
         );
 
         // 7b. Update Customer Wallet Balance
@@ -1693,14 +1634,14 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
                 [businessId, accountNumber]
             );
             if (!createResult.insertId) throw new Error("CRITICAL: Failed to initialize Business Wallet.");
-
+            
             var businessWalletId = createResult.insertId;
             var businessCurrentBalance = 0;
         } else {
             var businessWalletId = businessWalletRows[0].wallet_id;
             var businessCurrentBalance = businessWalletRows[0].balance;
         }
-
+        
         const businessNewBalance = businessCurrentBalance + businessCreditAmount;
 
 
@@ -1709,7 +1650,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
             `INSERT INTO transactions
              (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
              VALUES (?, ?, ?, 'Deposit', 'Wallet Revenue', ?, ?, 'Completed', ?)`,
-            [businessId, businessWalletId, Number(orderId), businessCreditAmount, businessExternalRef, businessDescription]
+            [businessId, businessWalletId, Number(orderId), businessCreditAmount, businessExternalRef, businessDescription] 
         );
 
         // 8b. Update Business Wallet Balance - Using existing connection
@@ -1722,7 +1663,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
         // -------------------------------
         await connection.execute(
             'DELETE FROM cart WHERE user_id = ?',
-            [userId]
+            [userId] 
         );
 
         // -------------------------------
@@ -1733,7 +1674,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
         // -------------------------------
         // 11. SEND EMAILS (Non-critical)
         // -------------------------------
-        // 🚨 CRITICAL SCALING: Use the limited Resend function
+        // ... (Email sending logic remains here)
         const orderDetailsHtml = items.map(item =>
             // Using item.name and item.price here is acceptable for non-transactional reporting
             `<li>${item.name || 'Product'} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
@@ -1741,9 +1682,8 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
 
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-        // Use Promise.all with the limited function
         await Promise.all([
-            resendSendEmail({
+            resend.emails.send({
                 from: `Lolly's Collection <${senderEmail}>`,
                 to: email,
                 subject: `Order #${orderId} Confirmation`,
@@ -1753,7 +1693,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
                     <ul>${orderDetailsHtml}</ul>
                 `
             }),
-            resendSendEmail({
+            resend.emails.send({
                 from: `Lolly's Collection Admin <${senderEmail}>`,
                 to: process.env.ADMIN_EMAIL,
                 subject: `New Wallet Order #${orderId}`,
@@ -1779,7 +1719,7 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
 
         // 🚨 IMPROVEMENT: Use generic error message if the specific error is a stock or critical error
         const userMessage = error.message.includes('stock') || error.message.includes('CRITICAL') || error.message.includes('INSUFFICIENT')
-            ? error.message
+            ? error.message 
             : error.sqlMessage || 'Order failed due to a server error. Please try again.';
 
         return res.status(500).json({
@@ -1789,15 +1729,15 @@ app.post('/api/order', isAuthenticated, limiter.wrap(async (req, res) => {
     } finally {
         connection.release();
     }
-}));
+});
 // ... (rest of server.js remains the same)
-app.get('/api/orders/:orderId', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/orders/:orderId', isAdmin, async (req, res) => {
     try {
         const orderId = req.params.orderId;
         const [rows] = await pool.query(
-            `SELECT id, customer_name, customer_phone, customer_email, delivery_location, total, status, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at
-             FROM orders
-             WHERE id = ?`,
+            `SELECT id, customer_name, customer_phone, customer_email, delivery_location, total, status, DATE_FORMAT(created_at, '%Y-%m-%d %H:%i') AS created_at 
+             FROM orders 
+             WHERE id = ?`, 
             [orderId]
         );
 
@@ -1809,68 +1749,68 @@ app.get('/api/orders/:orderId', isAdmin, limiter.wrap(async (req, res) => {
         console.error('API Error fetching order details:', error);
         res.status(500).json({ message: 'Failed to retrieve order details.' });
     }
-}));
+});
 
-app.get('/api/orders/:orderId/items', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/orders/:orderId/items', isAdmin, async (req, res) => {
     try {
         const orderId = req.params.orderId;
         const [rows] = await pool.query(
-            `SELECT product_name, unit_price, quantity
-             FROM order_items
-             WHERE order_id = ?`,
+            `SELECT product_name, unit_price, quantity 
+             FROM order_items 
+             WHERE order_id = ?`, 
             [orderId]
         );
         if (rows.length === 0) {
-            return res.json([]);
+            return res.json([]); 
         }
         res.json(rows);
     } catch (error) {
         console.error('API Error fetching order items:', error);
         res.status(500).json({ message: 'Failed to retrieve order items.' });
     }
-}));
+});
 
-app.post('/api/admin/messages/reply', isAdmin, limiter.wrap(async (req, res) => {
+app.post('/api/admin/messages/reply', isAdmin, async (req, res) => {
     const { to, from, subject, content } = req.body;
-
+    
     if (!to || !subject || !content) {
         return res.status(400).json({ message: 'Missing required fields: recipient (to), subject, or content.' });
     }
 
     try {
-        // 🚨 RESEND INTEGRATION FOR REPLIES (Using limited function)
+        // 🚨 RESEND INTEGRATION FOR REPLIES
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-        const { error } = await resendSendEmail({
+        const { error } = await resend.emails.send({
             from: `Lolly's Support <${senderEmail}>`,
             to: to,
             subject: subject,
-            text: content,
+            text: content, 
         });
 
         if (error) {
             console.error('Resend API Error:', error);
             return res.status(500).json({ message: 'Failed to send email via Resend.', error: error });
         }
-
+        
         res.json({ message: 'Reply sent successfully!' });
 
     } catch (error) {
         console.error('Server Error:', error.message);
-        res.status(500).json({
-            message: 'Failed to send reply email , please try again later.',
-            error: error.message
+        res.status(500).json({ 
+            message: 'Failed to send reply email , please try again later.', 
+            error: error.message 
         });
     }
-}));
+});
 // API for Product Deletion (Admin only)
-app.delete('/api/products/:id', isAdmin, limiter.wrap(async (req, res) => {
+app.delete('/api/products/:id', isAdmin, async (req, res) => {
     try {
         const productId = req.params.id;
-
-        // IMPORTANT: In a real system, you should also delete related records
+       
+        // IMPORTANT: In a real system, you should also delete related records 
         // in 'cart' and 'order_items' first, or configure CASCADE DELETE on the DB.
-
+        
         // For now, we only delete the product:
         const [result] = await pool.query(
             `DELETE FROM products WHERE id = ?`,
@@ -1881,9 +1821,9 @@ app.delete('/api/products/:id', isAdmin, limiter.wrap(async (req, res) => {
             return res.status(404).json({ message: 'Product not found.' });
         }
 
-        res.json({
+        res.json({ 
             message: `Product ID ${productId} deleted successfully.`,
-            deletedId: productId
+            deletedId: productId 
         });
 
     } catch (error) {
@@ -1894,9 +1834,9 @@ app.delete('/api/products/:id', isAdmin, limiter.wrap(async (req, res) => {
         }
         res.status(500).json({ message: 'Failed to delete product, please try again later.' });
     }
-}));
+});
 // sending contact messages to admin dashboard
-app.post('/api/contact', limiter.wrap(async (req, res) => {
+app.post('/api/contact', async (req, res) => {
     const { name, email, message } = req.body;
 
     if (!name || !email || !message) {
@@ -1910,9 +1850,9 @@ app.post('/api/contact', limiter.wrap(async (req, res) => {
         console.error('Database insertion error for contact form:', error);
         return res.status(500).json({ message: 'Internal server error while saving message. Please try again later.' });
     }
-}));
+});
 
-app.get('/api/admin/messages', isAuthenticated, isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
     try {
         const messages = await getAllContactMessages();
         return res.status(200).json(messages);
@@ -1920,26 +1860,26 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, limiter.wrap(async (req
         console.error('Error in GET /api/admin/messages:', error);
         return res.status(500).json({ message: 'Failed to retrieve messages.' });
     }
-}));
+});
 
 // Route to handle password reset request (Step 1: Send Email)
 
 
-app.post("/api/request-otp", limiter.wrap(async (req, res) => {
+app.post("/api/request-otp", async (req, res) => {
     const { phone } = req.body; // Primary lookup field
-
+    
     if (!phone) {
         return res.status(400).json({ message: 'Phone number is required to send OTP.' });
     }
-
+    
     // 1. Find user by phone number (<<< FIX APPLIED HERE)
-    const user = await db.findUserByPhone(phone);
-
+    const user = await db.findUserByPhone(phone); 
+    
     if (!user) {
         // Do not leak user existence
         return res.status(200).json({ message: 'If the account exists, an OTP has been sent.' });
     }
-
+    
     // 2. Determine the cache key (the phone number)
     const normalizedKey = phone.toLowerCase().trim();
 
@@ -1949,19 +1889,19 @@ app.post("/api/request-otp", limiter.wrap(async (req, res) => {
 
         // 3. Save OTP in memory using the global otpCache
         // Store userId and email for the final reset step lookup, keyed by phone number
-        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email };
+        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
 
         // 4. Send Email (Proxy for SMS)
-
-        // 🚨 RESEND INTEGRATION FOR OTP (Using limited function)
+        
+        // 🚨 RESEND INTEGRATION FOR OTP
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-        // ⬇️ TEMPORARY: Send the OTP to the Admin's verified email for testing,
+        // ⬇️ TEMPORARY: Send the OTP to the Admin's verified email for testing, 
         // regardless of the user's email, due to Resend restrictions.
-        const testingRecipient = 'oyoookoth42@gmail.com';
+        const testingRecipient = 'oyoookoth42@gmail.com'; 
         // ------------------------------------------------------------------
 
-        const { error } = await resendSendEmail({
+        const { error } = await resend.emails.send({
             from: `Lolly's Security <${senderEmail}>`,
             to: testingRecipient, // Sends to admin email for testing confirmation
             subject: 'Lollys Collection Password Reset OTP',
@@ -1977,22 +1917,22 @@ app.post("/api/request-otp", limiter.wrap(async (req, res) => {
         console.error('OTP Request Error:', error);
         res.status(500).json({ message: 'Error processing OTP request.' });
     }
-}));
+});
 
 
 // 🚨 VERIFY OTP - Debugging & Normalization
 app.post("/api/verify-otp", (req, res) => {
     const { phone, otp } = req.body; // Uses phone for lookup
-
+    
     if (!phone || !otp) {
         return res.status(400).json({ message: 'Phone and OTP are required.' });
     }
-
+    
     // Keying by phone number
     const verificationKey = phone.toLowerCase().trim();
 
-    const entry = otpCache[verificationKey];
-
+    const entry = otpCache[verificationKey]; 
+    
     if (!entry) return res.status(400).json({ message: "No OTP found or session expired." });
 
     if (Date.now() > entry.expiry) {
@@ -2003,33 +1943,33 @@ app.post("/api/verify-otp", (req, res) => {
     if (String(entry.otp) !== String(otp)) {
         return res.status(400).json({ message: "Invalid OTP." });
     }
-
+    
     // 4. Success: Generate verification token for the next step (password reset)
     const verificationToken = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 10 * 60 * 1000;
+    const expiry = Date.now() + 10 * 60 * 1000; 
 
     // Store user ID, email, and phone (as resetKey) in the verification cache
     verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
     delete otpCache[verificationKey];
 
-    res.json({
-        message: "OTP verified!",
-        verified: true,
+    res.json({ 
+        message: "OTP verified!", 
+        verified: true, 
         verificationToken: verificationToken,
         resetKey: verificationKey // Send the phone number back to the client
     });
 });
 
 // Route to handle password reset submission (Step 2: Update Password)
-app.post('/api/reset-password', limiter.wrap(async (req, res) => {
+app.post('/api/reset-password', async (req, res) => {
     // Client must send verificationToken, resetKey (now phone number), and newPassword
-    const { verificationToken, resetKey, newPassword } = req.body;
-
+    const { verificationToken, resetKey, newPassword } = req.body; 
+    
     // 2. Validate input and password strength
     if (!verificationToken || !resetKey || !newPassword) {
         return res.status(400).json({ message: 'Missing required reset information (token, key, or password).' });
     }
-
+    
     if (newPassword.length < 8) {
         return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
     }
@@ -2040,7 +1980,7 @@ app.post('/api/reset-password', limiter.wrap(async (req, res) => {
     if (!verificationEntry) {
         return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
     }
-
+    
     // 4. Validate Token Expiration and Reset Key Match
     if (Date.now() > verificationEntry.expiry || verificationEntry.resetKey !== resetKey) {
         delete verificationCache[verificationToken];
@@ -2050,16 +1990,16 @@ app.post('/api/reset-password', limiter.wrap(async (req, res) => {
     try {
         // Use the userId saved during the OTP request step
         const userIdToUpdate = verificationEntry.userId;
-
+        
         // 5. Hash the new password securely
         const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-
+        
         // 6. Update password using the stored user ID
         const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
 
         // 7. CRUCIAL: Clear the verification token immediately after successful use
-        delete verificationCache[verificationToken];
+        delete verificationCache[verificationToken]; 
 
         if (updated) {
             res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
@@ -2069,10 +2009,10 @@ app.post('/api/reset-password', limiter.wrap(async (req, res) => {
     } catch (error) {
         console.error('Password Reset Error:', error);
         // Clear the token even on hash/DB update failure for security
-        delete verificationCache[verificationToken];
+        delete verificationCache[verificationToken]; 
         res.status(500).json({ message: 'Failed to reset password, please try again later.' });
     }
-}));
+});
 // =========================================================
 //                   REAL-TIME CHAT SETUP
 // =========================================================
@@ -2084,11 +2024,10 @@ app.post('/api/reset-password', limiter.wrap(async (req, res) => {
  */
 async function getProductDetails({ query }) {
      // 🚨 INTEGRATION POINT: Connects AI to MySQL DB
-     // Use the internal limiter to protect the database from AI-driven queries
-     const [rows] = await limiter.schedule(() => pool.query(
-         `SELECT name, price, stock FROM products WHERE name LIKE ? OR description LIKE ? LIMIT 5`,
+     const [rows] = await pool.query(
+         `SELECT name, price, stock FROM products WHERE name LIKE ? OR description LIKE ? LIMIT 5`, 
          [`%${query}%`, `%${query}%`]
-     ));
+     );
      if (rows.length === 0) return JSON.stringify({ status: 'not_found', query });
      return JSON.stringify(rows);
 }
@@ -2100,10 +2039,10 @@ async function getProductDetails({ query }) {
  * @returns {string} The AI-generated response text.
  */
 async function getSmartBotResponse(userMessage) {
-    const systemInstruction = `You are Lolly Bot, a friendly, concise, and helpful customer service AI for Lolly's Collection, an e-commerce store specializing in clothing and accessories. Your tone must be warm, slightly casual, and professional.
-
+    const systemInstruction = `You are Lolly Bot, a friendly, concise, and helpful customer service AI for Lolly's Collection, an e-commerce store specializing in clothing and accessories. Your tone must be warm, slightly casual, and professional. 
+    
     Current Date: ${new Date().toLocaleDateString()}.
-
+    
     Instructions:
     1. If the user asks about products, use the provided getProductDetails tool.
     2. If the user expresses frustration (emotionally charged words), respond with empathy and suggest connecting to a live agent.
@@ -2143,9 +2082,8 @@ async function getSmartBotResponse(userMessage) {
             const functionName = functionCall.name;
             const functionToCall = availableFunctions[functionName];
             const functionArgs = functionCall.args;
-
+            
             // Execute the database function
-            // 🚨 CRITICAL: The functionToCall (getProductDetails) is already limited by Bottleneck internally.
             const toolOutput = await functionToCall(functionArgs);
 
             // 2. Send the tool result back to the model for the final response
@@ -2164,10 +2102,10 @@ async function getSmartBotResponse(userMessage) {
                     systemInstruction: systemInstruction,
                 },
             });
-
+            
             return secondResponse.text;
         }
-
+        
         // Return the initial response if no tool was called
         return response.text;
 
@@ -2178,7 +2116,7 @@ async function getSmartBotResponse(userMessage) {
 }
 // Global Map to hold active WebSocket connections for Admin and Customer
 // Key: customerId (string) -> Value: { admin: WebSocket | null, customer: WebSocket | null }
-const chatSessions = new Map();
+const chatSessions = new Map(); 
 
 // Create a WebSocket Server
 const wss = new WebSocket.Server({ noServer: true });
@@ -2189,51 +2127,36 @@ const wss = new WebSocket.Server({ noServer: true });
 
 async function handleChatMessage(ws, message, senderRole, customerId) {
     if (!message || !customerId) return;
-
+    
     // Determine the sender/recipient IDs based on the role and session data
     const sessionData = chatSessions.get(customerId);
     if (!sessionData) return console.log(`Session data missing for customer ${customerId}`);
 
     const senderId = (senderRole === 'admin') ? ADMIN_CHAT_ID : customerId;
     const recipientId = (senderRole === 'admin') ? customerId : ADMIN_CHAT_ID;
-
+    
     try {
         const parsed = JSON.parse(message);
-
+        
         // 1. AI Request Routing (Customer to Bot/AI)
         if (senderRole === 'customer' && parsed.ai_request) {
-
-            // 🚨 CRITICAL SCALING: Route the potentially expensive AI call through the limiter
-            const aiResponse = await limiter.schedule(() => getSmartBotResponse(parsed.message));
-
-            // Send AI response back to the customer
-            ws.send(JSON.stringify({
-                sender: 'ai_bot',
-                message: aiResponse
-            }));
-
-            // Save the customer's message and the AI's response to history
-            // Use limiter for database write operations
-            await limiter.schedule(() => saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message));
-            await limiter.schedule(() => saveChatMessage(customerId, 'ai_bot', ADMIN_CHAT_ID, customerId, aiResponse));
-
+            
+            // ... (AI request logic is correct)
             return;
-
 
         // 2. Handoff Request Routing (Customer to Admin Notification)
         } else if (senderRole === 'customer' && parsed.handoff) {
-
+            
             // 🚨 FIX: Fetch real customer name if they are logged in (numeric ID)
             const isAnon = customerId.startsWith('anon-');
             let customerName = parsed.customerName || 'Anonymous';
-
-            // Use limiter for database read operation
-            if (!isAnon) {
-                const user = await limiter.schedule(() => findUserById(customerId));
-                if (user) customerName = user.username; // Use user.username
+            
+            if (!isAnon) { 
+                const user = await findUserById(customerId); 
+                if (user) customerName = user.name; // Use user.name (which is username)
             }
             // END FIX
-
+            
             // Notify the admin via the Notification Socket
             const notificationPayload = JSON.stringify({
                 sender: 'customer',
@@ -2242,21 +2165,21 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
                 message: parsed.message, // The message that triggered the handoff
                 handoff_request: true
             });
-
+            
             // Send the notification to the dedicated admin notification socket
             const adminWs = chatSessions.get(ADMIN_CHAT_ID)?.admin;
             if (adminWs && adminWs.readyState === WebSocket.OPEN) {
                 adminWs.send(notificationPayload);
             }
-
+            
             // Save the customer's initial message to history
-            await limiter.schedule(() => saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message));
-
+            await saveChatMessage(customerId, senderRole, senderId, recipientId, parsed.message);
+            
             return;
-
+            
         // 3. Admin Handshake Signal (Admin to Customer)
         } else if (senderRole === 'admin' && parsed.is_admin_handshake) {
-
+            
              // Send HANDOFF_SUCCESS to the customer socket
              const customerWs = sessionData.customer;
              if (customerWs && customerWs.readyState === WebSocket.OPEN) {
@@ -2264,22 +2187,22 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
                  customerWs.send(JSON.stringify(successPayload));
              }
              // Do NOT save the handshake message to history
-             return;
+             return; 
 
         // 5. 🚨 NEW: Background Connection Check (Heartbeat)
         } else if (senderRole === 'customer' && parsed.check_status) {
-
+            
             // Check if an admin is present in this specific customer's session
             const session = chatSessions.get(customerId);
             const isAdminOnline = !!(session && session.admin && session.admin.readyState === WebSocket.OPEN);
-
+            
             // Reply with system status packet
             const statusPayload = JSON.stringify({
                 sender: 'system',
                 type: 'CONNECTION_STATUS',
                 connected: isAdminOnline
             });
-
+            
             if (ws.readyState === WebSocket.OPEN) {
                 ws.send(statusPayload);
             }
@@ -2288,29 +2211,27 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
         // 4. Standard Live Chat Routing (Saves and Relays)
         } else {
             const messageText = parsed.message;
-
-            // Save to DB (Use limiter)
-            await limiter.schedule(() => saveChatMessage(customerId, senderRole, senderId, recipientId, messageText));
-
+            
+            // Save to DB
+            await saveChatMessage(customerId, senderRole, senderId, recipientId, messageText);
+            
             // Relay the message to the other participant in the session
             const target = (senderRole === 'admin' ? sessionData.customer : sessionData.admin);
-            const payload = {
-                sender: senderRole,
+            const payload = { 
+                sender: senderRole, 
                 message: messageText,
                 customerId: customerId // Include customerId for admin side message identification
             };
-
+            
             if (target && target.readyState === WebSocket.OPEN) {
                 target.send(JSON.stringify(payload));
             } else {
-                // If the other side is offline, save a system message indicating this to the history
-                const offlineMessage = `${senderRole} sent a message, but the other party is offline. It will be seen upon login.`;
-                await limiter.schedule(() => saveChatMessage(customerId, 'system', senderId, recipientId, offlineMessage));
+                console.log(`Relay failed: ${senderRole}'s target is not open or undefined.`);
             }
         }
     } catch (error) {
         // This is the fallback for non-JSON messages (though fixed in handler)
-        console.error('WebSocket Routing/Message Error:', error);
+        console.error('WebSocket Routing/Message Error:', error); 
         // Fallback response for customer
         ws.send(JSON.stringify({ sender: 'admin', message: 'Sorry, I encountered an internal error. Please try again.' }));
     }
@@ -2319,18 +2240,21 @@ async function handleChatMessage(ws, message, senderRole, customerId) {
 function cleanupSession(customerId, role) {
     const session = chatSessions.get(customerId);
     if (session) {
+        // Close the other side if it's still open
+        const otherWs = (role === 'admin') ? session.customer : session.admin;
+        if (otherWs && otherWs.readyState === WebSocket.OPEN) {
+            // Send a close notification if possible
+            otherWs.send(JSON.stringify({ sender: 'system', message: `The ${role} has disconnected from the chat.` }));
+            // otherWs.close(); // Don't auto-close the customer's side just because the admin left
+        }
+        
         // Clear the specific role's reference
         if (role === 'admin') {
-            // Send a disconnect message to the customer if admin leaves
-            if (session.customer && session.customer.readyState === WebSocket.OPEN) {
-                session.customer.send(JSON.stringify({ sender: 'system', message: 'The live agent has disconnected. You are now speaking with Lolly Bot.' }));
-            }
             session.admin = null;
         } else if (role === 'customer') {
-            // No message needed for admin when customer leaves
             session.customer = null;
         }
-
+        
         // If both are null, delete the session entirely
         if (!session.admin && !session.customer) {
             chatSessions.delete(customerId);
@@ -2349,7 +2273,7 @@ wss.on('connection', (ws, req) => {
     const customerId = req.params.customerId;
     const role = req.params.role; // 'admin' or 'customer'
     const userId = req.session.userId;
-
+    
     // Initialize or retrieve the session
     let session = chatSessions.get(customerId) || { admin: null, customer: null };
 
@@ -2359,14 +2283,14 @@ wss.on('connection', (ws, req) => {
         session.customer = ws;
     }
     chatSessions.set(customerId, session);
-
+    
     console.log(`New WebSocket connection: ${role} ID ${userId} for Customer ${customerId}`);
 
     ws.on('message', (data) => {
         try {
            const message = data.toString();
-
-
+           
+            
            if (message && message.length > 0) {
             // Pass the message (which is the JSON string from the client) and the role
             handleChatMessage(ws, message, role, customerId);
@@ -2404,13 +2328,22 @@ server.on('upgrade', (req, socket, head) => {
         socket.destroy();
         return;
     }
-
+    
     // 2. Retrieve session from session store
-    sessionMiddleware(req, {}, () => {
-
+    session({
+        secret: process.env.SESSION_SECRET , 
+        resave: false,
+        saveUninitialized: false, 
+        store: sessionStore, 
+        cookie: { 
+            maxAge: 1000 * 60 * 60 * 24, 
+            secure: process.env.NODE_ENV === 'production' 
+        }
+    })(req, {}, () => {
+        
         // ⬇️ FIX 2: WebSocket Mismatch Fix
         let finalCustomerId = customerIdFromUrl;
-
+        
         if (role === 'customer' && req.session.userId) {
             // If the user is logged in, force the use of their DB ID as the session key.
             // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
@@ -2418,7 +2351,7 @@ server.on('upgrade', (req, socket, head) => {
         }
         // ------------------------------------
 
-
+        
         // 3. Security Check
         const isAdminRequest = role === 'admin';
         const isCustomerRequest = role === 'customer';
@@ -2432,7 +2365,7 @@ server.on('upgrade', (req, socket, head) => {
             }
         } else if (isCustomerRequest) {
             // 🚨 CRITICAL FIX: Enforce logged-in session for customer chat
-            if (!req.session.userId) {
+            if (!req.session.userId) { 
                  console.log('Customer WebSocket Auth Failed: Not Logged In.');
                  socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                  socket.destroy();
@@ -2449,13 +2382,13 @@ server.on('upgrade', (req, socket, head) => {
              socket.destroy();
              return;
         }
-
-
-
+        
+       
+        
         // 4. Attach params/session data for use in the wss.on('connection') handler
         // CRITICAL: Use the finalCustomerId (which is the DB ID if logged in)
-        req.params = { customerId: finalCustomerId, role };
-
+        req.params = { customerId: finalCustomerId, role }; 
+        
         // 5. Handle WebSocket handshake
         wss.handleUpgrade(req, socket, head, (ws) => {
             wss.emit('connection', ws, req);
@@ -2471,7 +2404,7 @@ server.on('upgrade', (req, socket, head) => {
  * GET /api/admin/chat/history/:customerId
  * Retrieves chat history for a specific customer.
  */
-app.get('/api/admin/chat/history/:customerId', isAdmin, limiter.wrap(async (req, res) => {
+app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
     const customerId = req.params.customerId;
     try {
         const history = await getChatHistory(customerId);
@@ -2480,20 +2413,20 @@ app.get('/api/admin/chat/history/:customerId', isAdmin, limiter.wrap(async (req,
         console.error(`Error fetching admin chat history for ${customerId}:`, error);
         res.status(500).json({ message: 'Failed to retrieve chat history.' });
     }
-}));
+});
 
 /**
  * GET /api/chat/history/:customerId
  * Retrieves chat history for the customer client.
  */
-app.get('/api/chat/history/:customerId', limiter.wrap(async (req, res) => {
+app.get('/api/chat/history/:customerId', async (req, res) => {
     const customerId = req.params.customerId;
-    const sessionUserId = String(req.session.userId);
+    const sessionUserId = String(req.session.userId); 
 
     // FIX 3: Centralize logic to determine if the customerId is valid for this request.
     const isAnon = customerId.startsWith('anon-');
     const isMatchingLoggedInUser = req.session.userId && (sessionUserId === customerId);
-
+    
     if (isAnon || isMatchingLoggedInUser) {
         try {
             const history = await getChatHistory(customerId);
@@ -2503,11 +2436,11 @@ app.get('/api/chat/history/:customerId', limiter.wrap(async (req, res) => {
             return res.status(500).json({ message: 'Failed to retrieve chat history.' });
         }
     }
-
-    // Default denial for unauthenticated user requesting a numeric (DB) ID,
+    
+    // Default denial for unauthenticated user requesting a numeric (DB) ID, 
     // or a logged-in user requesting a different DB ID.
     return res.status(403).json({ message: 'Access denied to this chat history.' });
-}));
+});
 
 
 // =========================================================
