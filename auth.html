@@ -36,7 +36,7 @@
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 480px; /* 🚨 UPGRADE: Expanded max-width for extra form fields */
+            max-width: 480px; 
             text-align: center;
             position: relative;
         }
@@ -155,7 +155,7 @@
             padding: 30px;
             border-radius: 12px;
             width: 90%;
-            max-width: 420px; /* 🚨 UPGRADE: Expanded max-width for modal */
+            max-width: 420px; 
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
             position: relative;
         }
@@ -175,7 +175,7 @@
     position: fixed;
     top: 20px;
     right: 20px;
-    z-index: 10000; /* Ensure it's above everything else */
+    z-index: 10000; 
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -238,7 +238,7 @@
 
         <div id="signup-section" class="form-section">
             <form id="signup-form">
-                <!-- 🚨 UPDATED SIGNUP FIELDS -->
+                <!-- UPDATED SIGNUP FIELDS -->
                 <input type="text" id="signup-username" placeholder="Username (e.g. JohnDoe)" required>
                 <input type="email" id="signup-email" placeholder="Email Address" required>
                 <input type="text" id="signup-national-id" placeholder="National ID Number (Account Number)" required pattern="[0-9]{8,15}" title="National ID must be between 8 and 15 digits">
@@ -265,7 +265,7 @@
             <h2 id="forgot-title">Forgot Password?</h2>
             
             <div id="forgot-step-1">
-                <p>Enter your **phone number** to receive a One-Time Password (OTP).</p>
+                <p>Enter your <strong>phone number</strong> to receive a One-Time Password (OTP).</p>
                 <form id="request-otp-form"> <input type="tel" id="forgot-phone-input" placeholder="Phone Number (e.g. +2547xxxxxxx)" required>
 
                     <button type="submit">Send OTP</button>
@@ -273,7 +273,7 @@
             </div>
             
             <div id="forgot-step-2" style="display: none;">
-                <p>A 6-digit OTP has been sent to **<span id="otp-phone-display" style="font-weight: bold;"></span>**. Enter it below (expires in 5 minutes).</p>
+                <p>A 6-digit OTP has been sent to <strong><span id="otp-phone-display" style="font-weight: bold;"></span></strong>. Enter it below (expires in 5 minutes).</p>
                 <form id="verify-otp-form">
                     <input type="text" id="otp-input" placeholder="6-digit OTP" required maxlength="6" pattern="[0-9]{6}">
                     <button type="submit">Verify OTP</button>
@@ -337,11 +337,6 @@
                 document.getElementById('forgot-step-1').style.display = 'block';
                 document.getElementById('forgot-step-2').style.display = 'none';
                 document.getElementById('request-otp-form').reset();
-                // Rename display span for phone number clarity (UI change)
-                const otpDisplay = document.getElementById('otp-email-display');
-                if (otpDisplay) {
-                    otpDisplay.id = 'otp-phone-display'; 
-                }
             }
         }
 
@@ -429,7 +424,7 @@ function showToast(message, type = 'info', duration = 4000) {
         // 2. SIGN UP (MODIFIED for New Fields and Password Confirmation)
         document.getElementById('signup-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            // 🚨 UPDATED: Get new fields
+            // UPDATED: Get new fields
             const username = document.getElementById('signup-username').value;
             const email = document.getElementById('signup-email').value;
             const nationalId = document.getElementById('signup-national-id').value;
@@ -451,7 +446,7 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // 🚨 UPDATED: Send all required data fields
+                    // UPDATED: Send all required data fields
                     body: JSON.stringify({ username, email, nationalId, password })
                 });
 
@@ -496,7 +491,6 @@ function showToast(message, type = 'info', duration = 4000) {
         
 // 4. OTP PASSWORD RESET LOGIC (MODIFIED TO USE PHONE NUMBER)
 
-// let resetEmail = ''; // No longer strictly needed
 let resetPhone = '';
 
 document.getElementById('request-otp-form').addEventListener('submit', async function(e) {

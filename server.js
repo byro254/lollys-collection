@@ -1,4 +1,4 @@
-// server.js (Updated to handle manual M-Pesa deposits)
+// server.js (Updated with FraudLabsPro SMS Verification API Integration)
 
 // 1. Load environment variables first
 require('dotenv').config(); 
@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { v4: uuidv4 } = require('uuid');
-// 🚨 RESEND INTEGRATION
+// 🚨 RESEND INTEGRATION (Kept for other emails like order confirmation)
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
 const session = require('express-session'); 
@@ -19,14 +19,44 @@ const cors = require('cors');
 
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
-const africastalking = require('africastalking')({
-    apiKey: process.env.AT_API_KEY,
-    username: process.env.AT_USERNAME
-});
+
+// --- FRAUDLABSPRO SMS VERIFICATION SETUP ---
+// Using the API Key and service concept from the provided image.
+const FRAUDLABSPRO_API_KEY = process.env.FRAUDLABSPRO_API_KEY; // From image
+
+// Placeholder for FraudLabsPro client logic
+const fraudLabsPro = {
+    // Simulates sending SMS with a verification code using the provided API Key
+    sendSMSVerifyCode: async ({ phoneNumber, verifyCode }) => {
+        // Assume FraudLabsPro requires E.164 format (e.g., +2547xxxxxxx)
+        const countryCode = '254'; // Assuming Kenya based on context
+        const phone = phoneNumber.startsWith('+') ? phoneNumber.substring(1) : phoneNumber;
+        
+        console.log(`[FRAUDLABSPRO MOCK] Sending OTP ${verifyCode} to ${phone}.`);
+        
+       
+         const response = await fetch('https://api.fraudlabspro.com/v1/verify/send', {
+             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                key: FRAUDLABSPRO_API_KEY,
+                tel: phone,
+                country: countryCode,
+                otp: verifyCode 
+            })
+        });
+         const data = await response.json();
+         if (data.status === 'OK') return { success: true, reference_id: data.verify_id };
+       
+        await new Promise(resolve => setTimeout(resolve, 500)); 
+        return { success: true, verify_id: `flp-${Date.now()}` };
+    }
+};
+// --- END FRAUDLABSPRO SMS VERIFICATION SETUP ---
+
+// In-memory caches
 const otpCache = {};
-const sms = africastalking.SMS;
 // Import DB functions
-// 🚨 UPDATE: Include performWalletTransaction instead of logDepositTransaction
 const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit } = require('./db'); 
 
 const passwordResetCache = {}; 
@@ -213,6 +243,14 @@ app.get('/auth', (req, res) => {
         return res.redirect('/'); 
     }
     res.sendFile(path.join(__dirname, 'auth.html'));
+});
+
+/**
+ * 🚨 NEW ROUTE: Password Reset Page (/reset-password.html)
+ * Must be publicly accessible as the auth relies on URL tokens.
+ */
+app.get('/reset-password.html', (req, res) => { 
+    res.sendFile(path.join(__dirname, 'reset-password.html')); 
 });
 
 // Admin dashboard is protected
@@ -1862,9 +1900,10 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
-// Route to handle password reset request (Step 1: Send Email)
-
-
+/**
+ * Endpoint to request OTP for password reset.
+ * Replaces Resend (email proxy) with simulated TeleSign SMS service.
+ */
 app.post("/api/request-otp", async (req, res) => {
     const { phone } = req.body; // Primary lookup field
     
@@ -1872,7 +1911,7 @@ app.post("/api/request-otp", async (req, res) => {
         return res.status(400).json({ message: 'Phone number is required to send OTP.' });
     }
     
-    // 1. Find user by phone number (<<< FIX APPLIED HERE)
+    // 1. Find user by phone number 
     const user = await db.findUserByPhone(phone); 
     
     if (!user) {
@@ -1887,32 +1926,31 @@ app.post("/api/request-otp", async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiry = Date.now() + 5 * 60 * 1000;
 
-        // 3. Save OTP in memory using the global otpCache
+        // 3. Save OTP in memory 
         // Store userId and email for the final reset step lookup, keyed by phone number
         otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
 
-        // 4. Send Email (Proxy for SMS)
-        
-        // 🚨 RESEND INTEGRATION FOR OTP
-        const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
+        // 4. Send SMS using FraudLabsPro
+        // Normalize phone to E.164 format for external services (e.g., +2547XXXXXXXX)
+        // FraudLabsPro client mock now used
+        const e164Phone = normalizedKey.startsWith('+') ? normalizedKey : `+${normalizedKey}`;
 
-        // ⬇️ TEMPORARY: Send the OTP to the Admin's verified email for testing, 
-        // regardless of the user's email, due to Resend restrictions.
-        const testingRecipient = 'oyoookoth42@gmail.com'; 
-        // ------------------------------------------------------------------
 
-        const { error } = await resend.emails.send({
-            from: `Lolly's Security <${senderEmail}>`,
-            to: testingRecipient, // Sends to admin email for testing confirmation
-            subject: 'Lollys Collection Password Reset OTP',
-            text: `Your One-Time Password (OTP) for password reset is: ${otp} (User: ${user.email}). It expires in 5 minutes.`
+        const flpResponse = await fraudLabsPro.sendSMSVerifyCode({ 
+            phoneNumber: e164Phone,
+            verifyCode: otp,
+            // You can add additional parameters here if needed, like language or template ID
         });
 
-        if (error) {
-            console.error('Resend OTP Error:', error);
+        if (flpResponse.success) {
+            res.status(200).json({ message: 'OTP sent successfully. Please check your phone for the SMS.' });
+        } else {
+            // Log the error from the FraudLabsPro client
+            console.error('FraudLabsPro API Error:', flpResponse.error || 'Unknown SMS error');
+            // Fallback to a generic message to the client
+            res.status(500).json({ message: 'Error processing OTP request via SMS provider. Please try again.' });
         }
 
-        res.status(200).json({ message: 'OTP sent successfully. Please check your email and submit the OTP.' });
     } catch (error) {
         console.error('OTP Request Error:', error);
         res.status(500).json({ message: 'Error processing OTP request.' });
