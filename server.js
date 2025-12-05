@@ -1,4 +1,4 @@
-// server.js (Updated for Production-Ready SMS OTP via External Service)
+// server.js (Updated for Production-Ready SMS OTP via External Service SDK Pattern)
 
 // 1. Load environment variables first
 require('dotenv').config(); 
@@ -20,75 +20,99 @@ const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
 // --- PRODUCTION-READY SMS SERVICE INTEGRATION ---
-// NOTE: We simulate the 'fetch' call to the actual service endpoint 
-// using the API key expected from the environment.
-const FRAUDLABSPRO_API_KEY = process.env.FRAUDLABSPRO_API_KEY || 'UTBFBZFWLQH12HT3ULYJQLZOJKT9VQE'; // Use ENV or the provided key as fallback
+// Using the API Key and SDK pattern provided by the user.
+// Key provided in the image/conversation: UTBFBZFWLQH12HT3ULYJQLZOJKT9VQE
+const FRAUDLABSPRO_API_KEY = process.env.FRAUDLABSPRO_API_KEY ; 
 
-// Production-ready client logic expecting JSON response from an API
+// Production-ready client logic structured to match the SDK usage (sendSMS)
 const smsServiceProvider = {
-    // Attempts to send SMS using FraudLabsPro's API signature
-    sendSMSVerifyCode: async ({ phoneNumber, verifyCode }) => {
-        
-        if (!FRAUDLABSPRO_API_KEY) {
-            console.error("FATAL: FRAUDLABSPRO_API_KEY is not set.");
-            return { success: false, error: 'API Key missing.' };
-        }
-
-        // FraudLabsPro typically expects the phone number without the leading '+' when
-        // the country is specified separately (using 254 for Kenya)
-        const countryCode = '254'; 
-        const phoneDigits = phoneNumber.replace('+', ''); 
-        
-        console.log(`[FRAUDLABSPRO REAL] Initiating SMS for OTP ${verifyCode} to ${phoneDigits}.`);
-        
-        try {
-            // NOTE: This URL is a common placeholder for verification APIs.
-            const apiUrl = 'https://api.fraudlabspro.com/v1/verification/send';
+    // Mimicking the SDK initialization: var sms = new SMSVerification('YOUR API KEY');
+    smsClient: {
+        // Mimicking the SDK call: sms.sendSMS(params, (err, data) => { ... })
+        sendSMS: async (params) => {
+            const { tel, mesg, otp_timeout, country_code } = params;
             
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json' 
-                },
-                body: JSON.stringify({
-                    key: FRAUDLABSPRO_API_KEY,
-                    tel: phoneDigits,
-                    country: countryCode,
-                    otp: verifyCode,
-                })
-            });
-
-            // 1. Check HTTP status code first
-            if (!response.ok) {
-                 const errorText = await response.text();
-                 console.error("SMS API responded with non-OK status:", response.status, "Body:", errorText.substring(0, 100));
-                 return { success: false, error: `SMS API HTTP Error (${response.status}): ${errorText.substring(0, 100)}` };
+            if (!FRAUDLABSPRO_API_KEY) {
+                console.error("FATAL: FRAUDLABSPRO_API_KEY is not set.");
+                return { err: 'API Key missing.' };
             }
 
-            // 2. Parse JSON response
-            let data;
+            // CRITICAL: Inject OTP into message template
+            const otp = mesg.match(/<otp>(\d+)/)?.[1] || mesg.match(/<otp>/) ? mesg.replace('<otp>', params.verifyCode) : 'NO_OTP_TEMPLATE';
+            if (otp === 'NO_OTP_TEMPLATE') {
+                 console.error("SMS Message template missing <otp> tag.");
+                 return { err: 'SMS Message template missing <otp> tag.' };
+            }
+
+            // Construct URL-encoded form data (as required by most low-level API clients)
+            const payload = new URLSearchParams();
+            payload.append('key', FRAUDLABSPRO_API_KEY);
+            payload.append('tel', tel.replace('+', '')); // Remove '+' if present
+            payload.append('country', country_code);
+            payload.append('otp', params.verifyCode); // Pass OTP separately for service verification
+            payload.append('mesg', otp);
+            payload.append('otp_timeout', otp_timeout);
+            
+            console.log(`[FRAUDLABSPRO REAL] Initiating SMS for OTP ${params.verifyCode} to ${tel}.`);
+            
             try {
-                data = await response.json();
-            } catch (e) {
-                console.error("Failed to parse JSON response from SMS API:", e.message);
-                // Return server error to stop execution
-                return { success: false, error: 'SMS API returned invalid JSON response.' };
-            }
-            
-            // 3. Check for service-level success condition (assuming 'OK' status)
-            if (data.status === 'OK' || data.error === 0) { 
-                return { success: true, verify_id: data.verify_id };
-            } else {
-                // Handle API-specific errors (e.g., "Invalid phone number", "Insufficient credit")
-                console.error("SMS API failed with message:", data.message || JSON.stringify(data));
-                return { success: false, error: data.message || 'SMS service denied request.' };
-            }
+                // NOTE: This URL is a common placeholder for verification APIs.
+                const apiUrl = ' https://api.fraudlabspro.com/v2/verification/send';
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 
+                        // Crucial change: Send as URL-encoded form data
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: payload.toString()
+                });
 
-        } catch (e) {
-            console.error('Network/Fetch Error during SMS call:', e.message);
-            // This catches the network/DNS/connection failures
-            return { success: false, error: `Network connection failed: ${e.message}` };
+                if (!response.ok) {
+                     const errorText = await response.text();
+                     console.error("SMS API responded with non-OK status:", response.status, "Body:", errorText.substring(0, 100));
+                     return { err: `SMS API HTTP Error (${response.status}): ${errorText.substring(0, 100)}`, data: null };
+                }
+
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    const errorText = await response.text();
+                    console.error("Failed to parse JSON response from SMS API:", e.message, "Raw response start:", errorText.substring(0, 100));
+                    return { err: 'SMS API returned invalid JSON response. Check API URL/Key.', data: null };
+                }
+                
+                if (data.status === 'OK' || data.error === 0) { 
+                    return { err: null, data: data };
+                } else {
+                    console.error("SMS API failed with message:", data.message || JSON.stringify(data));
+                    return { err: data.message || data.error || 'SMS service denied request.', data: data };
+                }
+
+            } catch (e) {
+                console.error('Network/Fetch Error during SMS call:', e.message);
+                return { err: `Network connection failed: ${e.message}`, data: null };
+            }
         }
+    },
+    // Public facing function that handles OTP generation and mapping to the client
+    sendSMSVerifyCode: async ({ phoneNumber, verifyCode }) => {
+        const params = {
+            tel: phoneNumber,
+            mesg: `Your verification code is ${verifyCode}.`,
+            otp_timeout: 300, // 5 minutes expiry
+            country_code: 'KE', // Hardcoded country code
+            verifyCode: verifyCode // Passed separately for logic
+        };
+
+        const result = await smsServiceProvider.smsClient.sendSMS(params);
+        
+        // Map SDK result format back to the expected internal format
+        if (result.err) {
+            return { success: false, error: result.err, details: result.data };
+        }
+        return { success: true, verify_id: result.data.verify_id, details: result.data };
     }
 };
 // -----------------------------------------
@@ -301,8 +325,8 @@ app.get('/products', (req, res) => { res.sendFile(path.join(__dirname, 'products
 
 app.get('/cart', (req, res) => { res.sendFile(path.join(__dirname, 'cart.html')); });
 
-app.get('/about', (req, res) => { res.sendFile(path.join(__dirname, 'about.html')); });
-app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.html')); });
+app.get('/about', (req, res) => { res.sendFile(path.join(__dirname, 'about.html'))); });
+app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.html'))); });
 
 
 // =========================================================
