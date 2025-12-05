@@ -325,8 +325,9 @@ app.get('/products', (req, res) => { res.sendFile(path.join(__dirname, 'products
 
 app.get('/cart', (req, res) => { res.sendFile(path.join(__dirname, 'cart.html')); });
 
-app.get('/about', (req, res) => { res.sendFile(path.join(__dirname, 'about.html'))); });
-app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.html'))); });
+app.get('/about', (req, res) => { res.sendFile(path.join(__dirname, 'about.html')); });
+
+app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.html')); });
 
 
 // =========================================================
