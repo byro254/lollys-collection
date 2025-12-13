@@ -22,6 +22,52 @@ const pool = mysql.createPool({
 
 
 // ---------------------------------------------------------------- //
+// --- DATABASE SCHEMA ALTERATIONS (Migrations) ---
+// ---------------------------------------------------------------- //
+
+/**
+ * Runs necessary database migrations to update tables (non-destructive where possible).
+ * This function should ideally be called once on server startup.
+ */
+async function runMigrations() {
+    console.log("--- Running Database Migrations ---");
+    const connection = await pool.getConnection();
+    try {
+        // Migration 1: Add 'size' column to the 'cart' table for product variations.
+        await connection.query(`
+            ALTER TABLE cart
+            ADD COLUMN size VARCHAR(10) DEFAULT NULL;
+        `);
+        console.log("✅ Migration 1/2: Added 'size' column to 'cart' table (if it didn't exist).");
+    } catch (error) {
+        if (error.code === 'ER_DUP_FIELDNAME') {
+            console.log("ℹ️ Migration 1/2: 'size' column already exists in 'cart'. Skipping.");
+        } else {
+            console.error("❌ Migration 1/2 Failed:", error.message);
+            throw error;
+        }
+    }
+    
+    try {
+        // Migration 2: Add 'size' column to 'order_items' table for order history.
+        await connection.query(`
+            ALTER TABLE order_items
+            ADD COLUMN size VARCHAR(10) DEFAULT NULL;
+        `);
+        console.log("✅ Migration 2/2: Added 'size' column to 'order_items' table (if it didn't exist).");
+    } catch (error) {
+        if (error.code === 'ER_DUP_FIELDNAME') {
+            console.log("ℹ️ Migration 2/2: 'size' column already exists in 'order_items'. Skipping.");
+        } else {
+            console.error("❌ Migration 2/2 Failed:", error.message);
+            throw error;
+        }
+    } finally {
+        connection.release();
+    }
+}
+// ---------------------------------------------------------------- //
+
 
 /**
  * Retrieves a list of all registered users (customers).
@@ -184,12 +230,14 @@ async function findUserOrders(userId) {
 
     // 2. For each order, fetch its associated items
     const ordersWithItems = await Promise.all(orders.map(async (order) => {
+        // 🚨 MODIFIED: Select the new 'size' column for order history views
         const itemSql = `
             SELECT 
                 id AS itemId,  
                 product_name as name, 
                 unit_price as price, 
-                quantity as quantity
+                quantity as quantity,
+                size as size
             FROM order_items 
             WHERE order_id = ? 
         `;
@@ -846,7 +894,6 @@ module.exports = {
     findTransactionByRef,
     // 🚨 Manual Deposit
     processManualMpesaDeposit, 
-    // 🚨 Database Alteration Placeholder
-    // Note: The actual alteration is done via the alter_cart_table.sql file.
-    // This is just for demonstration in a single-file environment.
+    // 🚨 Migration Function
+    runMigrations, 
 };
