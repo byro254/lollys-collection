@@ -51,6 +51,7 @@
         #close-modal:focus,
         .add-to-cart-btn:focus,
         .quantity-controls input:focus,
+        .size-controls select:focus, /* NEW: Size Selector Focus */
         #search-input:focus {
             outline: 2px solid var(--color-pink-accent); 
             outline-offset: 3px;
@@ -312,19 +313,34 @@
         .product-availability strong {
             font-weight: 600;
         }
-        .quantity-controls { 
-            margin-bottom: 15px; 
-            display: flex; 
-            align-items: center; 
-            gap: 10px; 
-        }
-        .quantity-controls input { 
-            width: 60px; 
-            padding: 5px; 
-            border: 1px solid var(--color-border-medium); 
-            border-radius: 4px; 
+
+        /* 🚨 NEW: Size and Quantity Controls Grouping */
+        .controls-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
         }
         
+        .quantity-controls, .size-controls {
+            flex-grow: 1;
+        }
+
+        .quantity-controls label, .size-controls label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .quantity-controls input, .size-controls select { 
+            width: 100%; 
+            padding: 8px; 
+            border: 1px solid var(--color-border-medium); 
+            border-radius: 4px; 
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+        /* END NEW CONTROLS STYLES */
+
         .add-to-cart-btn {
             background-color: var(--color-pink-dark); 
             color: white; 
@@ -593,7 +609,8 @@
 
 
         // --- 2. Add to Cart Logic (POST to API) ---
-        async function addToCart(product, quantity) {
+        // 🚨 MODIFIED: Added size parameter
+        async function addToCart(product, quantity, size = null) {
             if (!isUserAuthenticated) {
                 showCartAlert('Login required to add to cart.', true);
                 document.getElementById('access-required-modal').classList.add('is-open');
@@ -610,7 +627,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         productId: product.id,
-                        quantity: quantityToAdd
+                        quantity: quantityToAdd,
+                        size: size // 🚨 NEW: Send size in body
                     })
                 });
 
@@ -750,6 +768,11 @@
                 `<span class="stock-in" style="color: var(--color-success);">In Stock (${stock} left)</span>` : 
                 `<span class="stock-out" style="color: var(--color-danger);">Out of Stock</span>`;
             
+            // 🚨 NEW: Logic to check if size selector should be shown
+            const needsSize = product.category && 
+                             product.category.toLowerCase() !== 'electronic' && 
+                             product.category.toLowerCase() !== 'tools';
+
             // 🚨 Re-injecting the user's snippet, now wrapped in the correct modal-body structure
             modalBody.innerHTML = `
                 <div class="modal-image-col">
@@ -768,17 +791,35 @@
                     <p class="product-availability"><strong>Availability:</strong> ${stockStatus}</p>
                     
                     ${stock > 0 ? `
-                        <div class="quantity-controls">
-                            <label for="quantity-${product.id}">Quantity:</label>
-                            <input 
-                                type="number" 
-                                id="quantity-${product.id}" 
-                                value="1" 
-                                min="1" 
-                                max="${stock}"
-                                onchange="this.value = Math.min(Math.max(1, parseInt(this.value || 1)), ${stock})"
-                            >
+                        <div class="controls-group">
+                            <!-- 🚨 NEW: Size Selection (Conditional) -->
+                            ${needsSize ? `
+                                <div class="size-controls" id="size-controls-${product.id}">
+                                    <label for="size-${product.id}">Size:</label>
+                                    <select id="size-${product.id}" required>
+                                        <option value="">Select Size</option>
+                                        <option value="S">Small (S)</option>
+                                        <option value="M">Medium (M)</option>
+                                        <option value="L">Large (L)</option>
+                                        <option value="XL">Extra Large (XL)</option>
+                                    </select>
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Existing Quantity Controls -->
+                            <div class="quantity-controls">
+                                <label for="quantity-${product.id}">Quantity:</label>
+                                <input 
+                                    type="number" 
+                                    id="quantity-${product.id}" 
+                                    value="1" 
+                                    min="1" 
+                                    max="${stock}"
+                                    onchange="this.value = Math.min(Math.max(1, parseInt(this.value || 1)), ${stock})"
+                                >
+                            </div>
                         </div>
+
                         <button 
                             class="add-to-cart-btn"
                             id="add-to-cart-${product.id}"
@@ -796,7 +837,21 @@
             if (stock > 0) {
                 document.getElementById(`add-to-cart-${product.id}`).addEventListener('click', () => {
                     const quantity = document.getElementById(`quantity-${product.id}`).value;
-                    addToCart(product, quantity);
+                    
+                    let size = '';
+                    const sizeSelector = document.getElementById(`size-${product.id}`);
+                    
+                    if (needsSize) {
+                        // Check if a size was selected for non-electronic/tool items
+                        size = sizeSelector ? sizeSelector.value : '';
+                        if (!size) {
+                             showCartAlert('Please select a size.', true);
+                             return;
+                        }
+                    }
+                    
+                    // Pass the size (will be '' if not needed) to addToCart
+                    addToCart(product, quantity, size);
                 });
             }
 

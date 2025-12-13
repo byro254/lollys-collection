@@ -483,7 +483,7 @@ async function getBusinessFinancialHistory(businessId) {
 // ---------------------------------------------------------------- //
 
 /**
- 
+ * Saves a new chat message to the database.
  * @param {string} customerId - The ID of the primary chat session owner (key).
  * @param {('admin'|'customer')} senderRole - Role of the sender.
  * @param {string} senderId - The actual ID of the user who sent the message.
@@ -731,6 +731,89 @@ async function findTransactionByRef(externalRef, userId) {
         throw error;
     }
 }
+
+/**
+ * Processes a manual M-Pesa deposit, checking for duplicates and instantly crediting.
+ * @param {string} userId - The user ID (National ID) of the depositor.
+ * @param {string} transactionCode - The 10-character M-Pesa receipt code (external_ref).
+ * @param {number} amount - The validated amount paid.
+ * @returns {Promise<void>}
+ */
+async function processManualMpesaDeposit(userId, transactionCode, amount) {
+    const connection = await pool.getConnection();
+    const type = 'Deposit';
+    const method = 'M-Pesa Manual';
+    const transactionStatus = 'Completed';
+    const description = `Manual deposit via code ${transactionCode}`;
+    const businessId = '0'; 
+    
+    try {
+        await connection.beginTransaction();
+
+        // 1. Check for Duplicate Transaction Code (M-Pesa Receipt should be unique)
+        const [duplicateCheck] = await connection.execute(
+            'SELECT 1 FROM transactions WHERE external_ref = ?',
+            [transactionCode]
+        );
+        if (duplicateCheck.length > 0) {
+            throw new Error('DUPLICATE_RECEIPT');
+        }
+
+        // 2. Get User Wallet (with lock)
+        let [userWalletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
+            [userId]
+        );
+        
+        if (userWalletRows.length === 0) {
+            throw new Error('WALLET_NOT_FOUND');
+        }
+        const userWalletId = userWalletRows[0].wallet_id;
+        
+        // 3. Credit User Wallet
+        await connection.execute(
+            'UPDATE wallets SET balance = balance + ? WHERE user_id = ?',
+            [amount, userId]
+        );
+
+        // 4. Log User Transaction
+        await connection.execute(
+            `INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status, description)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [userId, userWalletId, type, method, amount, transactionCode, transactionStatus, description]
+        );
+
+        // 5. Credit Business Wallet (Revenue) and Log Transaction
+        const [businessWalletRows] = await connection.execute(
+            'SELECT wallet_id FROM wallets WHERE user_id = ? FOR UPDATE',
+            [businessId]
+        );
+        
+        if (businessWalletRows.length > 0) {
+            const businessWalletId = businessWalletRows[0].wallet_id;
+            // Update balance
+            await connection.execute(
+                'UPDATE wallets SET balance = balance + ? WHERE user_id = ?',
+                [amount, businessId]
+            );
+            // Log business revenue transaction
+            await connection.execute(
+                `INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status, description)
+                 VALUES (?, ?, 'Deposit', 'M-Pesa Revenue', ?, ?, 'Completed', ?)`,
+                [businessId, businessWalletId, amount, transactionCode, transactionStatus, `Manual Revenue from Customer ID ${userId}`]
+            );
+        }
+
+        await connection.commit();
+        
+    } catch (error) {
+        await connection.rollback();
+        console.error('Database error during manual M-Pesa deposit:', error);
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //
@@ -761,4 +844,9 @@ module.exports = {
     getChatHistory,
     completeMpesaDeposit,
     findTransactionByRef,
+    // 🚨 Manual Deposit
+    processManualMpesaDeposit, 
+    // 🚨 Database Alteration Placeholder
+    // Note: The actual alteration is done via the alter_cart_table.sql file.
+    // This is just for demonstration in a single-file environment.
 };

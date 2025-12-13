@@ -1452,9 +1452,10 @@ app.get('/api/cart', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     
     try {
+        // 🚨 MODIFIED: Select 'size' column from cart
         const sql = `
     SELECT c.product_id AS id, p.name, c.unit_price AS price, 
-             c.quantity, p.image_url, p.stock 
+             c.quantity, p.image_url, p.stock, c.size 
     FROM cart c
     JOIN products p ON c.product_id = p.id
     WHERE c.user_id = ?`;
@@ -1468,7 +1469,8 @@ app.get('/api/cart', isAuthenticated, async (req, res) => {
 
 app.post('/api/cart', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
-    const { productId, quantity } = req.body;
+    // 🚨 MODIFIED: Extract size from request body
+    const { productId, quantity, size } = req.body; 
     
     if (!productId || !quantity || quantity < 1) {
         return res.status(400).json({ message: 'Invalid product ID or quantity.' });
@@ -1479,32 +1481,68 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
     try {
         await connection.beginTransaction();
         
-        const [productRows] = await connection.execute('SELECT name, price, stock FROM products WHERE id = ?', [productId]);
+        // 🚨 FIX: Fetch 'category' as well to determine if size should be mandatory/present
+        const [productRows] = await connection.execute('SELECT name, price, stock, category FROM products WHERE id = ?', [productId]);
         if (productRows.length === 0) {
             return res.status(404).json({ message: 'Product not found.' });
         }
         const product = productRows[0];
         
-        const [cartRows] = await connection.execute('SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
+        // Determine if product requires size logic
+        const requiresSize = product.category && 
+                             product.category.toLowerCase() !== 'electronic' && 
+                             product.category.toLowerCase() !== 'tools';
+
+        // Validation for required size
+        if (requiresSize && (!size || size === '')) {
+             return res.status(400).json({ message: 'A size selection is required for this product category.' });
+        }
+
+        // 🚨 CRITICAL FIX: The cart lookup now includes the size.
+        // This ensures that adding 'Small Shirt' and 'Large Shirt' are treated as two distinct items.
+        let cartQuery = 'SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?';
+        let cartParams = [userId, productId];
+        
+        if (requiresSize) {
+            // For items requiring size, match on size
+            cartQuery += ' AND size = ?';
+            cartParams.push(size);
+        } else {
+            // For items without size, ensure size is NULL (or not set)
+            cartQuery += ' AND size IS NULL';
+        }
+        
+        const [cartRows] = await connection.execute(cartQuery, cartParams);
         
         const currentQuantity = cartRows.length > 0 ? cartRows[0].quantity : 0;
         const newQuantity = currentQuantity + quantity;
 
         if (newQuantity > product.stock) {
-            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock_quantity} of ${product.name} left.` });
+            return res.status(400).json({ message: `Cannot add that quantity. Only ${product.stock} of ${product.name} left.` });
         }
 
+        let productNameWithDetails = product.name;
+        if (size) {
+            productNameWithDetails = `${product.name} (Size: ${size})`;
+        }
+
+
         if (cartRows.length > 0) {
-            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?', [newQuantity, userId, productId]);
+            // Update quantity of existing item
+            // We use the original cartParams (which contains the size filter) to locate the unique cart item
+            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?' + (requiresSize ? ' AND size = ?' : ' AND size IS NULL'), [newQuantity, ...cartParams.slice(1)]);
+            
         } else {
+            // Insert new item
             await connection.execute(
-                'INSERT INTO cart (user_id, product_id, product_name, unit_price, quantity) VALUES (?, ?, ?, ?, ?)',
-                [userId, productId, product.name, product.price, newQuantity]
+                'INSERT INTO cart (user_id, product_id, product_name, unit_price, quantity, size) VALUES (?, ?, ?, ?, ?, ?)',
+                [userId, productId, productNameWithDetails, product.price, newQuantity, size || null] // Store size in the new column
             );
         }
 
         await connection.commit();
-        res.status(200).json({ message: `${product.name} quantity updated to ${newQuantity}.` });
+        // 🚨 FIX: Return the name with details in the success message
+        res.status(200).json({ message: `${productNameWithDetails} quantity updated to ${newQuantity}.` });
 
     } catch (error) {
         await connection.rollback();
