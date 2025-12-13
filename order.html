@@ -197,6 +197,17 @@
             color: var(--color-text-dark);
             font-weight: 600;
         }
+        .detail-table tbody td:first-child {
+             /* Ensure enough space for item name */
+            width: 50%; 
+        }
+        /* Style for Size meta data */
+        .item-meta {
+            font-size: 0.8em;
+            color: var(--color-pink-accent);
+            display: block;
+            margin-top: 2px;
+        }
 
         .status-message {
             padding: 20px;
@@ -585,7 +596,10 @@
                     <tbody>
                         ${items.map(item => `
                             <tr>
-                                <td>${item.name}</td>
+                                <td>
+                                    ${item.name}
+                                    ${item.size ? `<span class="item-meta">Size: ${item.size}</span>` : ''} 
+                                </td>
                                 <td>${item.quantity}</td>
                                 <td>KES${parseFloat(item.price).toFixed(2)}</td>
                                 <td>KES${(item.quantity * item.price).toFixed(2)}</td>

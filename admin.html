@@ -489,8 +489,17 @@
             padding: 10px 0;
             border-bottom: 1px solid var(--color-border-light);
             display: flex;
-            justify-content: space-between;
+            flex-direction: column; /* Allow content to stack */
             font-size: 0.95rem;
+        }
+        #modal-items-list li .item-line {
+            display: flex;
+            justify-content: space-between;
+        }
+        #modal-items-list li .item-meta {
+            font-size: 0.85rem;
+            color: var(--color-text-subtle);
+            margin-top: 3px;
         }
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -1277,14 +1286,14 @@ function manageAutoRefresh(sectionId) {
     // 2. Start the interval for the currently active section
     if (sectionId === 'dashboard') {
         autoRefreshDashboard(); 
-        dashboardIntervalId = setInterval(autoRefreshDashboard, REFRESH_INTERVAL);
+        dashboardIntervalId = setInterval(autoRefreshDashboard, REFRESH_INTERVAL_MS);
     } else if (sectionId === 'orders') {
         autoRefreshOrders();
-        ordersIntervalId = setInterval(autoRefreshOrders, REFRESH_INTERVAL);
+        ordersIntervalId = setInterval(autoRefreshOrders, REFRESH_INTERVAL_MS);
     } else if (sectionId === 'finance') {
         // 🚨 NEW: Start finance interval
         autoRefreshFinance();
-        window.financeIntervalId = setInterval(autoRefreshFinance, REFRESH_INTERVAL);
+        window.financeIntervalId = setInterval(autoRefreshFinance, REFRESH_INTERVAL_MS);
     }
 }
 
@@ -1837,8 +1846,10 @@ window.viewOrderDetails = async function(orderId, event) {
         document.getElementById('modal-total-amount').textContent = `KES${parseFloat(order.total).toFixed(2)}`;
         
         const itemsResponse = await fetch(`${API_BASE_URL}/orders/${orderId}/items`);
+        // Assuming order items API now returns the 'size' property
         let items = (itemsResponse.ok) ? await itemsResponse.json() :
-            [{ product_name: 'Mock Item A', quantity: 1, unit_price: 49.99 }, { product_name: 'Mock Item B', quantity: 2, unit_price: 25.00 }];
+            [{ product_name: 'Mock Item A (No Size)', quantity: 1, unit_price: 49.99, size: null }, 
+             { product_name: 'Mock Item B (Size L)', quantity: 2, unit_price: 25.00, size: 'L' }];
         
         loadingMessage.style.display = 'none';
         
@@ -1849,11 +1860,18 @@ window.viewOrderDetails = async function(orderId, event) {
 
         itemContainer.innerHTML = '';
         items.forEach(item => {
-           const li = document.createElement('li'); // <<< ADD THIS LINE
+           const li = document.createElement('li');
            const itemTotal = (item.unit_price * item.quantity).toFixed(2);
+           
+           // 🚨 MODIFIED: Check for size and display it in a separate meta line
+           const sizeMeta = item.size ? `<span class="item-meta">Size: ${item.size}</span>` : '';
+
             li.innerHTML = `
-                <span>${item.product_name}</span>
-                <span>${item.quantity} x KES ${parseFloat(item.unit_price).toFixed(2)} = <strong>KES ${itemTotal}</strong></span>
+                <div class="item-line">
+                    <span>${item.product_name}</span>
+                    <span>${item.quantity} x KES ${parseFloat(item.unit_price).toFixed(2)} = <strong>KES ${itemTotal}</strong></span>
+                </div>
+                ${sizeMeta}
             `;
             itemContainer.appendChild(li);
         });
