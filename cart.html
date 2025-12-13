@@ -412,7 +412,7 @@
         }
         #access-required-modal .modal-content h3 {
             font-size: 1.8rem;
-            color: var(--color-danger);
+            color: var(--color-pink-dark);
             margin-top: 10px;
         }
         #access-required-modal .modal-content button {
@@ -804,6 +804,12 @@
             // Replacing confirm() with console warning as per guidelines
             console.log("Item deletion initiated. Proceeding with removal.");
             
+            // Note: The backend API only handles deletion by product_id currently, 
+            // and relies on that product_id being unique in the cart. 
+            // In a fully correct implementation, a unique cart item ID (or product_id + size combination) 
+            // should be used for deletion. Since the current API uses only product_id, 
+            // we proceed with that for compatibility, but note that it deletes ALL instances of that product ID.
+            
             try {
                 const response = await fetch(`${CART_API_URL}/${productId}`, { method: 'DELETE' });
                 
@@ -881,6 +887,9 @@
                 subtotal += itemTotal;
                 
                 const productImageUrl = item.image_url || '/images/products/placeholder.jpg'; 
+                
+                // 🚨 MODIFIED: Include size in the item meta if it exists
+                const sizeInfo = item.size ? ` | Size: ${item.size}` : '';
 
                 const itemDiv = document.createElement('div');
                 itemDiv.classList.add('cart-item');
@@ -897,7 +906,7 @@
                     <div class="item-details">
                         <strong>${item.name || 'Unknown Product'}</strong>
                         <p class="item-meta">
-                            Unit Price: KES${price.toFixed(2)} | Qty: ${quantity}
+                            Unit Price: KES${price.toFixed(2)} | Qty: ${quantity}${sizeInfo}
                         </p>
                     </div>
                     <span class="item-total-price">KES${itemTotal.toFixed(2)}</span>
