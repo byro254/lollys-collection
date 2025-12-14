@@ -226,10 +226,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public'))); 
 app.use('/images/products', express.static(UPLOAD_DIR));
 app.use('/images/profiles', express.static(PROFILE_UPLOAD_DIR));
-// 🚨 REMOVED: Redundant or potentially conflicting static paths
-// app.use(express.static(__dirname)); 
-// app.use('public/images/products', express.static(path.join(__dirname, 'products')));
-// app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
+
+app.use(express.static(__dirname)); 
+app.use('public/images/products', express.static(path.join(__dirname, 'products')));
+app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
 // ---------------------------------------------------------------------------------
 
 // Configure session middleware
