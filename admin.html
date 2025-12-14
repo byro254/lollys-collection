@@ -1843,7 +1843,7 @@ window.viewOrderDetails = async function(orderId, event) {
         document.getElementById('modal-customer-email').textContent = order.customer_email || 'N/A';
         document.getElementById('modal-delivery-location').textContent = order.delivery_location || 'N/A';
         document.getElementById('modal-order-date').textContent = new Date(order.order_date || order.created_at).toLocaleString();
-        document.getElementById('modal-total-amount').textContent = `KES${parseFloat(order.total).toFixed(2)}`;
+        document.getElementById('modal-total-amount').textContent = `KES ${parseFloat(order.total).toFixed(2)}`;
         
         const itemsResponse = await fetch(`${API_BASE_URL}/orders/${orderId}/items`);
         // Assuming order items API now returns the 'size' property

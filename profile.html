@@ -440,8 +440,8 @@
             font-size: 0.95rem;
             cursor: default;
         }
-        .status-active { background-color: #e8f5e9; color: var(--color-success); border: 1px solid #a5d6a7; }
-        .status-deactivated { background-color: #ffebee; color: var(--color-danger); border: 1px solid #ef9a9a; }
+        .status-active, .status-enabled { background-color: #e8f5e9; color: var(--color-success); border: 1px solid #a5d6a7; }
+        .status-deactivated, .status-disabled { background-color: #ffebee; color: var(--color-danger); border: 1px solid #ef9a9a; }
         
         
         /* --- Responsive Adjustments --- */
@@ -622,7 +622,7 @@
         </div>
     </div>
     
-    <!-- 🚨 M-PESA STK PUSH DEPOSIT MODAL -->
+    <!-- 🚨 M-PESA STK PUSH DEPOSIT MODAL (omitted for brevity) -->
     <div id="mpesa-stk-modal" class="modal">
         <div class="modal-content-small">
             <span class="close-btn" onclick="closeModal('mpesa-stk-modal')">&times;</span>
@@ -653,7 +653,7 @@
         </div>
     </div>
     
-    <!-- 🚨 NEW MODAL: M-Pesa Manual Deposit (SIM TOOLKIT) -->
+    <!-- 🚨 NEW MODAL: M-Pesa Manual Deposit (SIM TOOLKIT) (omitted for brevity) -->
     <div id="mpesa-manual-modal" class="modal">
         <div class="modal-content-small">
             <span class="close-btn" onclick="closeModal('mpesa-manual-modal')">&times;</span>
@@ -684,7 +684,7 @@
         </div>
     </div>
 
-    <!-- 🚨 M-Pesa Processing/Spinner Modal (Used by STK Push) -->
+    <!-- 🚨 M-Pesa Processing/Spinner Modal (Used by STK Push) (omitted for brevity) -->
     <div id="deposit-processing-modal" class="modal">
         <div class="modal-content-small">
             <div class="spinner-container">
@@ -708,7 +708,7 @@
         </div>
     </div>
 
-    <!-- 🚨 M-Pesa Success Modal -->
+    <!-- 🚨 M-Pesa Success Modal (omitted for brevity) -->
     <div id="deposit-success-modal" class="modal">
         <div class="modal-content-small">
             <h3 style="display: flex; align-items: center; justify-content: center;">
@@ -728,7 +728,7 @@
         </div>
     </div>
 
-    <!-- 🚨 DEBIT/CREDIT CARD MODAL (Simulated, retained for generic payments) -->
+    <!-- 🚨 DEBIT/CREDIT CARD MODAL (Simulated, retained for generic payments) (omitted for brevity) -->
     <div id="card-deposit-modal" class="modal">
         <div class="modal-content-small">
             <span class="close-btn" onclick="closeModal('card-deposit-modal')">&times;</span>
@@ -795,6 +795,8 @@
                 <li><a href="#orders" class="nav-link" data-target="orders"><i class="fas fa-list-alt"></i> My Orders</a></li>
                 <li><a href="#wallet" class="nav-link" data-target="wallet"><i class="fas fa-wallet"></i> Wallet & Payments</a></li>
                 <li><a href="#history" class="nav-link" data-target="history"><i class="fas fa-history"></i> Payment History</a></li>
+                <!-- 🚨 NEW: Settings Section -->
+                <li><a href="#settings" class="nav-link" data-target="settings"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
         </nav>
     </aside>
@@ -935,6 +937,54 @@
                     </div>
                 </div>
             </section>
+
+            <!-- 🚨 NEW SETTINGS SECTION -->
+            <section id="settings" class="profile-section">
+                <h2 class="section-header"><i class="fas fa-cog"></i> User Settings</h2>
+                <div class="card">
+                    <h3 style="border-bottom: 1px solid var(--color-border-medium); margin-bottom: 20px; padding-bottom: 10px;"><i class="fas fa-lock"></i> Security & Two-Factor Authentication (2FA)</h3>
+                    
+                    <div id="security-status-container">
+                        <p style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px;">
+                            Current Status: 
+                            <span id="2fa-status-badge" class="status-display status-disabled">DISABLED</span>
+                        </p>
+                        <p id="security-message" style="color: var(--color-text-subtle);">
+                            Two-Factor Authentication is disabled. Click "Begin Setup" to add a security layer to your account.
+                        </p>
+                    </div>
+
+                    <!-- 2FA Setup/Control Section -->
+                    <div id="2fa-setup-section" style="margin-top: 30px;">
+                        <h4 style="font-family: var(--font-body); color: var(--color-pink-dark); margin-bottom: 15px;">Google Authenticator Setup</h4>
+                        
+                        <div id="setup-qr-area" style="display: none; text-align: center; margin-bottom: 20px; padding: 20px; border: 1px dashed var(--color-border-medium); border-radius: 8px;">
+                            <p>1. Scan this QR code or manually enter the secret key into your Google Authenticator app (or similar TOTP app).</p>
+                            <img id="2fa-qr-code" src="" alt="2FA QR Code" style="width: 160px; height: 160px; margin: 10px auto;">
+                            <p>Secret Key: <strong id="2fa-secret-key">...</strong></p>
+                        </div>
+                        
+                        <form id="2fa-form">
+                            <input type="hidden" id="2fa-current-secret">
+                            
+                            <div class="form-group">
+                                <label for="2fa-code">2. Enter Verification Code:</label>
+                                <input type="text" id="2fa-code" placeholder="6-digit code from your app" maxlength="6" pattern="[0-9]{6}" required>
+                            </div>
+                            
+                            <button type="button" id="2fa-setup-btn" class="update-button">
+                                <i class="fas fa-qrcode"></i> Begin Setup
+                            </button>
+                            <button type="submit" id="2fa-enable-btn" class="update-button" style="display: none; background-color: var(--color-success);">
+                                <i class="fas fa-check-circle"></i> Enable 2FA
+                            </button>
+                            <button type="submit" id="2fa-disable-btn" class="update-button" style="display: none; background-color: var(--color-danger);">
+                                <i class="fas fa-times-circle"></i> Disable 2FA
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </section>
             
         </main>
     </div>
@@ -954,6 +1004,11 @@
         const CARD_DEPOSIT_API_URL = '/api/wallet/deposit/card'; 
         const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; 
         
+        // 🚨 NEW 2FA API ENDPOINTS
+        const SETUP_2FA_URL = '/api/user/2fa/setup';
+        const ENABLE_2FA_URL = '/api/user/2fa/enable';
+        const DISABLE_2FA_URL = '/api/user/2fa/disable';
+        
         // 🚨 NEW: M-Pesa Status Query Endpoint
         const MPESA_STATUS_QUERY_API_URL = '/api/wallet/deposit/status'; 
         // 🚨 NEW: Manual M-Pesa Verification Endpoint
@@ -968,6 +1023,7 @@
         let pollingIntervalId = null;
         let pollingAttempts = 0;
         let depositAmount = 0; // To store the amount for the success modal
+        let current2faSecret = null; // 🚨 NEW: Holds the secret during setup
 
         // --- DOM Elements ---
         const sidebar = document.getElementById('sidebar');
@@ -1100,6 +1156,7 @@
                 currentUserData = userData; // Update global data
                 
                 populateStatusOnly(userData); 
+                updateSecurityUI(userData.is2faEnabled); // 🚨 NEW CALL
 
                 const isActive = userData.isActive === 1 || userData.isActive === true;
                 
@@ -1149,6 +1206,7 @@
                     const userData = await response.json();
                     currentUserData = userData; 
                     populateForm(userData); 
+                    updateSecurityUI(userData.is2faEnabled); // 🚨 NEW CALL
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
@@ -1208,7 +1266,45 @@
                 sidebarHeader.textContent = data.name.split(' ')[0] + "'s Account";
             }
         }
-        
+
+        // 🚨 NEW: 2FA UI Management Function
+        function updateSecurityUI(is2faEnabled) {
+            const statusBadge = document.getElementById('2fa-status-badge');
+            const securityMessage = document.getElementById('security-message');
+            const setupBtn = document.getElementById('2fa-setup-btn');
+            const enableBtn = document.getElementById('2fa-enable-btn');
+            const disableBtn = document.getElementById('2fa-disable-btn');
+            const setupArea = document.getElementById('setup-qr-area');
+            
+            // Set current user data for use in the form handlers
+            const isEnabled = is2faEnabled === true || is2faEnabled === 1;
+
+            if (isEnabled) {
+                statusBadge.textContent = 'ENABLED';
+                statusBadge.className = 'status-display status-active';
+                securityMessage.innerHTML = '<span style="color: var(--color-success);">Two-Factor Authentication is active.</span> You must use a code to log in.';
+                
+                setupBtn.style.display = 'none';
+                disableBtn.style.display = 'inline-block';
+                enableBtn.style.display = 'none';
+                setupArea.style.display = 'none';
+                current2faSecret = null; // Clear setup secret
+                document.getElementById('2fa-code').placeholder = 'Enter code to disable';
+            } else {
+                statusBadge.textContent = 'DISABLED';
+                statusBadge.className = 'status-display status-deactivated';
+                securityMessage.textContent = 'Two-Factor Authentication is disabled. Click "Begin Setup" to add a security layer to your account.';
+                
+                setupBtn.style.display = 'inline-block';
+                disableBtn.style.display = 'none';
+                enableBtn.style.display = 'none';
+                setupArea.style.display = 'none';
+                current2faSecret = null;
+                document.getElementById('2fa-code').placeholder = '6-digit code from your app';
+            }
+            document.getElementById('2fa-code').value = ''; // Clear input on state change
+        }
+
         // --- Dynamic Data Refreshers (Removed Mock Data) ---
 
         /**
@@ -1359,11 +1455,13 @@
             if (activeSectionId === 'history' || activeSectionId === 'all') {
                 fetchAndRenderPaymentHistory();
             }
+            if (activeSectionId === 'settings' || activeSectionId === 'all') {
+                fetchProfileData(); // Re-fetches all profile data, including 2FA status
+            }
             // Ensure status/profile data is also refreshed via checkProfileStatusAndLogout which is called in the main interval
         }
 
-        // --- M-PESA POLLING LOGIC ---
-
+        // --- M-PESA POLLING LOGIC (omitted for brevity) ---
         function startPolling(checkoutRequestID) {
             pollingAttempts = 0;
             const statusMessageEl = document.getElementById('polling-status-message');
@@ -1445,7 +1543,7 @@
             showSection('wallet'); // Switch to wallet tab
         }
 
-        // --- Payment Modals and Handlers ---
+        // --- Payment Modals and Handlers (omitted for brevity) ---
 
         window.openDepositModal = function(method) {
             // Close all related modals first
@@ -1662,6 +1760,111 @@
             messageEl.style.display = 'block';
             setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
         }
+
+        // -----------------------------------------------------
+        // 🚨 NEW: 2FA CONTROL LOGIC
+        // -----------------------------------------------------
+
+        // Handle "Begin Setup" button click
+        document.getElementById('2fa-setup-btn').addEventListener('click', async () => {
+            if (!currentUserData.email) {
+                showMessage('Please ensure your account has a valid email address.', 'error');
+                return;
+            }
+
+            const setupBtn = document.getElementById('2fa-setup-btn');
+            setupBtn.disabled = true;
+            setupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+
+            try {
+                const response = await fetch(SETUP_2FA_URL);
+                if (!response.ok) throw new Error('Failed to generate secret.');
+
+                const data = await response.json();
+                current2faSecret = data.secret;
+                
+                // Display QR code and secret
+                document.getElementById('2fa-qr-code').src = data.qrCodeUrl;
+                document.getElementById('2fa-secret-key').textContent = data.secret;
+                document.getElementById('2fa-current-secret').value = data.secret;
+                document.getElementById('setup-qr-area').style.display = 'block';
+                
+                // Change button context
+                setupBtn.style.display = 'none';
+                document.getElementById('2fa-enable-btn').style.display = 'inline-block';
+                document.getElementById('security-message').textContent = 'Scan the QR code and enter the code below to finalize activation.';
+
+            } catch (error) {
+                console.error('2FA setup error:', error);
+                showMessage('Error during 2FA setup initiation.', 'error');
+            } finally {
+                setupBtn.disabled = false;
+                setupBtn.innerHTML = '<i class="fas fa-qrcode"></i> Begin Setup';
+            }
+        });
+
+        // Handle form submission (Enable/Disable)
+        document.getElementById('2fa-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const code = document.getElementById('2fa-code').value.trim();
+            const isCurrentlyEnabled = currentUserData.is2faEnabled;
+            
+            if (!code || code.length !== 6 || isNaN(code)) {
+                showMessage('Please enter the 6-digit numerical code.', 'error');
+                return;
+            }
+
+            let url, submitBtn;
+            
+            if (!isCurrentlyEnabled) {
+                // ENABLE attempt
+                const secret = current2faSecret || document.getElementById('2fa-current-secret').value;
+                if (!secret) {
+                    showMessage('Setup process not complete. Click "Begin Setup" first.', 'error');
+                    return;
+                }
+                url = ENABLE_2FA_URL;
+                submitBtn = document.getElementById('2fa-enable-btn');
+                var payload = { secret: secret, token: code };
+            } else {
+                // DISABLE attempt
+                url = DISABLE_2FA_URL;
+                submitBtn = document.getElementById('2fa-disable-btn');
+                var payload = { token: code };
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage(result.message, 'success');
+                    // Re-fetch user data to update the global state and UI
+                    await fetchProfileData();
+                } else {
+                    showMessage(result.message || 'Verification failed. Try again.', 'error');
+                }
+            } catch (error) {
+                console.error('2FA enable/disable error:', error);
+                showMessage('Network error during security update.', 'error');
+            } finally {
+                submitBtn.disabled = false;
+                if (!isCurrentlyEnabled) {
+                    submitBtn.innerHTML = '<i class="fas fa-check-circle"></i> Enable 2FA';
+                } else {
+                    submitBtn.innerHTML = '<i class="fas fa-times-circle"></i> Disable 2FA';
+                }
+            }
+        });
+
 
         // --- Final Initialization ---
 

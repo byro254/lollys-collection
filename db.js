@@ -21,51 +21,9 @@ const pool = mysql.createPool({
 });
 
 
-// ---------------------------------------------------------------- //
-// --- DATABASE SCHEMA ALTERATIONS (Migrations) ---
-// ---------------------------------------------------------------- //
 
-/**
- * Runs necessary database migrations to update tables (non-destructive where possible).
- * This function should ideally be called once on server startup.
- */
-async function runMigrations() {
-    console.log("--- Running Database Migrations ---");
-    const connection = await pool.getConnection();
-    try {
-        // Migration 1: Add 'size' column to the 'cart' table for product variations.
-        await connection.query(`
-            ALTER TABLE cart
-            ADD COLUMN size VARCHAR(10) DEFAULT NULL;
-        `);
-        console.log("✅ Migration 1/2: Added 'size' column to 'cart' table (if it didn't exist).");
-    } catch (error) {
-        if (error.code === 'ER_DUP_FIELDNAME') {
-            console.log("ℹ️ Migration 1/2: 'size' column already exists in 'cart'. Skipping.");
-        } else {
-            console.error("❌ Migration 1/2 Failed:", error.message);
-            throw error;
-        }
-    }
-    
-    try {
-        // Migration 2: Add 'size' column to 'order_items' table for order history.
-        await connection.query(`
-            ALTER TABLE order_items
-            ADD COLUMN size VARCHAR(10) DEFAULT NULL;
-        `);
-        console.log("✅ Migration 2/2: Added 'size' column to 'order_items' table (if it didn't exist).");
-    } catch (error) {
-        if (error.code === 'ER_DUP_FIELDNAME') {
-            console.log("ℹ️ Migration 2/2: 'size' column already exists in 'order_items'. Skipping.");
-        } else {
-            console.error("❌ Migration 2/2 Failed:", error.message);
-            throw error;
-        }
-    } finally {
-        connection.release();
-    }
-}
+
+
 // ---------------------------------------------------------------- //
 
 
@@ -290,13 +248,13 @@ async function findUserByPhone(phone) {
 /**
  * Retrieves a user object by their ID (National ID).
  * @param {string} userId - The ID of the user.
- * @returns {Promise<{id: string, name: string, email: string, ...} | null>} - User profile or null.
+ * @returns {Promise<{id: string, name: string, email: string, twoFactorSecret: string, is2faEnabled: boolean, ...} | null>} - User profile or null.
  */
 async function findUserById(userId) {
     try {
-        // 🚨 FIX: Fetch 'username' and map it to 'name' for profile.html compatibility
+        // 🚨 MODIFIED: Select new 2FA fields
         const [rows] = await pool.execute(
-            'SELECT id, username, email, phone_number, profile_picture_url, is_active FROM users WHERE id = ?',
+            'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled FROM users WHERE id = ?',
             [userId]
         );
         
@@ -311,6 +269,9 @@ async function findUserById(userId) {
             phoneNumber: rows[0].phone_number,
             profilePictureUrl: rows[0].profile_picture_url,
             isActive: rows[0].is_active,
+            // 🚨 NEW: 2FA Fields
+            twoFactorSecret: rows[0].two_factor_secret,
+            is2faEnabled: rows[0].is_2fa_enabled,
         };
 
     } catch (error) {
@@ -366,6 +327,21 @@ async function updateUserStatus(userId, newStatus) {
         throw error;
     }
 }
+
+// 🚨 NEW: 2FA Status Update Function
+async function update2faStatus(userId, secret, isEnabled) {
+    try {
+        const [result] = await pool.execute(
+            `UPDATE users SET two_factor_secret = ?, is_2fa_enabled = ? WHERE id = ?`,
+            [secret, isEnabled, userId]
+        );
+        return result.affectedRows;
+    } catch (error) {
+        console.error('Database error updating 2FA status:', error);
+        throw error;
+    }
+}
+
 
 // ---------------------------------------------------------------- //
 // --- Wallet & Transaction Functions (NEW) ---
@@ -896,4 +872,6 @@ module.exports = {
     processManualMpesaDeposit, 
     // 🚨 Migration Function
     runMigrations, 
+    // 🚨 NEW 2FA Function
+    update2faStatus, 
 };

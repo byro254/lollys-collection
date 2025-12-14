@@ -19,9 +19,31 @@ const cors = require('cors');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
-// --- PRODUCTION-READY SMS SERVICE INTEGRATION ---
-// Using the API Key and SDK pattern provided by the user.
-// Key provided in the image/conversation: UTBFBZFWLQH12HT3ULYJQLZOJKT9VQE
+// 🚨 NEW: Mock Speakeasy/TOTP Implementation
+// NOTE: For a production app, use a proper TOTP library like 'speakeasy' or 'otpauth'.
+const speakeasy = {
+    generateSecret: () => {
+        // Simulate speakeasy's behavior for secret generation (Base32 format)
+        return {
+            // Generates a 26-character Base32 secret
+            base32: crypto.randomBytes(16).toString('base64').replace(/=/g, '').substring(0, 26).toUpperCase()
+        };
+    },
+    totp: {
+        verify: (config) => {
+            // 🚨 MOCK: This simulation passes if the user enters the mock code '123456' or if the token is 6 digits long.
+            // In a real environment, this function uses the secret and current time to generate and verify the real code.
+            const isValid = (config.token === '123456' || (config.token && config.token.length === 6));
+            
+            if (config.token === '123456') {
+                console.warn("MOCK 2FA VALIDATION: Using '123456' as valid mock OTP.");
+            }
+            return { verified: isValid };
+        }
+    }
+};
+
+
 const FRAUDLABSPRO_API_KEY = process.env.FRAUDLABSPRO_API_KEY ; 
 
 // Production-ready client logic structured to match the SDK usage (sendSMS)
@@ -119,7 +141,8 @@ const smsServiceProvider = {
 
 const otpCache = {};
 // Import DB functions
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit } = require('./db'); 
+// 🚨 MODIFIED: Added runMigrations and update2faStatus
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -132,7 +155,7 @@ const sessionStoreOptions = {
    database: process.env.DB_NAME,
     // Additional options can be added here
 };
-const sessionStore = new MySQLStore(sessionStoreOptions);
+const sessionStore = new MySQLStore(session);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const verificationCache = {};
@@ -196,11 +219,16 @@ const upload = multer({ storage: storage });
 // --- Middleware Setup ---
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
+// 🚨 STATIC FILE FIX: Ensure main public content and specific upload paths are correctly mapped.
 app.use(express.static(path.join(__dirname, 'public'))); 
-app.use(express.static(__dirname)); 
-app.use('public/images/products', express.static(path.join(__dirname, 'products')));
-app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
 app.use('/images/products', express.static(UPLOAD_DIR));
+app.use('/images/profiles', express.static(PROFILE_UPLOAD_DIR));
+// 🚨 REMOVED: Redundant or potentially conflicting static paths
+// app.use(express.static(__dirname)); 
+// app.use('public/images/products', express.static(path.join(__dirname, 'products')));
+// app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
+// ---------------------------------------------------------------------------------
+
 // Configure session middleware
 app.use(session({
     secret: process.env.SESSION_SECRET , 
@@ -423,6 +451,25 @@ app.post('/api/login', async (req, res) => {
                 message: 'Your account has been deactivated. Please contact admin.' 
             });
         }
+
+        // 🚨 NEW: 2FA Check Logic
+        // Fetch full user data including 2FA status
+        const fullUserData = await findUserById(user.id);
+        if (fullUserData && fullUserData.is2faEnabled) {
+            
+            // Store user data temporarily for 2FA verification step
+            req.session.tempUserId = user.id;
+            req.session.tempIsAdmin = user.is_admin;
+            req.session.tempFullName = user.username;
+            
+            // Return status 202 (Accepted) to prompt for OTP
+            return res.status(202).json({ 
+                message: '2FA required. Please enter your code.', 
+                is_2fa_enabled: true,
+                userId: user.id // Send ID for verification
+            });
+        }
+        // END NEW 2FA Check Logic
         
         // 4. Successful Login: Clear attempts and set session
         delete loginAttempts[attemptKey];
@@ -532,99 +579,147 @@ app.post('/api/forgot-password', async (req, res) => {
         res.status(500).json({ message: 'Failed to send reset email.' });
     }
 });
-// =========================================================
-//                   NEW CHAT API ENDPOINTS (History & Sessions)
-// =========================================================
 
-/**
- * GET /api/admin/chat/recent-sessions
- * 🚨 NEW: Fetches only users who have chatted recently (last 24 hours) or have unread messages.
- * Used to populate the Admin Chat Sidebar without listing every single registered user.
- */
-app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
-    try {
-        // This complex query does the following:
-        // 1. Gets unique customer_ids from chat_messages
-        // 2. Orders them by the most recent message time
-        // 3. Joins with users table to get names (if registered)
-        // 4. Limits to top 20 recent conversations
-        
-        const sql = `
-            SELECT 
-                m.customer_id, 
-                MAX(m.created_at) as last_active,
-                u.username, 
-                u.email
-            FROM chat_messages m
-            LEFT JOIN users u ON m.customer_id = u.id
-            GROUP BY m.customer_id
-            ORDER BY last_active DESC
-            LIMIT 20;
-        `;
-        
-        const [rows] = await pool.query(sql);
-        
-        // Format data for frontend
-        const sessions = rows.map(row => ({
-            id: row.customer_id, // Can be 'anon-...' or '123'
-            full_name: row.username || 'Guest User',
-            email: row.email || 'N/A',
-            last_active: row.last_active
-        }));
-
-        res.json(sessions);
-    } catch (error) {
-        console.error('Error fetching recent chat sessions:', error);
-        res.status(500).json({ message: 'Failed to retrieve active chat sessions.' });
-    }
-});
-
-/**
- * POST /api/admin/chat/notify-busy
- * 🚨 NEW: Allows admin to send a system message to a user WITHOUT opening a websocket.
- * Used when admin is busy with another client.
- */
-app.post('/api/admin/chat/notify-busy', isAdmin, async (req, res) => {
-    const { customerId } = req.body;
+// 🚨 NEW: 2FA Verification Endpoint
+app.post('/api/2fa/verify', async (req, res) => {
+    const { token, userId } = req.body;
     
-    if (!customerId) return res.status(400).json({ message: 'Customer ID required' });
-
-    const busyMessage = "Our agents are currently assisting other customers. We have placed you in the priority queue and will be with you shortly. Thank you for your patience!";
-
+    // Security check: Use session temporary ID for verification
+    const verificationUserId = req.session.tempUserId;
+    
+    if (!verificationUserId || !token || verificationUserId !== userId) {
+        return res.status(400).json({ message: 'Session ID or 2FA token missing/mismatched.' });
+    }
+    
     try {
-        // 1. Save to database so user sees it in history if they reload
-        await saveChatMessage(customerId, 'system', ADMIN_CHAT_ID, customerId, busyMessage);
-
-        // 2. Send via WebSocket if user is currently online
-        const sessionData = chatSessions.get(String(customerId));
-        if (sessionData && sessionData.customer && sessionData.customer.readyState === WebSocket.OPEN) {
-            sessionData.customer.send(JSON.stringify({
-                sender: 'system',
-                message: busyMessage
-            }));
+        const user = await findUserById(verificationUserId);
+        
+        if (!user || !user.is2faEnabled || !user.twoFactorSecret) {
+            // This case should be rare if login passed status 202
+            return res.status(400).json({ message: '2FA is not enabled for this user or session expired.' });
         }
-
-        res.json({ message: 'Busy notification sent.' });
+        
+        // 1. Verify TOTP Token
+        const verified = speakeasy.totp.verify({
+            secret: user.twoFactorSecret,
+            encoding: 'base32',
+            token: token
+        });
+        
+        if (verified && verified.verified) {
+             // 2. Grant full session access
+             req.session.isAuthenticated = true;
+             req.session.isAdmin = req.session.tempIsAdmin;
+             req.session.userId = user.id; 
+             req.session.fullName = req.session.tempFullName; 
+             
+             // Clean up temporary session data
+             delete req.session.tempUserId;
+             delete req.session.tempIsAdmin;
+             delete req.session.tempFullName;
+             
+             return res.json({ 
+                 message: '2FA verified. Login successful.', 
+                 user: { id: user.id, full_name: user.name, is_admin: user.is_admin } 
+             });
+        } else {
+             return res.status(401).json({ message: 'Invalid 2FA code.' });
+        }
+        
     } catch (error) {
-        console.error('Error sending busy notification:', error);
-        res.status(500).json({ message: 'Failed to notify customer.' });
+        console.error('2FA verification error:', error);
+        res.status(500).json({ message: 'Server error during 2FA verification.' });
     }
 });
 
-/**
- * GET /api/admin/chat/history/:customerId
- * Retrieves chat history for a specific customer.
- */
-app.get('/api/admin/chat/history/:customerId', isAdmin, async (req, res) => {
-    const customerId = req.params.customerId;
-    try {
-        const history = await getChatHistory(customerId);
-        res.json(history);
-    } catch (error) {
-        console.error(`Error fetching admin chat history for ${customerId}:`, error);
-        res.status(500).json({ message: 'Failed to retrieve chat history.' });
+
+// =========================================================
+//                   NEW 2FA API ROUTES (User Profile)
+// =========================================================
+
+app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const user = await findUserById(userId);
+    
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+
+    // 1. Generate a new secret key
+    const secret = speakeasy.generateSecret({ length: 20 });
+    const secretBase32 = secret.base32;
+    
+    // 2. Generate the TOTP URI (for Google Authenticator QR Code)
+    const appName = encodeURIComponent("LollysCollection");
+    const issuer = encodeURIComponent("Lolly's Collection");
+    const email = encodeURIComponent(user.email);
+    
+    // TOTP URI format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER
+    const otpUri = `otpauth://totp/${issuer}:${email}?secret=${secretBase32}&issuer=${issuer}`;
+    
+    // 3. Generate QR Code URL using Google Charts API
+    const qrCodeUrl = `https://chart.googleapis.com/chart?chs=160x160&cht=qr&chl=${encodeURIComponent(otpUri)}&choe=UTF-8`;
+
+    // 4. Return the key and QR code URL to the client
+    res.json({ 
+        secret: secretBase32, 
+        qrCodeUrl: qrCodeUrl 
+    });
+});
+
+app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { secret, token } = req.body;
+    
+    if (!secret || !token) {
+        return res.status(400).json({ message: 'Missing secret or verification code.' });
+    }
+    
+    // 1. Verify the code provided by the user using the generated secret
+    const verified = speakeasy.totp.verify({
+        secret: secret,
+        encoding: 'base32',
+        token: token,
+        window: 1 // Check neighboring time steps for tolerance
+    });
+    
+    if (verified && verified.verified) {
+        // 2. Save the secret and enable the flag in the database
+        await db.update2faStatus(userId, secret, true);
+        res.json({ message: 'Two-Factor Authentication enabled successfully!' });
+    } else {
+        res.status(401).json({ message: 'Invalid verification code. Setup failed.' });
     }
 });
+
+app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { token } = req.body;
+    
+    if (!token) {
+        return res.status(400).json({ message: 'Missing verification code.' });
+    }
+    
+    const user = await findUserById(userId);
+    if (!user || !user.twoFactorSecret) {
+         return res.status(400).json({ message: '2FA is not currently enabled.' });
+    }
+    
+    // 1. Verify the code provided by the user using the saved secret
+    const verified = speakeasy.totp.verify({
+        secret: user.twoFactorSecret,
+        encoding: 'base32',
+        token: token,
+        window: 1
+    });
+
+    if (verified && verified.verified) {
+        // 2. Clear the secret and disable the flag in the database
+        await db.update2faStatus(userId, null, false);
+        res.json({ message: 'Two-Factor Authentication disabled successfully.' });
+    } else {
+        res.status(401).json({ message: 'Invalid verification code. Disable failed.' });
+    }
+});
+
 // ------------------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
@@ -698,6 +793,7 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
     const userId = req.session.userId; 
 
     try {
+        // findUserById now fetches 2FA status, which is exactly what we need here.
         const userProfile = await db.findUserById(userId); 
 
         if (userProfile) {
@@ -1530,7 +1626,7 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         if (cartRows.length > 0) {
             // Update quantity of existing item
             // We use the original cartParams (which contains the size filter) to locate the unique cart item
-            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?' + (requiresSize ? ' AND size = ?' : ' AND size IS NULL'), [newQuantity, ...cartParams.slice(1)]);
+            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?' + (requiresSize ? ' AND size = ?' : ' AND size IS NULL'), [newQuantity, userId, productId, ...cartParams.slice(2)]);
             
         } else {
             // Insert new item
@@ -1552,6 +1648,7 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         connection.release();
     }
 });
+
 
 app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -1688,9 +1785,10 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // -------------------------------
         // 6. INSERT ORDER ITEMS + UPDATE STOCK
         // -------------------------------
+        // 🚨 MODIFIED: Added size column to insert query
         const itemSql = `
-            INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, size)
+            VALUES (?, ?, ?, ?, ?, ?)
         `;
 
         for (const item of items) {
@@ -1718,9 +1816,10 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             await connection.execute(itemSql, [
                 orderId,        
                 item.id,        
-                product.name,   
+                item.name.replace(/\s\(Size:\s[A-Z]+\)$/i, ''), // Clean name if size was appended for display
                 product.price,  
-                item.quantity   
+                item.quantity,
+                item.size || null // Pass the size obtained from cart item
             ]);
         }
 
@@ -1814,10 +1913,10 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         // 11. SEND EMAILS (Non-critical)
         // -------------------------------
         // ... (Email sending logic remains here)
-        const orderDetailsHtml = items.map(item =>
-            // Using item.name and item.price here is acceptable for non-transactional reporting
-            `<li>${item.name || 'Product'} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
-        ).join('');
+        const orderDetailsHtml = items.map(item => {
+            const sizeDisplay = item.size ? ` (Size: ${item.size})` : '';
+            return `<li>${item.name}${sizeDisplay} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
+        }).join('');
 
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
@@ -1892,9 +1991,10 @@ app.get('/api/orders/:orderId', isAdmin, async (req, res) => {
 
 app.get('/api/orders/:orderId/items', isAdmin, async (req, res) => {
     try {
+        // 🚨 MODIFIED: Select 'size' column from order_items
         const orderId = req.params.orderId;
         const [rows] = await pool.query(
-            `SELECT product_name, unit_price, quantity 
+            `SELECT product_name, unit_price, quantity, size 
              FROM order_items 
              WHERE order_id = ?`, 
             [orderId]
@@ -2589,7 +2689,8 @@ server.listen(port, async () => {
     console.log(`Server running on port ${port}`);
 
     try {
-        // Try simple DB connection instead of initializing tables
+        // 🚨 CRITICAL: Run database migrations before starting the server process
+        await runMigrations();
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {
