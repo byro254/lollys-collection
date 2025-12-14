@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Account Access | Lolly's Collection</title>
-    <link rel="manifest" href="/manifest.json">
+     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/x-icon" href="images/icons/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
@@ -21,256 +21,580 @@
             --color-info: #17a2b8;
         }
         
+        /* --- Global Styles --- */
         body {
             font-family: var(--font-body);
-            background-color: #fce4ec;
+            background-color: #fce4ec; /* Light pink background */
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
             margin: 0;
-            overflow-y: auto;
         }
-        .container { width: 100%; max-width: 400px; padding: 20px; }
-        .auth-card {
-            background: var(--color-bg-light);
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-            padding: 40px 30px;
-            text-align: center;
-        }
-        h2, h3 { font-family: var(--font-heading); color: var(--color-pink-dark); margin-bottom: 20px; }
-        .form-group { margin-bottom: 20px; text-align: left; }
-        .form-group label { display: block; margin-bottom: 8px; font-weight: 500; color: var(--color-text-dark); }
-        .form-group input {
-            width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px;
-            box-sizing: border-box; font-size: 16px; transition: border-color 0.3s;
-        }
-        .form-group input:focus { border-color: var(--color-pink-accent); outline: none; }
-        .btn {
-            width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px;
-            cursor: pointer; transition: background-color 0.3s, transform 0.1s; font-weight: 600;
-        }
-        .btn-primary { background-color: var(--color-pink-accent); color: white; margin-top: 10px; }
-        .btn-primary:hover { background-color: var(--color-pink-dark); transform: translateY(-1px); }
-        .toggle-link { display: block; margin-top: 15px; color: var(--color-pink-accent); text-decoration: none; font-size: 14px; }
-        .forgot-password { float: right; font-size: 14px; color: var(--color-text-subtle); text-decoration: none; margin-top: 5px; }
-        
-        /* Modal and Step Visibility */
-        .modal {
-            display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.6); justify-content: center; align-items: center; backdrop-filter: blur(3px);
-        }
-        .modal-content {
-            background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 380px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3); animation: slideIn 0.3s ease-out;
-        }
-        .step-hidden { display: none; }
-        @keyframes slideIn { from { transform: translateY(-30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-        /* Toast Notifications */
-        #toast-container { position: fixed; top: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px; }
-        .toast { padding: 15px 20px; border-radius: 8px; color: white; min-width: 250px; transition: 0.5s; opacity: 0; transform: translateX(100%); }
-        .toast.show { opacity: 1; transform: translateX(0); }
-        .toast-success { background: var(--color-success); }
-        .toast-error { background: var(--color-danger); }
-        .toast-info { background: var(--color-info); }
+        /* --- Card Container --- */
+        .card-container {
+            width: 90%;
+            max-width: 400px;
+            background-color: var(--color-bg-light);
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            box-sizing: border-box;
+        }
+
+        /* --- Header/Title --- */
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            font-family: var(--font-heading);
+            color: var(--color-pink-dark);
+            font-size: 2.2em;
+            margin: 0;
+        }
+        .header p {
+            color: var(--color-text-subtle);
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+
+        /* --- Modules --- */
+        .module {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+            padding: 0;
+        }
+        .hidden-module {
+            opacity: 0;
+            height: 0;
+            overflow: hidden;
+            pointer-events: none;
+            position: absolute; /* Allows for smooth transition */
+            transform: translateY(10px);
+        }
+        .active-module {
+            opacity: 1;
+            height: auto;
+            position: static;
+            transform: translateY(0);
+        }
+
+        /* --- Input Group --- */
+        .input-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 8px 12px;
+            background-color: #f9f9f9;
+        }
+        .input-group i {
+            color: var(--color-pink-accent);
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+        .input-group input {
+            flex-grow: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 1em;
+            color: var(--color-text-dark);
+            padding: 5px 0;
+        }
+
+        /* --- Buttons --- */
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            font-weight: 600;
+        }
+        .btn-primary {
+            background-color: var(--color-pink-accent);
+            color: var(--color-bg-light);
+        }
+        .btn-primary:hover {
+            background-color: var(--color-pink-dark);
+            transform: translateY(-1px);
+        }
+        .btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        /* --- Links --- */
+        .text-pink-accent {
+            color: var(--color-pink-accent);
+            text-decoration: none;
+        }
+        .text-pink-accent:hover {
+            color: var(--color-pink-dark);
+            text-decoration: underline;
+        }
+        .mt-4 { margin-top: 1rem; }
+        .text-center { text-align: center; }
+        .text-sm { font-size: 0.875rem; }
+        .font-semibold { font-weight: 600; }
+
+        /* --- Toast Notification --- */
+        #toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        .toast {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            opacity: 0;
+            transition: opacity 0.3s, transform 0.3s;
+            transform: translateY(-20px);
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.success { background-color: var(--color-success); }
+        .toast.error { background-color: var(--color-danger); }
+        .toast.info { background-color: var(--color-info); }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div class="auth-card">
-            <h2 id="form-title">Login to Account</h2>
-            
-            <form id="login-form">
-                <div class="form-group">
-                    <label>National ID</label>
-                    <input type="text" id="login-id" placeholder="Enter National ID" required>
+    <div class="card-container">
+        <div class="header">
+            <h1>Lolly's Collection</h1>
+            <p id="module-title">Customer Account Access</p>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- 1. CUSTOMER LOGIN MODULE (National ID) -->
+        <!-- ========================================================== -->
+        <div id="customer-login-module" class="module active-module">
+            <form id="customer-login-form">
+                <div class="input-group">
+                    <i class="fa fa-id-card"></i>
+                    <input type="text" id="national-id" placeholder="National ID" required>
                 </div>
-                <div class="form-group">
-                    <label>Password</label>
-                    <input type="password" id="login-password" placeholder="Enter Password" required>
-                    <a href="#" id="forgot-pw-link" class="forgot-password">Forgot Password?</a>
+                <div class="input-group">
+                    <i class="fa fa-lock"></i>
+                    <input type="password" id="password" placeholder="Password" required>
                 </div>
-                <button type="submit" class="btn btn-primary" id="login-btn">Login</button>
+
+                <button type="submit" class="btn btn-primary">Log In</button>
             </form>
-
-            <form id="register-form" style="display:none;">
-                <div class="form-group"><label>National ID</label><input type="text" id="reg-id" required></div>
-                <div class="form-group"><label>Username</label><input type="text" id="reg-username" required></div>
-                <div class="form-group"><label>Email</label><input type="email" id="reg-email" required></div>
-                <div class="form-group"><label>Password</label><input type="password" id="reg-password" required></div>
-                <div class="form-group"><label>Confirm Password</label><input type="password" id="reg-confirm" required></div>
-                <button type="submit" class="btn btn-primary">Register</button>
-            </form>
-
-            <a href="#" class="toggle-link" id="toggle-auth">Need an account? Register</a>
-        </div>
-    </div>
-
-    <div id="totp-modal" class="modal">
-        <div class="modal-content">
-            <h3>2FA Verification</h3>
-            <p>Enter the code from your authenticator app.</p>
-            <form id="totp-form">
-                <div class="form-group"><input type="text" id="totp-code" maxlength="6" placeholder="000000" required></div>
-                <button type="submit" class="btn btn-primary">Verify & Login</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="forgot-modal" class="modal">
-        <div class="modal-content">
-            <h3>Reset Password</h3>
             
-            <div id="step-request">
-                <p>Enter your registered email.</p>
-                <div class="form-group"><input type="email" id="reset-email-input" placeholder="user@example.com" required></div>
-                <button type="button" class="btn btn-primary" id="send-otp-btn">Send Code</button>
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('forgot-password-module'); return false;">
+                    Forgot Password?
+                </a>
             </div>
 
-            <div id="step-verify" class="step-hidden">
-                <p>Enter the 6-digit code sent to your email.</p>
-                <div class="form-group"><input type="text" id="reset-otp-input" maxlength="6" placeholder="000000"></div>
-                <button type="button" class="btn btn-primary" id="verify-otp-btn">Verify Code</button>
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('admin-login-module'); return false;">
+                    Admin Login
+                </a>
             </div>
 
-            <div id="step-new-pw" class="step-hidden">
-                <p>Set your new password.</p>
-                <div class="form-group"><input type="password" id="new-pw" placeholder="New Password"></div>
-                <div class="form-group"><input type="password" id="confirm-new-pw" placeholder="Confirm Password"></div>
-                <button type="button" class="btn btn-primary" id="finish-reset-btn">Update Password</button>
+            <!-- New link to switch to Registration -->
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('register-module'); return false;">
+                    Don't have an account? Register Now
+                </a>
             </div>
-            <button type="button" onclick="closeModals()" class="toggle-link" style="border:none; background:none; cursor:pointer; width:100%;">Cancel</button>
         </div>
+
+        <!-- ========================================================== -->
+        <!-- 2. ADMIN LOGIN MODULE (Email & Password) -->
+        <!-- ========================================================== -->
+        <div id="admin-login-module" class="module hidden-module">
+            <form id="admin-login-form">
+                <div class="input-group">
+                    <i class="fa fa-envelope"></i>
+                    <input type="email" id="admin-email" placeholder="Admin Email" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa fa-lock"></i>
+                    <input type="password" id="admin-password" placeholder="Password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Log In as Admin</button>
+            </form>
+
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('customer-login-module'); return false;">
+                    Back to Customer Login
+                </a>
+            </div>
+        </div>
+        
+        <!-- ========================================================== -->
+        <!-- 3. REGISTRATION MODULE -->
+        <!-- ========================================================== -->
+        <div id="register-module" class="module hidden-module">
+            <p class="text-center" style="margin-bottom: 20px;">Create your customer account.</p>
+            <form id="register-form">
+                <div class="input-group">
+                    <i class="fa fa-user"></i>
+                    <input type="text" id="reg-username" placeholder="Full Name / Username" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa fa-id-card"></i>
+                    <input type="text" id="reg-national-id" placeholder="National ID (Required for login)" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa fa-envelope"></i>
+                    <input type="email" id="reg-email" placeholder="Email Address" required>
+                </div>
+                <div class="input-group">
+                    <i class="fa fa-lock"></i>
+                    <input type="password" id="reg-password" placeholder="Password (min 8 chars)" required minlength="8">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Register Account</button>
+            </form>
+
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('customer-login-module'); return false;">
+                    Already have an account? Log In
+                </a>
+            </div>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- 4. TWO-FACTOR AUTH MODULE -->
+        <!-- ========================================================== -->
+        <div id="two-factor-module" class="module hidden-module">
+            <p class="text-center" style="margin-bottom: 20px;">Enter the 6-digit code from your authenticator app.</p>
+            <form id="two-factor-form">
+                <div class="input-group">
+                    <i class="fa fa-key"></i>
+                    <input type="text" id="totp-code" placeholder="6-digit TOTP Code" maxlength="6" pattern="\d{6}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Verify Code</button>
+            </form>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- 5. FORGOT PASSWORD MODULE (Email Request) -->
+        <!-- ========================================================== -->
+        <div id="forgot-password-module" class="module hidden-module">
+            <p class="text-center" style="margin-bottom: 20px;">Enter your email to receive a password reset code.</p>
+            <form id="forgot-password-form">
+                <div class="input-group">
+                    <i class="fa fa-envelope"></i>
+                    <input type="email" id="reset-email" placeholder="Registered Email" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Send Code</button>
+            </form>
+            <div class="mt-4 text-center">
+                <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('customer-login-module'); return false;">
+                    Back to Login
+                </a>
+            </div>
+        </div>
+
+        <!-- ========================================================== -->
+        <!-- 6. OTP VERIFY MODULE -->
+        <!-- ========================================================== -->
+        <div id="otp-verify-module" class="module hidden-module">
+            <p class="text-center" style="margin-bottom: 20px;">A 6-digit verification code has been sent to your email.</p>
+            <form id="otp-verify-form">
+                <div class="input-group">
+                    <i class="fa fa-hashtag"></i>
+                    <input type="text" id="otp-input" placeholder="6-digit Code" maxlength="6" pattern="\d{6}" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Verify Code</button>
+            </form>
+            <div class="mt-4 text-center">
+                 <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('forgot-password-module'); return false;">
+                    Change Email / Resend
+                </a>
+            </div>
+        </div>
+
     </div>
 
+    <!-- Toast Container -->
     <div id="toast-container"></div>
 
     <script>
-        const API = {
-            login: '/api/login',
-            verify2fa: '/api/2fa/verify-login',
-            register: '/api/register',
-            requestOtp: '/api/request-otp',
-            verifyOtp: '/api/verify-otp',
-            updatePw: '/api/update-password' 
+        // --- API Endpoints ---
+        const LOGIN_URL = '/api/login';
+        const ADMIN_LOGIN_URL = '/api/admin/login'; // 🚨 NEW ADMIN ENDPOINT
+        const REGISTER_URL = '/api/register'; // 🚨 NEW REGISTER ENDPOINT
+        const TWO_FA_VERIFY_URL = '/api/2fa/verify-login';
+        const OTP_REQUEST_URL = '/api/request-otp';
+        const OTP_VERIFY_URL = '/api/verify-otp';
+
+        // --- State Variables ---
+        let customerLoginCredentials = {};
+        let resetEmail = '';
+
+        const moduleTitles = {
+            'customer-login-module': 'Customer Account Access',
+            'admin-login-module': 'Admin Account Access', 
+            'register-module': 'Customer Registration', // 🚨 NEW TITLE
+            'two-factor-module': 'Two-Factor Authentication',
+            'forgot-password-module': 'Forgot Password',
+            'otp-verify-module': 'Verify OTP'
         };
 
-        let pendingCreds = {};
-        let resetEmail = '';
-        let vToken = '';
+        // --- Utility Functions ---
 
-        function showToast(msg, type='info') {
+        /**
+         * Switches the active display module.
+         * @param {string} moduleId - The ID of the module to show.
+         */
+        function showModule(moduleId) {
+            const modules = document.querySelectorAll('.module');
+            modules.forEach(module => {
+                if (module.id === moduleId) {
+                    module.classList.remove('hidden-module');
+                    module.classList.add('active-module');
+                } else {
+                    module.classList.remove('active-module');
+                    module.classList.add('hidden-module');
+                }
+            });
+            document.getElementById('module-title').textContent = moduleTitles[moduleId] || 'Account Access';
+        }
+
+        /**
+         * Displays a toast notification.
+         * @param {string} message 
+         * @param {'success'|'error'|'info'} type 
+         */
+        function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
             const toast = document.createElement('div');
-            toast.className = `toast toast-${type}`;
-            toast.textContent = msg;
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+
             container.appendChild(toast);
-            setTimeout(() => toast.classList.add('show'), 10);
-            setTimeout(() => { toast.classList.remove('show'); setTimeout(()=>toast.remove(), 500); }, 4000);
+
+            // Show and hide logic
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+                toast.addEventListener('transitionend', () => toast.remove());
+            }, 5000);
         }
 
-        function closeModals() {
-            document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
-            document.getElementById('step-request').classList.remove('step-hidden');
-            document.getElementById('step-verify').classList.add('step-hidden');
-            document.getElementById('step-new-pw').classList.add('step-hidden');
-        }
+        // --- Event Handlers ---
 
-        // Login Logic
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const nationalId = document.getElementById('login-id').value;
-            const password = document.getElementById('login-password').value;
+        document.addEventListener('DOMContentLoaded', () => {
+            // Initial view setup
+            showModule('customer-login-module');
 
-            try {
-                const res = await fetch(API.login, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ nationalId, password })
-                });
-                const data = await res.json();
+            // 1. Customer Login (National ID) Handler
+            document.getElementById('customer-login-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const nationalId = document.getElementById('national-id').value.trim();
+                const password = document.getElementById('password').value;
 
-                if (res.ok) {
-                    if (data.is2faRequired) {
-                        pendingCreds = { nationalId, password };
-                        document.getElementById('totp-modal').style.display = 'flex';
+                customerLoginCredentials = { nationalId, password };
+                showToast('Logging in...', 'info');
+
+                try {
+                    const response = await fetch(LOGIN_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(customerLoginCredentials)
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        if (result.is2faRequired) {
+                            showToast('2FA required. Enter your code.', 'info');
+                            showModule('two-factor-module');
+                        } else {
+                            showToast('✅ Login successful! Redirecting...', 'success');
+                            setTimeout(() => window.location.href = '/dashboard.html', 1500);
+                        }
                     } else {
-                        window.location.href = '/profile.html';
+                         showToast(`❌ Error: ${result.message || 'Login failed.'}`, 'error');
                     }
-                } else { showToast(data.message, 'error'); }
-            } catch { showToast('Server error', 'error'); }
-        });
-
-        // 2FA Verification Logic
-        document.getElementById('totp-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const totpCode = document.getElementById('totp-code').value;
-            try {
-                const res = await fetch(API.verify2fa, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ ...pendingCreds, totpCode })
-                });
-                if (res.ok) window.location.href = '/profile.html';
-                else showToast('Invalid code', 'error');
-            } catch { showToast('Verification failed', 'error'); }
-        });
-
-        // Forgot Password Workflow
-        document.getElementById('forgot-pw-link').onclick = () => document.getElementById('forgot-modal').style.display = 'flex';
-
-        document.getElementById('send-otp-btn').onclick = async () => {
-            resetEmail = document.getElementById('reset-email-input').value;
-            const res = await fetch(API.requestOtp, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: resetEmail })
+                } catch (error) {
+                    showToast('❌ Network error. Check server connection.', 'error');
+                }
             });
-            if (res.ok) {
-                document.getElementById('step-request').classList.add('step-hidden');
-                document.getElementById('step-verify').classList.remove('step-hidden');
-                showToast('Code sent!', 'success');
-            } else showToast('User not found', 'error');
-        };
 
-        document.getElementById('verify-otp-btn').onclick = async () => {
-            const otp = document.getElementById('reset-otp-input').value;
-            const res = await fetch(API.verifyOtp, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: resetEmail, otp })
+            // 2. Admin Login (Email) Handler 
+            document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const email = document.getElementById('admin-email').value.trim();
+                const password = document.getElementById('admin-password').value;
+
+                showToast('Attempting Admin Login...', 'info');
+
+                try {
+                    const response = await fetch(ADMIN_LOGIN_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, password })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('✅ Admin Login successful! Redirecting to panel...', 'success');
+                        // Admins should be redirected to their specific dashboard
+                        setTimeout(() => window.location.href = '/admin-dashboard.html', 1500);
+                    } else {
+                         showToast(`❌ Error: ${result.message || 'Admin login failed.'}`, 'error');
+                    }
+                } catch (error) {
+                    showToast('❌ Network error. Check server connection.', 'error');
+                }
             });
-            const data = await res.json();
-            if (res.ok) {
-                vToken = data.verificationToken;
-                document.getElementById('step-verify').classList.add('step-hidden');
-                document.getElementById('step-new-pw').classList.remove('step-hidden');
-            } else showToast('Invalid OTP', 'error');
-        };
 
-        document.getElementById('finish-reset-btn').onclick = async () => {
-            const password = document.getElementById('new-pw').value;
-            if (password !== document.getElementById('confirm-new-pw').value) return showToast('Mismatch', 'error');
+            // 3. Registration Handler 🚨 NEW
+            document.getElementById('register-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('reg-username').value.trim();
+                const nationalId = document.getElementById('reg-national-id').value.trim();
+                const email = document.getElementById('reg-email').value.trim();
+                const password = document.getElementById('reg-password').value;
+
+                showToast('Registering account...', 'info');
+
+                try {
+                    const response = await fetch(REGISTER_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, nationalId, email, password })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('✅ Registration successful! Please log in.', 'success');
+                        // Switch back to login module and pre-fill national ID
+                        document.getElementById('national-id').value = nationalId;
+                        document.getElementById('password').value = '';
+                        showModule('customer-login-module');
+                    } else {
+                         showToast(`❌ Error: ${result.message || 'Registration failed.'}`, 'error');
+                    }
+                } catch (error) {
+                    showToast('❌ Network error. Check server connection.', 'error');
+                }
+            });
+
+            // 4. Two-Factor Verification Handler
+            document.getElementById('two-factor-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const totpCode = document.getElementById('totp-code').value.trim();
+                
+                showToast('Verifying 2FA code...', 'info');
+
+                try {
+                    const payload = {
+                        nationalId: customerLoginCredentials.nationalId,
+                        password: customerLoginCredentials.password,
+                        totpCode: totpCode 
+                    };
+
+                    const response = await fetch(TWO_FA_VERIFY_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('✅ 2FA successful! Redirecting...', 'success');
+                        setTimeout(() => window.location.href = '/dashboard.html', 1500);
+                    } else {
+                         showToast(`❌ Error: ${result.message || '2FA verification failed.'}`, 'error');
+                    }
+                } catch (error) {
+                    showToast('❌ Network error.', 'error');
+                }
+            });
             
-            const res = await fetch(API.updatePw, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email: resetEmail, password, vtoken: vToken })
-            });
-            if (res.ok) { showToast('Updated!', 'success'); closeModals(); }
-            else showToast('Update failed', 'error');
-        };
+            // 5. Forgot Password - Request OTP Handler
+            document.getElementById('forgot-password-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                resetEmail = document.getElementById('reset-email').value.trim();
 
-        // UI Toggle
-        document.getElementById('toggle-auth').onclick = () => {
-            const isLogin = document.getElementById('login-form').style.display !== 'none';
-            document.getElementById('login-form').style.display = isLogin ? 'none' : 'block';
-            document.getElementById('register-form').style.display = isLogin ? 'block' : 'none';
-            document.getElementById('form-title').textContent = isLogin ? 'Register' : 'Login';
-        };
+                showToast('Requesting password reset code...', 'info');
+
+                try {
+                    const response = await fetch(OTP_REQUEST_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: resetEmail })
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('✅ Code requested! Check your email.', 'success'); 
+                        showModule('otp-verify-module');
+                    } else {
+                         // Note: Server always returns success message even if email is not found
+                         showToast(`❌ Error: ${result.message || 'Failed to request code.'}`, 'error');
+                    }
+                } catch (error) {
+                    showToast('❌ Network error.', 'error');
+                }
+            });
+
+            // 6. OTP Verification Handler
+            document.getElementById('otp-verify-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const otp = document.getElementById('otp-input').value;
+                const email = resetEmail; // Retrieve email from global variable
+
+                showToast('Verifying OTP...', 'info');
+
+                try {
+                    const response = await fetch(OTP_VERIFY_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email, otp }) // MODIFIED payload to email
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showToast('✅ OTP verified! Redirecting to password reset...', 'success'); 
+                        
+                        const verificationToken = result.verificationToken;
+                        // The resetKey is the email address used to identify the user
+                        const resetKey = email; 
+
+                        // The redirect must now pass the email as the resetKey
+                        const redirectUrl = `/reset-password.html?vtoken=${verificationToken}&resetkey=${encodeURIComponent(resetKey)}`;
+                        
+                        setTimeout(() => window.location.href = redirectUrl, 1500);
+
+                    } else {
+                         showToast(`❌ Error: ${result.message || 'OTP verification failed.'}`, 'error');
+                    }
+                } catch (error) {
+                    showToast('❌ Network error.', 'error');
+                }
+            });
+        });
     </script>
 </body>
 </html>
