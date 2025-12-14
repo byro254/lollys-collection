@@ -167,20 +167,36 @@ async function findUserByUsername(username) {
     }
 }
 
+/**
+ * Creates a new user in the database.
+ * @param {{id: string, username: string, email: string, passwordHash: string}} userData 
+ * @returns {Promise<void>}
+ */
+async function createUser({ id, username, email, passwordHash }) {
+    try {
+        // id is the nationalId
+        await pool.execute(
+            `INSERT INTO users (id, username, email, password_hash, is_admin, is_active, created_at) 
+             VALUES (?, ?, ?, ?, 0, 1, NOW())`,
+            [id, username, email, passwordHash]
+        );
+    } catch (error) {
+        console.error('Database error creating user:', error);
+        throw error;
+    }
+}
 
 /**
- * Resets the user's password.
- * @param {string} userId - The ID (National ID) of the user.
- * @param {string} hashedPassword - The new, securely hashed password.
- * @returns {Promise<boolean>} True if the password was successfully updated.
+ * Updates a user's password hash by their email address.
+ * @param {string} email - The user's email.
+ * @param {string} hashedPassword - The new hashed password.
+ * @returns {Promise<boolean>} - True if successful, false otherwise.
  */
-async function updatePassword(userId, hashedPassword) {
+async function updatePassword(email, hashedPassword) {
     try {
         const [result] = await pool.execute(
-            `UPDATE users 
-             SET password_hash = ?
-             WHERE id = ?`,
-            [hashedPassword, userId]
+            'UPDATE users SET password_hash = ? WHERE email = ?',
+            [hashedPassword, email]
         );
         return result.affectedRows > 0;
     } catch (error) {
@@ -191,7 +207,6 @@ async function updatePassword(userId, hashedPassword) {
 
 
 
-// db.js - Corrected findUserOrders function
 
 /**
  * Fetches all orders for a specific user, with all nested items.

@@ -490,11 +490,13 @@ app.post('/api/login', async (req, res) => {
         }
 
         const match = await bcrypt.compare(password, user.password_hash);
-        if (!match) {
-            // Log failure for security analysis
-            console.warn(`Password mismatch for ID: ${nationalId}`);
+       // 🚨 FIX: Ensure password hash exists before comparison to prevent server crash
+        if (!user.password_hash) {
+            console.error(`User ${nationalId} found but has no password hash.`);
             return res.status(401).json({ message: 'Invalid National ID or Password.' });
         }
+
+        
 
         // 🚨 NEW: 2FA Check Logic
         if (user.is2faEnabled) {
@@ -620,45 +622,79 @@ app.post('/api/forgot-password', async (req, res) => {
 });
 
 // 🚨 NEW: 2FA Verification Endpoint
-app.post('/api/2fa/verify', async (req, res) => {
-    const { token } = req.body;
-    const userId = req.session.tempUserId;
-
-    if (!token || !userId) {
-        return res.status(400).json({ message: 'Invalid session.' });
-    }
-
-    // 🚨 FIX: findUserById now reliably includes is_admin due to db.js update
-    const user = await findUserById(userId);
-    if (!user || !user.twoFactorSecret) {
-        // Clear temp data if user is somehow found but 2FA is suddenly missing
-        delete req.session.tempUserId;
-        return res.status(400).json({ message: '2FA not enabled for this user.' });
-    }
-
-    // 🚨 FIX: totpController.totp.verify now returns a boolean
-    const verified = totpController.totp.verify({
-        secret: user.twoFactorSecret,
-        token,
-        window: 1
-    });
-
-    if (!verified) {
-        return res.status(401).json({ message: 'Invalid 2FA code.' });
-    }
-
-    // Promote temp session → full session
-    req.session.isAuthenticated = true;
-    req.session.userId = user.id;
-    // 🚨 FIX: Set isAdmin directly from the fetched user object
-    req.session.isAdmin = user.is_admin; 
+app.post('/api/2fa/verify-login', async (req, res) => {
+    const { nationalId, password, totpCode } = req.body;
     
-    // 🚨 CLEANUP: Remove temp session data after successful promotion
-    delete req.session.tempUserId;
-    delete req.session.tempIsAdmin;
-    delete req.session.tempFullName;
+    try {
+        // Re-verify credentials (important safety check)
+        const user = await db.findUserById(nationalId);
 
-    res.json({ message: '2FA verified. Login successful.' });
+        if (!user || !user.is_2fa_enabled) {
+            return res.status(401).json({ message: 'Invalid credentials or 2FA setup.' });
+        }
+        
+        // 🚨 FIX: Ensure password hash exists before comparison to prevent server crash
+        if (!user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+             return res.status(401).json({ message: 'Invalid credentials or 2FA setup.' });
+        }
+
+        // Verify TOTP code using the secret stored in the user record
+        const verified = totpController.totp.verify({
+            secret: user.two_fa_secret,
+            token: totpCode,
+        });
+
+        if (verified) {
+            // 2FA successful: Create session
+            req.session.userId = nationalId; 
+            req.session.isAdmin = user.is_admin;
+            return res.json({ message: '2FA and Login successful.' });
+        } else {
+            return res.status(401).json({ message: 'Invalid 2FA code.' });
+        }
+    } catch (error) {
+        console.error('2FA verification error:', error);
+        return res.status(500).json({ message: 'An internal server error occurred.' });
+    }
+});
+
+
+// ---------------------------------------------------------------- //
+// 🚨 NEW: ADMIN LOGIN ROUTE (via Email)
+// ---------------------------------------------------------------- //
+app.post('/api/admin/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        const user = await db.findUserByEmail(email);
+
+        if (!user || !user.is_admin) {
+            console.warn(`Admin login attempt failure for email: ${email}`);
+            return res.status(401).json({ message: 'Invalid credentials or user is not an admin.' });
+        }
+
+        // 🚨 FIX: Ensure password hash exists before comparison
+        if (!user.password_hash) {
+            console.error(`Admin user ${email} found but has no password hash.`);
+            return res.status(500).json({ message: 'Admin account configuration error.' });
+        }
+        
+        const match = await bcrypt.compare(password, user.password_hash);
+        
+        if (!match) {
+            console.warn(`Admin password mismatch for email: ${email}`);
+            return res.status(401).json({ message: 'Invalid credentials or user is not an admin.' });
+        }
+
+        // Admin Login successful: Create session
+        req.session.userId = user.id; 
+        req.session.isAdmin = true;
+        return res.json({ message: 'Admin login successful.' });
+
+    } catch (error) {
+        console.error('Admin login error:', error);
+        return res.status(500).json({ message: 'An internal server error occurred.' });
+    }
 });
 
 
