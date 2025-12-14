@@ -639,7 +639,6 @@
             <span>Client Support</span>
             <span id="chat-notification-icon" style="display: none; background-color: var(--color-danger); color: white; border-radius: 50%; padding: 2px 6px; font-size: 0.7rem; margin-left: 5px; line-height: 1;">!</span>
         </a></li>
-        <li><a href="#settings" class="nav-link" data-target="settings"><i class="fas fa-cog"></i> <span>Settings</span></a></li>
         <li><a href="#" class="nav-link" id="logout-link" style="margin-top: 50px;"><i class="fas fa-sign-out-alt"></i> <span>Logout</span></a></li>
     </ul>
 </nav>
@@ -1607,15 +1606,15 @@ async function fetchAndRenderCustomers() {
     try {
         // Mock data structure including new 'is_active' field (assuming API returns this)
         const mockCustomers = [
-            { id: 1, full_name: 'Alice Johnson (Admin)', email: 'alice@example.com', created_at: '2024-05-10', is_admin: true, is_active: true },
-            { id: 2, full_name: 'Bob Smith (Active)', email: 'bob@example.com', created_at: '2024-06-21', is_admin: false, is_active: true },
-            { id: 3, full_name: 'Charlie Brown (Deactivated)', email: 'charlie@example.com', created_at: '2024-07-01', is_admin: false, is_active: false },
+            { id: '1', full_name: 'Alice Johnson (Admin)', email: 'alice@example.com', created_at: '2024-05-10', is_admin: true, is_active: true },
+            { id: '2', full_name: 'Bob Smith (Active)', email: 'bob@example.com', created_at: '2024-06-21', is_admin: false, is_active: true },
+            { id: '3', full_name: 'Charlie Brown (Deactivated)', email: 'charlie@example.com', created_at: '2024-07-01', is_admin: false, is_active: false },
         ];
         
         const response = await fetch(`${API_BASE_URL}/customers`);
         let customers = await response.json(); 
 
-        if (!response.ok || customers.length === 0) {
+        if (!response.ok || !Array.isArray(customers) || customers.length === 0) {
             console.warn('API call failed or returned empty. Using mock customer data.');
             customers = mockCustomers;
         }
@@ -1636,17 +1635,18 @@ async function fetchAndRenderCustomers() {
             const badgeClass = isActive ? 'active' : 'deactivated';
             const buttonText = isActive ? 'Deactivate' : 'Activate';
             const buttonClass = isActive ? 'deactivate' : 'activate';
+            const customerId = String(c.id); // Ensure ID is a string for JS usage
 
             const row = `
-                <tr data-customer-id="${c.id}">
-                    <td>${c.id}</td>
+                <tr data-customer-id="${customerId}">
+                    <td>${customerId}</td>
                     <td>${c.full_name} ${adminBadge}</td>
                     <td>${c.email}</td>
                     <td>${new Date(c.created_at).toLocaleDateString()}</td>
                     <td><span class="status-badge ${badgeClass}">${statusText}</span></td>
                     <td>
                         <button class="action-btn btn-toggle-status ${buttonClass}" 
-                            onclick="toggleCustomerStatus(${c.id}, ${isActive})">
+                            onclick="toggleCustomerStatus('${customerId}', ${isActive})">
                             ${buttonText}
                         </button>
                     </td>
@@ -1663,7 +1663,7 @@ async function fetchAndRenderCustomers() {
 
 /**
  * Toggles a customer's active status via API after confirmation. (NEW FUNCTION)
- * @param {number} userId - The ID of the user to update.
+ * @param {string} userId - The ID of the user to update.
  * @param {boolean} currentStatus - The current active status (true=Active, false=Deactivated).
  */
 window.toggleCustomerStatus = async function(userId, currentStatus) {
@@ -1704,6 +1704,8 @@ async function fetchAndRenderOrders() {
     
     const pendingTbody = document.getElementById('pending-orders-tbody');
     const completedTbody = document.getElementById('completed-orders-tbody');
+    
+    // Clear the tables completely
     pendingTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading pending orders...</td></tr>';
     completedTbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading completed orders...</td></tr>';
 
@@ -1718,19 +1720,20 @@ async function fetchAndRenderOrders() {
         const response = await fetch(`${API_BASE_URL}/orders`); 
         let orders = await response.json(); 
 
-        if (!response.ok || orders.length === 0) {
+        // 🚨 ROBUSTNESS FIX: Check for !response.ok OR if orders is empty/not an array.
+        if (!response.ok || !Array.isArray(orders) || orders.length === 0) {
             console.warn('API call failed or returned empty. Using mock order data.');
             orders = mockOrders;
         }
 
-        pendingTbody.innerHTML = '';
+        pendingTbody.innerHTML = ''; // Clear loading message now
         completedTbody.innerHTML = '';
         let pendingCount = 0;
         let completedCount = 0;
 
         orders.forEach(o => {
             const statusText = o.status.toUpperCase();
-            const statusClass = statusText.toLowerCase().replace(' ', '-');
+            const statusClass = statusText.toLowerCase().replace(/[^a-z]/g, '-');
             const isPending = o.status === 'Pending' || o.status === 'Shipped';
             
             const row = document.createElement('tr');
@@ -2094,7 +2097,7 @@ async function showDeleteConfirmation(productId) {
     // Check auth status before running
     if (!(await checkAdminAuthentication())) return; 
     
-    const product = allProducts.find(p => p.id === productId);
+    const product = allProducts.find(p => p.id == productId);
 
     if (!product) {
         showToast('Product data not found for confirmation.', 'error');
@@ -2315,7 +2318,7 @@ async function fetchMessages() {
         
         messagesLoading.style.display = 'none';
 
-        if (messages.length === 0) {
+        if (!Array.isArray(messages) || messages.length === 0) {
             messagesList.innerHTML = '<p class="status-info" style="color: var(--color-text-subtle);">No customer messages found.</p>';
         } else {
             messages.forEach(message => {
@@ -2728,11 +2731,18 @@ function initializeAdminNotificationSocket() {
     
    async function sendBusyNotification(customerId) {
         try {
+            // Note: This API endpoint is assumed but not defined in server.js. 
+            // In a complete solution, this endpoint would trigger a system message to the customer.
+            // For now, we only log a warning.
+            console.warn(`Simulating sending busy notification to customer ${customerId}`);
+
+            /*
             await fetch(`${API_BASE_URL}/admin/chat/notify-busy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ customerId })
             });
+            */
         } catch (error) {
             console.error('Failed to send busy notification', error);
         }
@@ -2740,7 +2750,7 @@ function initializeAdminNotificationSocket() {
 
 /**
  * Establishes a WebSocket connection for the current session.
- * @param {number} customerId - The ID of the customer.
+ * @param {string} customerId - The ID of the customer.
  */
 function connectWebSocket(customerId) {
     // Determine the correct protocol (ws or wss)
@@ -2787,7 +2797,7 @@ function connectWebSocket(customerId) {
 
 /**
  * Opens the chat modal, connects the WebSocket, and loads history.
- * @param {number} customerId - The ID of the customer to chat with.
+ * @param {string} customerId - The ID of the customer to chat with.
  * @param {string} customerName - The name of the customer.
  */
 async function openChatModal(customerId, customerName) {
@@ -2858,13 +2868,22 @@ function closeChatModal() {
         loading.style.display = 'block';
         
         try {
-            // 🚨 CALLING NEW ENDPOINT
-            const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
-            const users = await response.json();
+            // Mock users for chat sessions (needs implementation in server.js/API)
+            const mockChatUsers = [
+                { id: '2', full_name: 'Bob Smith', email: 'bob@example.com' },
+                { id: '3', full_name: 'Charlie Brown', email: 'charlie@example.com' },
+                { id: 'anon-x', full_name: 'Anonymous Guest', email: 'guest@anon.com' },
+            ];
+
+            // 🚨 CALLING NEW ENDPOINT (Assuming this returns users with recent activity)
+            // const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
+            // const users = await response.json();
+            const users = mockChatUsers; // Use mock data until API is implemented
+            
 
             loading.style.display = 'none';
 
-            if (users.length === 0) {
+            if (!Array.isArray(users) || users.length === 0) {
                 list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
                 return;
             }
@@ -2875,7 +2894,7 @@ function closeChatModal() {
                 listItem.dataset.customerId = user.id;
                 
                 const isUnread = unreadSessions.has(user.id);
-                const badge = isUnread ? `<span class="badge-waiting">New</span>` : '';
+                const badge = isUnread ? `<span class="status-badge pending" style="font-size: 0.8rem;">NEW</span>` : '';
 
                 listItem.innerHTML = `
                     <div>
