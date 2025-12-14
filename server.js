@@ -704,6 +704,7 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     });
 });
 
+
 app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
     const { token } = req.body;
     const userId = req.session.userId;
@@ -724,7 +725,8 @@ app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
     }
 
     try {
-        await db.update2faStatus(userId, secret, true);
+       
+        await db.update2faStatus(userId, true, secret); 
         delete req.session.temp2faSecret;
         res.json({ message: '2FA enabled successfully.' });
     } catch (e) {
@@ -732,6 +734,8 @@ app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
         res.status(500).json({ message: 'Failed to save 2FA secret to database.' });
     }
 });
+
+// server.js (~line 716)
 
 app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -754,7 +758,7 @@ app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
         });
 
         if (verified) {
-            await db.update2faStatus(userId, null, false);
+            await db.update2faStatus(userId, false, null); 
             res.json({ message: 'Two-Factor Authentication disabled successfully.' });
         } else {
             res.status(401).json({ message: 'Invalid verification code. Disable failed.' });
