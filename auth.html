@@ -220,7 +220,8 @@
 
         <div id="login-section" class="form-section active">
             <form id="login-form">
-                <input type="email" id="login-email" placeholder="Email Address" required>
+                <!-- 🚨 MODIFIED: Use username instead of email for login -->
+                <input type="text" id="login-username" placeholder="Username" required>
                 
                 <div class="password-container">
                     <input type="password" id="login-password" placeholder="Password" required>
@@ -238,10 +239,13 @@
 
         <div id="signup-section" class="form-section">
             <form id="signup-form">
-                <!-- UPDATED SIGNUP FIELDS -->
-                <input type="text" id="signup-username" placeholder="Username (e.g. JohnDoe)" required>
-                <input type="email" id="signup-email" placeholder="Email Address" required>
-                <input type="text" id="signup-national-id" placeholder="National ID Number (Account Number)" required pattern="[0-9]{8,15}" title="National ID must be between 8 and 15 digits">
+                <!-- 🚨 MODIFIED: Username is now the primary ID/login field -->
+                <input type="text" id="signup-username" placeholder="Username (3-20 chars)" required pattern="[a-zA-Z0-9_]{3,20}" title="Username must be 3-20 characters long, containing letters, numbers, or underscores.">
+                <!-- Email is now only for password reset/contact -->
+                <input type="email" id="signup-email" placeholder="Email Address (For Password Reset)" required>
+                
+                <!-- 🚨 RE-ADDED: National ID input, used as Wallet ID -->
+                <input type="text" id="signup-national-id" placeholder="National ID (Used as Wallet ID)" required pattern="[0-9]{8,15}" title="National ID must be between 8 and 15 digits.">
                 
                 <div class="password-container">
                     <input type="password" id="signup-password" placeholder="Password (min 6 chars)" required minlength="6">
@@ -256,6 +260,21 @@
                 <button type="submit">Sign Up</button>
             </form>
             <div id="signup-message" class="message" style="display: none;"></div>
+        </div>
+    </div>
+    
+    <!-- 🚨 NEW MODAL: 2FA Verification -->
+    <div id="2fa-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" onclick="closeModal('2fa')">&times;</span>
+            <h2>Two-Factor Authentication</h2>
+            <p>Please enter the 6-digit code from your Google Authenticator app to continue.</p>
+            <form id="2fa-form">
+                <input type="hidden" id="2fa-user-id" value="">
+                <input type="text" id="2fa-token-input" placeholder="6-digit Code" required maxlength="6" pattern="[0-9]{6}">
+                <button type="submit">Verify Code</button>
+            </form>
+             <div id="2fa-message" class="message" style="display: none;"></div>
         </div>
     </div>
     
@@ -389,10 +408,10 @@ function showToast(message, type = 'info', duration = 4000) {
     }, duration);
 }
        
-        // 1. LOGIN (MODIFIED for Account Status Check)
+        // 1. LOGIN (MODIFIED for Username and 2FA Check)
         document.getElementById('login-form').addEventListener('submit', async function(e) {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
+            const username = document.getElementById('login-username').value; // Get username
             const password = document.getElementById('login-password').value;
             
 
@@ -400,24 +419,62 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ username, password }) // Send username
                 });
 
                 const result = await response.json();
                 
                 if (response.ok) {
+                    // Standard Login Success (No 2FA)
                     const redirectUrl = result.user.is_admin ? '/admin.html' : '/';
-                    showToast(` Welcome ${result.user.full_name} ! `, 'success');
+                    showToast(` Welcome ${result.user.full_name}! `, 'success');
                     setTimeout(() => window.location.href = redirectUrl, 1500);
+                } else if (response.status === 202) {
+                     // 2FA Required: Server returns 202 Accepted
+                    document.getElementById('2fa-user-id').value = result.userId; // Store user ID
+                    document.getElementById('2fa-token-input').value = ''; // Clear previous token
+                    showMessage('2fa-message', '', 'info'); // Clear message area
+                    openModal('2fa'); // Show the stylish modal
+                    showToast(result.message, 'info');
                 } else if (response.status === 403) {
-                     // 403 will be used by server for deactivated account or rate limit
-                    showToast(`  ${result.message}`, 'error');
+                     // 403 for deactivated account or rate limit
+                    showToast(`❌ ${result.message}`, 'error');
                 } else {
                     // 401 for Invalid credentials/other errors
-                    showToast(`  ${result.message || 'Invalid credentials or login attempt limit reached.'}`, 'error');
+                    showToast(`❌ ${result.message || 'Invalid credentials or login attempt limit reached.'}`, 'error');
                 }
             } catch (error) {
                 showToast('❌ An error occurred connecting to the server.', 'error');
+            }
+        });
+        
+        // 🚨 NEW: 2FA Verification Submission
+        document.getElementById('2fa-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const token = document.getElementById('2fa-token-input').value;
+            const userId = document.getElementById('2fa-user-id').value;
+            
+            showMessage('2fa-message', 'Verifying code...', 'info');
+
+            try {
+                const response = await fetch('/api/2fa/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, userId })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    closeModal('2fa');
+                    const redirectUrl = result.user.is_admin ? '/admin.html' : '/';
+                    showToast(`✅ 2FA verified. Welcome ${result.user.full_name}!`, 'success');
+                    setTimeout(() => window.location.href = redirectUrl, 1500);
+                } else {
+                    showMessage('2fa-message', result.message || 'Invalid 2FA code. Please try again.', 'error');
+                }
+            } catch (error) {
+                 showMessage('2fa-message', 'An error occurred during verification.', 'error');
             }
         });
         
@@ -427,6 +484,7 @@ function showToast(message, type = 'info', duration = 4000) {
             // UPDATED: Get new fields
             const username = document.getElementById('signup-username').value;
             const email = document.getElementById('signup-email').value;
+            // 🚨 RE-ADDED: National ID
             const nationalId = document.getElementById('signup-national-id').value;
             const password = document.getElementById('signup-password').value;
             const confirmPassword = document.getElementById('signup-password-confirm').value;
@@ -435,7 +493,11 @@ function showToast(message, type = 'info', duration = 4000) {
                 showToast('❌ Passwords do not match.', 'error');
                 return;
             }
-            // Basic National ID validation check (using input pattern above, but useful client-side check)
+            // Basic validation checks
+            if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+                showToast('❌ Invalid username format.', 'error');
+                return;
+            }
             if (!/^\d{8,15}$/.test(nationalId)) {
                 showToast('❌ Invalid National ID format. Must be 8-15 digits.', 'error');
                 return;
@@ -446,7 +508,7 @@ function showToast(message, type = 'info', duration = 4000) {
                 const response = await fetch('/api/signup', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // UPDATED: Send all required data fields
+                    // UPDATED: Send nationalId
                     body: JSON.stringify({ username, email, nationalId, password })
                 });
 

@@ -124,7 +124,7 @@ const smsServiceProvider = {
     sendSMSVerifyCode: async ({ phoneNumber, verifyCode }) => {
         const params = {
             tel: phoneNumber,
-            mesg: `Your verification code is ${verifyCode}.`,
+            mesg: `Your verification code is <otp>${verifyCode}</otp>.`, // Ensure OTP is in the template
             otp_timeout: 300, // 5 minutes expiry
             country_code: 'KE', // Hardcoded country code
             verifyCode: verifyCode // Passed separately for logic
@@ -143,8 +143,8 @@ const smsServiceProvider = {
 
 const otpCache = {};
 // Import DB functions
-// 🚨 MODIFIED: Added runMigrations and update2faStatus
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus } = require('./db'); 
+// 🚨 MODIFIED: findUserByUsername and runMigrations are imported
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -366,19 +366,23 @@ app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.h
 // =========================================================
 
 app.post('/api/signup', async (req, res) => {
-    // 🚨 UPDATED: Collect username and nationalId (which serves as user ID)
+    // 🚨 UPDATED: Collect nationalId
     const { username, email, nationalId, password } = req.body;
     
     if (!username || !email || !nationalId || !password) {
         return res.status(400).json({ message: 'All fields (Username, Email, National ID, Password) are required.' });
     }
-
-    // Simple validation for National ID length/format
+    
+    // Simple username format validation (e.g., alphanumeric, min length 3)
+    if (!/^[a-zA-Z0-9_]{3,20}$/.test(username)) {
+         return res.status(400).json({ message: 'Invalid username format. Must be 3-20 characters long, containing letters, numbers, or underscores.' });
+    }
+    // Simple National ID validation check
     if (!/^\d{8,15}$/.test(nationalId)) {
         return res.status(400).json({ message: 'Invalid National ID format. Must be 8-15 digits.' });
     }
-
-    // Set the National ID as the unique userId for the database
+    
+    // 🚨 CRITICAL CHANGE: Use National ID as the unique user ID (PK) and wallet account number
     const userId = nationalId;
 
     try {
@@ -390,7 +394,7 @@ app.post('/api/signup', async (req, res) => {
             [userId, username, email, password_hash]
         );
 
-        // 2. Automatically create a Wallet for the new user (ID is also the account number)
+        // 2. Automatically create a Wallet for the new user (ID/National ID is also the account number)
         await pool.execute(
             'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
             [userId, userId] // National ID used for both user_id and account_number
@@ -399,12 +403,18 @@ app.post('/api/signup', async (req, res) => {
         res.status(201).json({ message: 'User registered successfully and wallet created.' });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
-            // Check if the duplicate entry is the PRIMARY KEY (National ID)
+            // Check if the duplicate entry is the UNIQUE KEY for username, email, or PRIMARY KEY (National ID)
+            if (error.message.includes('username')) {
+                 return res.status(409).json({ message: 'Username is already taken.' });
+            }
+            if (error.message.includes('email')) {
+                 return res.status(409).json({ message: 'Email is already registered.' });
+            }
             if (error.message.includes('PRIMARY')) {
                  return res.status(409).json({ message: 'National ID is already registered.' });
             }
-            // Otherwise, assume it's the UNIQUE KEY for email
-            return res.status(409).json({ message: 'Email already registered.' });
+             // Default catch for other duplicate entries
+            return res.status(409).json({ message: 'A user with this detail already exists.' });
         }
         console.error('Signup error:', error);
         res.status(500).json({ message: 'Server error during registration.' });
@@ -412,14 +422,19 @@ app.post('/api/signup', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
-    const attemptKey = email.toLowerCase();
+    // 🚨 UPDATED: Log in with username, not email
+    const { username, password } = req.body;
+    const attemptKey = username.toLowerCase();
     const now = Date.now();
+    
+    if (!username || !password) {
+        return res.status(400).json({ message: 'Username and Password are required.' });
+    }
     
     // 1. Check Rate Limit / Lockout
     if (loginAttempts[attemptKey] && loginAttempts[attemptKey].lockoutTime > now) {
         return res.status(401).json({ 
-            message: `Too many failed attempts. Try again in ${Math.ceil((loginAttempts[attemptKey].lockoutTime - now) / 60000)} minutes.` 
+            message: `Too many failed attempts. Try again in ${Math.ceil((loginAttempts[attemptKey].lockoutTime - now) / 18000)} minutes.` 
         });
     }
     
@@ -430,25 +445,21 @@ app.post('/api/login', async (req, res) => {
 
 
     try {
-        // 🚨 FIX: Fetch 'username' instead of 'full_name' for new structure
-        const [users] = await pool.execute(
-            'SELECT id, username, password_hash, is_admin, is_active FROM users WHERE email = ?',
-            [email]
-        );
+        // 🚨 CRITICAL: Use the new function to find the user by username
+        const user = await findUserByUsername(username); 
 
-        const user = users[0];
         if (!user) {
             // Use a slight delay to mitigate timing attacks
             await new Promise(resolve => setTimeout(resolve, 500)); 
-            return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
+            return handleFailedLogin(res, attemptKey, 'Invalid username or password.');
         }
 
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
-            return handleFailedLogin(res, attemptKey, 'Invalid credentials.');
+            return handleFailedLogin(res, attemptKey, 'Invalid username or password.');
         }
         
-        // 3. Check Account Status (NEW REQUIREMENT)
+        // 3. Check Account Status
         if (!user.is_active) {
             return res.status(403).json({ 
                 message: 'Your account has been deactivated. Please contact admin.' 
@@ -456,9 +467,7 @@ app.post('/api/login', async (req, res) => {
         }
 
         // 🚨 NEW: 2FA Check Logic
-        // Fetch full user data including 2FA status
-        const fullUserData = await findUserById(user.id);
-        if (fullUserData && fullUserData.is2faEnabled) {
+        if (user.is2faEnabled) {
             
             // Store user data temporarily for 2FA verification step
             req.session.tempUserId = user.id;
@@ -469,23 +478,20 @@ app.post('/api/login', async (req, res) => {
             return res.status(202).json({ 
                 message: '2FA required. Please enter your code.', 
                 is_2fa_enabled: true,
-                userId: user.id // Send ID for verification
+                userId: user.id, // Send ID for verification
             });
         }
         // END NEW 2FA Check Logic
         
-        // 4. Successful Login: Clear attempts and set session
+        // 4. Successful Login (Standard Auth): Clear attempts and set session
         delete loginAttempts[attemptKey];
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
-        // 🚨 CRITICAL FIX: The user ID is now the National ID (VARCHAR)
         req.session.userId = user.id; 
-        // 🚨 FIX: Use 'username' for session compatibility
         req.session.fullName = user.username; 
         
         res.json({ 
             message: 'Login successful.', 
-            // 🚨 FIX: Use 'username' for response compatibility
             user: { id: user.id, full_name: user.username, is_admin: user.is_admin } 
         });
 
@@ -539,10 +545,9 @@ app.post('/api/admin/login', async (req, res) => {
     // 2. Check for DB user with admin flag
     try {
         // 🚨 FIX: Fetch 'username' instead of 'full_name'
-        const [users] = await pool.execute('SELECT id, username, password_hash FROM users WHERE email = ? AND is_admin = TRUE', [email]);
-        const user = users[0];
+        const user = await findUserByEmail(email); // Still use email for admin check
 
-        if (user) {
+        if (user && user.is_admin) {
             const match = await bcrypt.compare(password, user.password_hash);
             if (match) {
                 req.session.isAuthenticated = true;
@@ -585,6 +590,7 @@ app.post('/api/forgot-password', async (req, res) => {
 
 // 🚨 NEW: 2FA Verification Endpoint
 app.post('/api/2fa/verify', async (req, res) => {
+    // 🚨 MODIFIED: Accept the 'method' (password or authenticator)
     const { token, userId } = req.body;
     
     // Security check: Use session temporary ID for verification
@@ -598,23 +604,23 @@ app.post('/api/2fa/verify', async (req, res) => {
         const user = await findUserById(verificationUserId);
         
         if (!user || !user.is2faEnabled || !user.twoFactorSecret) {
-            // This case should be rare if login passed status 202
             return res.status(400).json({ message: '2FA is not enabled for this user or session expired.' });
         }
         
-        // 1. Verify TOTP Token
+        // 1. Verify TOTP Token (Google Authenticator)
         const verified = speakeasy.totp.verify({
             secret: user.twoFactorSecret,
             encoding: 'base32',
             token: token
         });
         
+        // 🚨 LOGIC CHANGE: Only allow sign-in if the token is valid
         if (verified && verified.verified) {
              // 2. Grant full session access
              req.session.isAuthenticated = true;
              req.session.isAdmin = req.session.tempIsAdmin;
              req.session.userId = user.id; 
-             req.session.fullName = req.session.tempFullName; 
+             req.session.fullName = user.name; 
              
              // Clean up temporary session data
              delete req.session.tempUserId;
@@ -653,10 +659,11 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     // 2. Generate the TOTP URI (for Google Authenticator QR Code)
     const appName = encodeURIComponent("LollysCollection");
     const issuer = encodeURIComponent("Lolly's Collection");
-    const email = encodeURIComponent(user.email);
+    // 🚨 IMPORTANT: Use the username, as email is for password reset only
+    const accountName = encodeURIComponent(user.name); 
     
     // TOTP URI format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER
-    const otpUri = `otpauth://totp/${issuer}:${email}?secret=${secretBase32}&issuer=${issuer}`;
+    const otpUri = `otpauth://totp/${issuer}:${accountName}?secret=${secretBase32}&issuer=${issuer}`;
     
     // 3. Generate QR Code URL using Google Charts API
     const qrCodeUrl = `https://chart.googleapis.com/chart?chs=160x160&cht=qr&chl=${encodeURIComponent(otpUri)}&choe=UTF-8`;
@@ -984,7 +991,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                     "PartyB": shortCode,
                     "PhoneNumber": phoneNumber,
                     "CallBackURL": callbackUrl,
-                    // 🚨 CRITICAL: Use the user's National ID as the AccountReference
+                    // 🚨 CRITICAL: Use the user's ID (National ID) as the AccountReference
                     "AccountReference": userId, 
                     "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
@@ -2233,7 +2240,7 @@ app.post('/api/reset-password', async (req, res) => {
         
         // 5. Hash the new password securely
         const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
+        const hashedPassword = await bcrypt.hash(newPassword, saltRaltounds);
         
         // 6. Update password using the stored user ID
         const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
@@ -2693,8 +2700,7 @@ server.listen(port, async () => {
     console.log(`Server running on port ${port}`);
 
     try {
-        // 🚨 CRITICAL: Run database migrations before starting the server process
-        
+       
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {

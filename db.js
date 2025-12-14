@@ -23,10 +23,6 @@ const pool = mysql.createPool({
 
 
 
-
-// ---------------------------------------------------------------- //
-
-
 /**
  * Retrieves a list of all registered users (customers).
  * This is intended for the admin panel listing.
@@ -146,6 +142,31 @@ async function findUserByEmail(email) {
         throw error;
     }
 }
+/**
+ * 🚨 NEW: Retrieves a user object by their username for login purposes.
+ * @param {string} username - The username of the user.
+ * @returns {Promise<object | null>} - User object including password_hash, is_admin, is_active, and 2FA status, or null.
+ */
+async function findUserByUsername(username) {
+    try {
+        const [rows] = await pool.execute(
+            'SELECT id, username, email, password_hash, is_admin, is_active, two_factor_secret, is_2fa_enabled FROM users WHERE username = ?',
+            [username]
+        );
+        
+        if (rows.length === 0) return null;
+
+        return {
+            ...rows[0],
+            full_name: rows[0].username, // Map username back to full_name for compatibility
+            is2faEnabled: rows[0].is_2fa_enabled // Expose 2FA status for server logic
+        }
+    } catch (error) {
+        console.error('Database error fetching user by username:', error);
+        throw error;
+    }
+}
+
 
 /**
  * Resets the user's password.
@@ -415,7 +436,7 @@ async function logBusinessExpenditure(businessId, amount, purpose) {
         // 1. Get Wallet ID and current balance (with FOR UPDATE lock)
         let [walletRows] = await connection.execute(
             'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [businessId] // Use the businessId
+            [businessId]
         );
 
         let wallet_id;
@@ -855,6 +876,9 @@ module.exports = {
     updateUserProfile, 
     updateUserStatus, 
     findUserByPhone, 
+    // 🚨 NEW: Find by Username
+    findUserByUsername,
+   
     
     // 🚨 NEW Wallet & Transaction functions
     getWalletByUserId,
