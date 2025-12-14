@@ -313,7 +313,7 @@
         // --- API Endpoints ---
         const LOGIN_URL = '/api/login';
         const ADMIN_LOGIN_URL = '/api/admin/login'; 
-        // 🚨 FIX: Corrected to match server.js endpoint
+        // 🚨 FIX 1: Corrected to match server.js endpoint
         const REGISTER_URL = '/api/signup'; 
         const TWO_FA_VERIFY_URL = '/api/2fa/verify-login';
         const OTP_REQUEST_URL = '/api/request-otp';
@@ -400,13 +400,14 @@
                     
                     const result = await response.json();
                     
-                    // 🚨 FIX: Check for 202 status code explicitly for 2FA
+                    // 🚨 FIX 2: Check for 202 status code explicitly for 2FA
                     if (response.status === 202) {
                         showToast('2FA required. Enter your code.', 'info');
                         showModule('two-factor-module');
                     } else if (response.ok) { // This handles 200 OK
                         showToast('✅ Login successful! Redirecting...', 'success');
-                        setTimeout(() => window.location.href = '/index.html', 1500); // Redirect to base URL
+                        // 🚨 FIX 3: Redirect to the base URL (which serves index.html)
+                        setTimeout(() => window.location.href = '/', 1500); 
                     } else {
                          showToast(`❌ Error: ${result.message || 'Login failed.'}`, 'error');
                     }
@@ -434,8 +435,8 @@
                     
                     if (response.ok) {
                         showToast('✅ Admin Login successful! Redirecting to panel...', 'success');
-                        // Admins should be redirected to their specific dashboard
-                        setTimeout(() => window.location.href = '/admin.html', 1500); // Redirect to /admin.html
+                        // 🚨 FIX 4: Redirect to the correct admin page
+                        setTimeout(() => window.location.href = '/admin.html', 1500); 
                     } else {
                          showToast(`❌ Error: ${result.message || 'Admin login failed.'}`, 'error');
                     }
@@ -501,7 +502,8 @@
                     
                     if (response.ok) {
                         showToast('✅ 2FA successful! Redirecting...', 'success');
-                        setTimeout(() => window.location.href = '/', 1500); // Redirect to base URL
+                        // 🚨 FIX 5: Redirect to the base URL (which serves index.html)
+                        setTimeout(() => window.location.href = '/', 1500); 
                     } else {
                          showToast(`❌ Error: ${result.message || '2FA verification failed.'}`, 'error');
                     }
