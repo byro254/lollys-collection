@@ -27,7 +27,6 @@ const WebSocket = require('ws'); // ws library for WebSockets
 
 /**
  * Converts a Base32 string to a Buffer (required for crypto module).
- * This function simulates the Base32 decoding done by TOTP libraries.
  */
 function base32ToBuffer(base32) {
     const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -39,7 +38,7 @@ function base32ToBuffer(base32) {
         const char = base32[i];
         const index = ALPHABET.indexOf(char);
         
-        if (index === -1) continue; // Skip padding or invalid chars
+        if (index === -1) continue; 
         
         value = (value << 5) | index;
         bits += 5;
@@ -54,17 +53,20 @@ function base32ToBuffer(base32) {
 
 /**
  * Generates a TOTP code using the HMAC-SHA1 algorithm.
- * @param {string} secret Base32 encoded secret key.
- * @param {number} epoch_ms Current time in milliseconds.
- * @param {number} step_s Time step in seconds (30 for Google Authenticator).
- * @param {number} digits Length of the OTP (6 or 8).
- * @returns {string} The generated OTP code.
  */
 function generateTotpCode(secret, epoch_ms, step_s = 30, digits = 6) {
     const T = Math.floor(epoch_ms / 1000 / step_s);
     const T_Buffer = Buffer.alloc(8);
-    T_Buffer.writeBigInt64BE(BigInt(T));
-
+    // CRITICAL: Need BigInt for 64-bit counter value (even though JS can only reliably use up to 53-bit integers)
+    // Using Buffer.writeBigInt64BE is the standard TOTP approach.
+    try {
+        T_Buffer.writeBigInt64BE(BigInt(T));
+    } catch (e) {
+        // Fallback for older environments or unusual BigInt constraints
+        T_Buffer.writeUInt32BE(0, 0); 
+        T_Buffer.writeUInt32BE(T, 4);
+    }
+    
     const key = base32ToBuffer(secret);
     const hmac = crypto.createHmac('sha1', key);
     hmac.update(T_Buffer);
@@ -84,9 +86,6 @@ function generateTotpCode(secret, epoch_ms, step_s = 30, digits = 6) {
 
 /**
  * Verifies a user-provided token against the secret, checking current and neighboring steps.
- * 🚨 FIX: Returns a boolean directly instead of an object.
- * @param {object} config Configuration object {secret: string, token: string, window: number}
- * @returns {boolean} True if the token is valid, false otherwise.
  */
 function verifyTotpCode({ secret, token, window = 1 }) {
     const now = Date.now();
@@ -99,6 +98,7 @@ function verifyTotpCode({ secret, token, window = 1 }) {
 
     // Check neighboring time steps (window > 0)
     for (let i = 1; i <= window; i++) {
+        // Check prev and next steps for clock drift
         const prevCode = generateTotpCode(secret, now - i * 30 * 1000);
         const nextCode = generateTotpCode(secret, now + i * 30 * 1000);
 
@@ -107,15 +107,16 @@ function verifyTotpCode({ secret, token, window = 1 }) {
         }
     }
     
-    // 🚨 SECURITY FIX: Removed the hardcoded '123456' backdoor for production security.
-    
     return false;
 }
 
-// Global object replacing the mock speakeasy
+// Global object for TOTP operations
 const totpController = {
+    /**
+     * Generates a random Base32 secret string.
+     */
     generateSecret: () => {
-        // Generates a random Base32 secret string, mimicking speakeasy's output
+        // Generates 16 random bytes and encodes them to a 26-character Base32 string
         const base32 = crypto.randomBytes(16).toString('base64').replace(/=/g, '').substring(0, 26).toUpperCase();
         return { base32 };
     },
@@ -741,7 +742,6 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
         return res.status(400).json({ message: '2FA already enabled.' });
     }
     
-    // 🚨 Security Enhancement: Ensure user has a name/email for the QR URI
     if (!user.name || !user.email) {
         return res.status(400).json({ message: 'User must have a name or email set to setup 2FA.' });
     }
@@ -749,10 +749,9 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const secret = totpController.generateSecret();
 
     const issuer = "LollysCollection";
-    const account = user.name; // Use username as the account identifier
+    const account = user.name; 
 
-    // otpauth://totp/ISSUER:ACCOUNT_NAME?secret=SECRET_KEY&issuer=ISSUER
-    // 🚨 FIX: Added algorithm, digits, and period for robustness, as Google Authenticator expects them.
+    // Generate the otpauth URI with all required parameters
     const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret.base32}&algorithm=SHA1&digits=6&period=30&issuer=${encodeURIComponent(issuer)}`;
 
     const qrImage = await QRCode.toDataURL(otpauth);
@@ -773,10 +772,9 @@ app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
     const secret = req.session.temp2faSecret;
 
     if (!token || !secret) {
-        return res.status(400).json({ message: 'Setup session expired.' });
+        return res.status(400).json({ message: 'Setup session expired or missing token.' });
     }
 
-    // 🚨 FIX: Call verifyTotpCode directly, it now returns a boolean
     const verified = totpController.totp.verify({
         secret,
         token,
@@ -787,10 +785,14 @@ app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
         return res.status(401).json({ message: 'Invalid verification code.' });
     }
 
-    await db.update2faStatus(userId, secret, true);
-    delete req.session.temp2faSecret;
-
-    res.json({ message: '2FA enabled successfully.' });
+    try {
+        await db.update2faStatus(userId, secret, true);
+        delete req.session.temp2faSecret;
+        res.json({ message: '2FA enabled successfully.' });
+    } catch (e) {
+        console.error('2FA enable DB error:', e);
+        res.status(500).json({ message: 'Failed to save 2FA secret to database.' });
+    }
 });
 
 app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
@@ -801,29 +803,30 @@ app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
         return res.status(400).json({ message: 'Missing verification code.' });
     }
     
-    const user = await findUserById(userId);
-    if (!user || !user.twoFactorSecret) {
-         return res.status(400).json({ message: '2FA is not currently enabled.' });
-    }
-    
-    // 1. Verify the code provided by the user using the saved secret
-    // 🚨 FIX: Call verifyTotpCode directly, it now returns a boolean
-    const verified = totpController.totp.verify({
-        secret: user.twoFactorSecret,
-        token: token,
-        window: 1
-    });
+    try {
+        const user = await findUserById(userId);
+        if (!user || !user.twoFactorSecret) {
+             return res.status(400).json({ message: '2FA is not currently enabled.' });
+        }
+        
+        const verified = totpController.totp.verify({
+            secret: user.twoFactorSecret,
+            token: token,
+            window: 1
+        });
 
-    // 🚨 FIX: Change condition from `verified && verified.verified` to `verified`
-    if (verified) {
-        // 2. Clear the secret and disable the flag in the database
-        await db.update2faStatus(userId, null, false);
-        res.json({ message: 'Two-Factor Authentication disabled successfully.' });
-    } else {
-        res.status(401).json({ message: 'Invalid verification code. Disable failed.' });
+        if (verified) {
+            await db.update2faStatus(userId, null, false);
+            res.json({ message: 'Two-Factor Authentication disabled successfully.' });
+        } else {
+            res.status(401).json({ message: 'Invalid verification code. Disable failed.' });
+        }
+    } catch (error) {
+        console.error('2FA disable error:', error);
+        res.status(500).json({ message: 'An internal server error occurred.' });
     }
 });
-// ------------------------------------------------------------------
+//-----------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
 /**
