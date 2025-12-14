@@ -443,6 +443,25 @@
         .status-active, .status-enabled { background-color: #e8f5e9; color: var(--color-success); border: 1px solid #a5d6a7; }
         .status-deactivated, .status-disabled { background-color: #ffebee; color: var(--color-danger); border: 1px solid #ef9a9a; }
         
+        /* 🚨 2FA QR Code Styling */
+        #setup-qr-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px dashed var(--color-border-medium);
+            border-radius: 8px;
+        }
+        #2fa-qr-code {
+            width: 180px; /* Increased size for easy scanning */
+            height: 180px; 
+            margin: 15px 0;
+            border: 5px solid var(--color-bg-light);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+        }
         
         /* --- Responsive Adjustments --- */
         @media (max-width: 900px) {
@@ -810,6 +829,7 @@
                 <div class="card">
                     <form id="profile-form" enctype="multipart/form-data">
                         <!-- ... Profile Picture ... -->
+                        <!-- 🚨 FIX: currentProfilePictureUrl is now used only for database retrieval context -->
                         <input type="hidden" id="current-pic-url" name="currentProfilePictureUrl">
                         <div id="profile-picture-container">
                             <img id="current-profile-picture" 
@@ -825,7 +845,7 @@
                         
                         <!-- ... Name and Email (Read Only) ... -->
                         <div class="form-group">
-                            <label for="full-name">Full Name:</label>
+                            <label for="full-name">Full Name (Username):</label>
                             <input type="text" id="full-name" name="name" readonly required>
                         </div>
                         <div class="form-group">
@@ -958,9 +978,10 @@
                     <div id="2fa-setup-section" style="margin-top: 30px;">
                         <h4 style="font-family: var(--font-body); color: var(--color-pink-dark); margin-bottom: 15px;">Google Authenticator Setup</h4>
                         
-                        <div id="setup-qr-area" style="display: none; text-align: center; margin-bottom: 20px; padding: 20px; border: 1px dashed var(--color-border-medium); border-radius: 8px;">
+                        <!-- 🚨 MODIFIED: QR Area is now visible/hidden by JS, not inline style -->
+                        <div id="setup-qr-area" style="display: none; text-align: center;">
                             <p>1. Scan this QR code or manually enter the secret key into your Google Authenticator app (or similar TOTP app).</p>
-                            <img id="2fa-qr-code" src="" alt="2FA QR Code" style="width: 160px; height: 160px; margin: 10px auto;">
+                            <img id="2fa-qr-code" src="" alt="2FA QR Code">
                             <p>Secret Key: <strong id="2fa-secret-key">...</strong></p>
                         </div>
                         
@@ -1018,6 +1039,8 @@
         const POLLING_INTERVAL_MS = 3000; // Check status every 3 seconds
         const MAX_POLLING_ATTEMPTS = 20; // Max 60 seconds of polling
         
+        const DEFAULT_PROFILE_PIC = '/images/profiles/default_profile.png';
+        
         let isUserAuthenticated = false; 
         let currentUserData = {}; 
         let pollingIntervalId = null;
@@ -1065,7 +1088,7 @@
 
         /**
          * Shows the specific content section and updates the sidebar link state.
-         * Also triggers a dynamic data refresh for the new section.
+         * @param {string} targetId 
          */
         function showSection(targetId) {
             document.querySelectorAll('.profile-section').forEach(section => {
@@ -1218,13 +1241,10 @@
             }
         }
 
-        function renderProfilePicture(imageUrl, elementId = 'current-profile-picture', defaultPath = '/images/profiles/default_profile.png') {
+        // 🚨 FIX: Profile picture always uses database URL
+        function renderProfilePicture(imageUrl, elementId = 'current-profile-picture') {
             const imgElement = document.getElementById(elementId);
-            let finalUrl = imageUrl;
-
-            if (!imageUrl || imageUrl.trim() === '' || imageUrl === 'null') {
-                finalUrl = defaultPath;
-            } 
+            const finalUrl = imageUrl && imageUrl.trim() !== '' && imageUrl !== 'null' ? imageUrl : DEFAULT_PROFILE_PIC;
             imgElement.src = finalUrl;
         }
 
@@ -1233,10 +1253,10 @@
             document.getElementById('full-name').value = data.name || '';
             document.getElementById('email').value = data.email || '';
             document.getElementById('phone-number').value = data.phoneNumber || '';
-            document.getElementById('current-pic-url').value = data.profilePictureUrl || '';
             
-            const profilePicEl = document.getElementById('current-profile-picture');
-            profilePicEl.src = data.profilePictureUrl || '/images/profiles/default_profile.png';
+            // 🚨 FIX: Set the profile picture URL and the hidden field for persistence
+            document.getElementById('current-pic-url').value = data.profilePictureUrl || '';
+            renderProfilePicture(data.profilePictureUrl);
             
             populateStatusOnly(data);
         }
@@ -1276,7 +1296,6 @@
             const disableBtn = document.getElementById('2fa-disable-btn');
             const setupArea = document.getElementById('setup-qr-area');
             
-            // Set current user data for use in the form handlers
             const isEnabled = is2faEnabled === true || is2faEnabled === 1;
 
             if (isEnabled) {
@@ -1298,7 +1317,8 @@
                 setupBtn.style.display = 'inline-block';
                 disableBtn.style.display = 'none';
                 enableBtn.style.display = 'none';
-                setupArea.style.display = 'none';
+                // 🚨 FIX: Ensure setup area is hidden initially/when disabled
+                setupArea.style.display = 'none'; 
                 current2faSecret = null;
                 document.getElementById('2fa-code').placeholder = '6-digit code from your app';
             }
@@ -1364,7 +1384,7 @@
             // Get all elements that display the account number
             const accountNoDisplays = [
                 document.getElementById('account-number-display-mpesa'),
-                document.getElementById('account-number-display-manual') // New manual modal ID
+                // document.getElementById('account-number-display-manual') // Removed as it was a duplicate pattern from prior file version
             ];
 
             balanceDisplay.textContent = 'Loading...';
@@ -1455,10 +1475,12 @@
             if (activeSectionId === 'history' || activeSectionId === 'all') {
                 fetchAndRenderPaymentHistory();
             }
-            if (activeSectionId === 'settings' || activeSectionId === 'all') {
-                fetchProfileData(); // Re-fetches all profile data, including 2FA status
+            if (activeSectionId === 'details' || activeSectionId === 'all') {
+                fetchProfileData();
             }
-            // Ensure status/profile data is also refreshed via checkProfileStatusAndLogout which is called in the main interval
+            if (activeSectionId === 'settings' || activeSectionId === 'all') {
+                fetchProfileData(); // Re-fetches user data including 2FA status
+            }
         }
 
         // --- M-PESA POLLING LOGIC (omitted for brevity) ---
@@ -1719,9 +1741,13 @@
             const formData = new FormData(this);
             const fileInput = document.getElementById('file-input');
             
+            // 🚨 FIX: ONLY send the file if a new one was selected.
             if (fileInput.files.length === 0) {
                 formData.delete('profilePicture');
+                // Ensure the current URL is sent so the server knows what to keep if no file is uploaded.
+                formData.set('currentProfilePictureUrl', document.getElementById('current-pic-url').value);
             }
+            // If a file is present, multer handles it, and the hidden field value is ignored/overwritten on the server.
             
             try {
                 const response = await fetch(PROFILE_API_URL, {
@@ -1735,10 +1761,11 @@
                     showMessage(result.message || 'Profile updated!', 'success');
                     
                     if (result.profilePictureUrl) {
-                        renderProfilePicture(result.profilePictureUrl, 'current-profile-picture');
+                        // Update UI with new or existing URL
+                        renderProfilePicture(result.profilePictureUrl);
                         document.getElementById('current-pic-url').value = result.profilePictureUrl;
                     }
-                    fileInput.value = ''; 
+                    fileInput.value = ''; // Clear the file input element after successful upload
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
@@ -1767,6 +1794,9 @@
 
         // Handle "Begin Setup" button click
         document.getElementById('2fa-setup-btn').addEventListener('click', async () => {
+            // Reset the message area
+            showMessage('', 'info');
+            
             if (!currentUserData.email) {
                 showMessage('Please ensure your account has a valid email address.', 'error');
                 return;
@@ -1774,7 +1804,10 @@
 
             const setupBtn = document.getElementById('2fa-setup-btn');
             setupBtn.disabled = true;
-            setupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+            setupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating QR...';
+            
+            // 🚨 FIX: Immediately show the QR area to prevent layout jump after image loads
+            document.getElementById('setup-qr-area').style.display = 'flex';
 
             try {
                 const response = await fetch(SETUP_2FA_URL);
@@ -1787,19 +1820,23 @@
                 document.getElementById('2fa-qr-code').src = data.qrCodeUrl;
                 document.getElementById('2fa-secret-key').textContent = data.secret;
                 document.getElementById('2fa-current-secret').value = data.secret;
-                document.getElementById('setup-qr-area').style.display = 'block';
+                
                 
                 // Change button context
                 setupBtn.style.display = 'none';
                 document.getElementById('2fa-enable-btn').style.display = 'inline-block';
-                document.getElementById('security-message').textContent = 'Scan the QR code and enter the code below to finalize activation.';
+                document.getElementById('security-message').textContent = 'Scan the QR code and enter the verification code below to finalize activation.';
 
             } catch (error) {
                 console.error('2FA setup error:', error);
                 showMessage('Error during 2FA setup initiation.', 'error');
+                // Hide on error
+                document.getElementById('setup-qr-area').style.display = 'none';
             } finally {
                 setupBtn.disabled = false;
-                setupBtn.innerHTML = '<i class="fas fa-qrcode"></i> Begin Setup';
+                if(setupBtn.style.display !== 'none') {
+                    setupBtn.innerHTML = '<i class="fas fa-qrcode"></i> Begin Setup';
+                }
             }
         });
 
@@ -1898,6 +1935,7 @@
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             }
             
+            // 🚨 PROFILE PICTURE PREVIEW FIX: Update local image preview when a new file is selected
             document.getElementById('file-input').addEventListener('change', function(e) {
                 if (this.files && this.files[0]) {
                     const reader = new FileReader();
@@ -1905,6 +1943,9 @@
                         document.getElementById('current-profile-picture').src = event.target.result;
                     }
                     reader.readAsDataURL(this.files[0]);
+                } else {
+                    // If file is cleared, revert to the current database-persisted URL
+                    renderProfilePicture(document.getElementById('current-pic-url').value);
                 }
             });
             
