@@ -157,7 +157,8 @@ const sessionStoreOptions = {
    database: process.env.DB_NAME,
     // Additional options can be added here
 };
-const sessionStore = new MySQLStore(session);
+// 🚨 FIX: Initialize MySQLStore with configuration options, not the session object
+const sessionStore = new MySQLStore(sessionStoreOptions);
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const verificationCache = {};
@@ -2693,7 +2694,7 @@ server.listen(port, async () => {
 
     try {
         // 🚨 CRITICAL: Run database migrations before starting the server process
-     
+        
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {
