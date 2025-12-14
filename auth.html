@@ -178,9 +178,6 @@
             <p id="module-title">Customer Account Access</p>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- 1. CUSTOMER LOGIN MODULE (National ID) -->
-        <!-- ========================================================== -->
         <div id="customer-login-module" class="module active-module">
             <form id="customer-login-form">
                 <div class="input-group">
@@ -207,7 +204,6 @@
                 </a>
             </div>
 
-            <!-- New link to switch to Registration -->
             <div class="mt-4 text-center">
                 <a href="#" class="text-sm font-semibold text-pink-accent hover:text-pink-dark" onclick="showModule('register-module'); return false;">
                     Don't have an account? Register Now
@@ -215,9 +211,6 @@
             </div>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- 2. ADMIN LOGIN MODULE (Email & Password) -->
-        <!-- ========================================================== -->
         <div id="admin-login-module" class="module hidden-module">
             <form id="admin-login-form">
                 <div class="input-group">
@@ -239,9 +232,6 @@
             </div>
         </div>
         
-        <!-- ========================================================== -->
-        <!-- 3. REGISTRATION MODULE -->
-        <!-- ========================================================== -->
         <div id="register-module" class="module hidden-module">
             <p class="text-center" style="margin-bottom: 20px;">Create your customer account.</p>
             <form id="register-form">
@@ -272,9 +262,6 @@
             </div>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- 4. TWO-FACTOR AUTH MODULE -->
-        <!-- ========================================================== -->
         <div id="two-factor-module" class="module hidden-module">
             <p class="text-center" style="margin-bottom: 20px;">Enter the 6-digit code from your authenticator app.</p>
             <form id="two-factor-form">
@@ -286,9 +273,6 @@
             </form>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- 5. FORGOT PASSWORD MODULE (Email Request) -->
-        <!-- ========================================================== -->
         <div id="forgot-password-module" class="module hidden-module">
             <p class="text-center" style="margin-bottom: 20px;">Enter your email to receive a password reset code.</p>
             <form id="forgot-password-form">
@@ -305,9 +289,6 @@
             </div>
         </div>
 
-        <!-- ========================================================== -->
-        <!-- 6. OTP VERIFY MODULE -->
-        <!-- ========================================================== -->
         <div id="otp-verify-module" class="module hidden-module">
             <p class="text-center" style="margin-bottom: 20px;">A 6-digit verification code has been sent to your email.</p>
             <form id="otp-verify-form">
@@ -326,14 +307,14 @@
 
     </div>
 
-    <!-- Toast Container -->
     <div id="toast-container"></div>
 
     <script>
         // --- API Endpoints ---
         const LOGIN_URL = '/api/login';
-        const ADMIN_LOGIN_URL = '/api/admin/login'; // 🚨 NEW ADMIN ENDPOINT
-        const REGISTER_URL = '/api/register'; // 🚨 NEW REGISTER ENDPOINT
+        const ADMIN_LOGIN_URL = '/api/admin/login'; 
+        // 🚨 FIX: Corrected to match server.js endpoint
+        const REGISTER_URL = '/api/signup'; 
         const TWO_FA_VERIFY_URL = '/api/2fa/verify-login';
         const OTP_REQUEST_URL = '/api/request-otp';
         const OTP_VERIFY_URL = '/api/verify-otp';
@@ -345,7 +326,7 @@
         const moduleTitles = {
             'customer-login-module': 'Customer Account Access',
             'admin-login-module': 'Admin Account Access', 
-            'register-module': 'Customer Registration', // 🚨 NEW TITLE
+            'register-module': 'Customer Registration', 
             'two-factor-module': 'Two-Factor Authentication',
             'forgot-password-module': 'Forgot Password',
             'otp-verify-module': 'Verify OTP'
@@ -416,17 +397,16 @@
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(customerLoginCredentials)
                     });
-
+                    
                     const result = await response.json();
                     
-                    if (response.ok) {
-                        if (result.is2faRequired) {
-                            showToast('2FA required. Enter your code.', 'info');
-                            showModule('two-factor-module');
-                        } else {
-                            showToast('✅ Login successful! Redirecting...', 'success');
-                            setTimeout(() => window.location.href = '/dashboard.html', 1500);
-                        }
+                    // 🚨 FIX: Check for 202 status code explicitly for 2FA
+                    if (response.status === 202) {
+                        showToast('2FA required. Enter your code.', 'info');
+                        showModule('two-factor-module');
+                    } else if (response.ok) { // This handles 200 OK
+                        showToast('✅ Login successful! Redirecting...', 'success');
+                        setTimeout(() => window.location.href = '/', 1500); // Redirect to base URL
                     } else {
                          showToast(`❌ Error: ${result.message || 'Login failed.'}`, 'error');
                     }
@@ -455,7 +435,7 @@
                     if (response.ok) {
                         showToast('✅ Admin Login successful! Redirecting to panel...', 'success');
                         // Admins should be redirected to their specific dashboard
-                        setTimeout(() => window.location.href = '/admin-dashboard.html', 1500);
+                        setTimeout(() => window.location.href = '/admin.html', 1500); // Redirect to /admin.html
                     } else {
                          showToast(`❌ Error: ${result.message || 'Admin login failed.'}`, 'error');
                     }
@@ -464,7 +444,7 @@
                 }
             });
 
-            // 3. Registration Handler 🚨 NEW
+            // 3. Registration Handler 
             document.getElementById('register-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const username = document.getElementById('reg-username').value.trim();
@@ -521,7 +501,7 @@
                     
                     if (response.ok) {
                         showToast('✅ 2FA successful! Redirecting...', 'success');
-                        setTimeout(() => window.location.href = '/dashboard.html', 1500);
+                        setTimeout(() => window.location.href = '/', 1500); // Redirect to base URL
                     } else {
                          showToast(`❌ Error: ${result.message || '2FA verification failed.'}`, 'error');
                     }
