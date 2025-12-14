@@ -16,7 +16,7 @@ const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
 const speakeasy = require('speakeasy');
-const QRCode = require('qrcode');
+
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
