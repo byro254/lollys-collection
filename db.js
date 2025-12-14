@@ -273,9 +273,9 @@ async function findUserByPhone(phone) {
  */
 async function findUserById(userId) {
     try {
-        // 🚨 MODIFIED: Select new 2FA fields
+        // 🚨 MODIFIED: Select new 2FA fields AND is_admin
         const [rows] = await pool.execute(
-            'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled FROM users WHERE id = ?',
+            'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled, is_admin FROM users WHERE id = ?',
             [userId]
         );
         
@@ -293,6 +293,8 @@ async function findUserById(userId) {
             // 🚨 NEW: 2FA Fields
             twoFactorSecret: rows[0].two_factor_secret,
             is2faEnabled: rows[0].is_2fa_enabled,
+            // 🚨 FIX: Include is_admin for session promotion safety in 2FA flow
+            is_admin: rows[0].is_admin 
         };
 
     } catch (error) {

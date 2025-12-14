@@ -1797,8 +1797,9 @@
             // Reset the message area
             showMessage('', 'info');
             
-            if (!currentUserData.email) {
-                showMessage('Please ensure your account has a valid email address.', 'error');
+            if (!currentUserData.name) {
+                // 🚨 FIX: Use the 'name' (username) as the identity in the QR code
+                showMessage('Please ensure your account has a username/name set before setting up 2FA.', 'error');
                 return;
             }
 
@@ -1825,7 +1826,8 @@
                 // Change button context
                 setupBtn.style.display = 'none';
                 document.getElementById('2fa-enable-btn').style.display = 'inline-block';
-                document.getElementById('security-message').textContent = 'Scan the QR code and enter the verification code below to finalize activation.';
+                // 🚨 CLEANUP: Improved success message after setup step
+                document.getElementById('security-message').innerHTML = '<span style="color: var(--color-warning);">Setup in Progress:</span> Scan the QR code with your app and enter the 6-digit verification code below to finalize activation.';
 
             } catch (error) {
                 console.error('2FA setup error:', error);

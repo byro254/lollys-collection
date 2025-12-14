@@ -15,7 +15,8 @@ const MySQLStore = require('express-mysql-session')(session);
 const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
-
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
@@ -83,8 +84,9 @@ function generateTotpCode(secret, epoch_ms, step_s = 30, digits = 6) {
 
 /**
  * Verifies a user-provided token against the secret, checking current and neighboring steps.
+ * 🚨 FIX: Returns a boolean directly instead of an object.
  * @param {object} config Configuration object {secret: string, token: string, window: number}
- * @returns {object} { verified: boolean }
+ * @returns {boolean} True if the token is valid, false otherwise.
  */
 function verifyTotpCode({ secret, token, window = 1 }) {
     const now = Date.now();
@@ -92,7 +94,7 @@ function verifyTotpCode({ secret, token, window = 1 }) {
     // Check current time step (window 0)
     const currentCode = generateTotpCode(secret, now);
     if (currentCode === token) {
-        return { verified: true };
+        return true;
     }
 
     // Check neighboring time steps (window > 0)
@@ -101,17 +103,13 @@ function verifyTotpCode({ secret, token, window = 1 }) {
         const nextCode = generateTotpCode(secret, now + i * 30 * 1000);
 
         if (prevCode === token || nextCode === token) {
-            return { verified: true };
+            return true;
         }
     }
     
-    // 🚨 BACKDOOR FOR DEMO PURPOSES: Remove this line for ultimate security.
-    if (token === '123456') {
-        console.warn("MOCK 2FA VALIDATION: Using '123456' as valid mock OTP.");
-        return { verified: true };
-    }
+    // 🚨 SECURITY FIX: Removed the hardcoded '123456' backdoor for production security.
     
-    return { verified: false };
+    return false;
 }
 
 // Global object replacing the mock speakeasy
@@ -559,7 +557,8 @@ app.post('/api/login', async (req, res) => {
             
             // Store user data temporarily for 2FA verification step
             req.session.tempUserId = user.id;
-            req.session.tempIsAdmin = user.is_admin;
+            // 🚨 FIX: Save isAdmin status for later promotion
+            req.session.tempIsAdmin = user.is_admin; 
             req.session.tempFullName = user.username;
             
             // Return status 202 (Accepted) to prompt for OTP
@@ -678,55 +677,44 @@ app.post('/api/forgot-password', async (req, res) => {
 
 // 🚨 NEW: 2FA Verification Endpoint
 app.post('/api/2fa/verify', async (req, res) => {
-    // 🚨 MODIFIED: Accept the 'method' (password or authenticator)
-    const { token, userId } = req.body;
-    
-    // Security check: Use session temporary ID for verification
-    const verificationUserId = req.session.tempUserId;
-    
-    if (!verificationUserId || !token || verificationUserId !== userId) {
-        return res.status(400).json({ message: 'Session ID or 2FA token missing/mismatched.' });
+    const { token } = req.body;
+    const userId = req.session.tempUserId;
+
+    if (!token || !userId) {
+        return res.status(400).json({ message: 'Invalid session.' });
     }
-    
-    try {
-        const user = await findUserById(verificationUserId);
-        
-        if (!user || !user.is2faEnabled || !user.twoFactorSecret) {
-            return res.status(400).json({ message: '2FA is not enabled for this user or session expired.' });
-        }
-        
-        // 1. Verify TOTP Token (Google Authenticator)
-        const verified = totpController.totp.verify({
-            secret: user.twoFactorSecret,
-            encoding: 'base32',
-            token: token
-        });
-        
-        // 🚨 LOGIC CHANGE: Only allow sign-in if the token is valid
-        if (verified && verified.verified) {
-             // 2. Grant full session access
-             req.session.isAuthenticated = true;
-             req.session.isAdmin = req.session.tempIsAdmin;
-             req.session.userId = user.id; 
-             req.session.fullName = user.name; 
-             
-             // Clean up temporary session data
-             delete req.session.tempUserId;
-             delete req.session.tempIsAdmin;
-             delete req.session.tempFullName;
-             
-             return res.json({ 
-                 message: '2FA verified. Login successful.', 
-                 user: { id: user.id, full_name: user.name, is_admin: user.is_admin } 
-             });
-        } else {
-             return res.status(401).json({ message: 'Invalid 2FA code.' });
-        }
-        
-    } catch (error) {
-        console.error('2FA verification error:', error);
-        res.status(500).json({ message: 'Server error during 2FA verification.' });
+
+    // 🚨 FIX: findUserById now reliably includes is_admin due to db.js update
+    const user = await findUserById(userId);
+    if (!user || !user.twoFactorSecret) {
+        // Clear temp data if user is somehow found but 2FA is suddenly missing
+        delete req.session.tempUserId;
+        return res.status(400).json({ message: '2FA not enabled for this user.' });
     }
+
+    // 🚨 FIX: totpController.totp.verify now returns a boolean
+    const verified = totpController.totp.verify({
+        secret: user.twoFactorSecret,
+        token,
+        window: 1
+    });
+
+    if (!verified) {
+        return res.status(401).json({ message: 'Invalid 2FA code.' });
+    }
+
+    // Promote temp session → full session
+    req.session.isAuthenticated = true;
+    req.session.userId = user.id;
+    // 🚨 FIX: Set isAdmin directly from the fetched user object
+    req.session.isAdmin = user.is_admin; 
+    
+    // 🚨 CLEANUP: Remove temp session data after successful promotion
+    delete req.session.tempUserId;
+    delete req.session.tempIsAdmin;
+    delete req.session.tempFullName;
+
+    res.json({ message: '2FA verified. Login successful.' });
 });
 
 
@@ -734,60 +722,69 @@ app.post('/api/2fa/verify', async (req, res) => {
 //                   NEW 2FA API ROUTES (User Profile)
 // =========================================================
 
+const QRCode = require('qrcode');
+
 app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const user = await findUserById(userId);
-    
-    if (!user) return res.status(404).json({ message: 'User not found.' });
 
-    // 1. Generate a new secret key
-    const secret = totpController.generateSecret({ length: 20 });
-    const secretBase32 = secret.base32;
-    
-    // 2. Generate the TOTP URI (for Google Authenticator QR Code)
-    // The URI format specifies TOTP, ensuring it is time-based.
-    const appName = encodeURIComponent("LollysCollection");
-    const issuer = encodeURIComponent("Lolly's Collection");
-    // 🚨 IMPORTANT: Use the username, as email is for password reset only
-    const accountName = encodeURIComponent(user.name); 
-    
-    // TOTP URI format: otpauth://totp/ISSUER:ACCOUNT?secret=SECRET&issuer=ISSUER
-    const otpUri = `otpauth://totp/${issuer}:${accountName}?secret=${secretBase32}&issuer=${issuer}`;
-    
-    // 3. Generate QR Code URL using Google Charts API
-    // The client requested this be visible for easy scanning, hence the large size.
-    const qrCodeUrl = `https://chart.googleapis.com/chart?chs=180x180&cht=qr&chl=${encodeURIComponent(otpUri)}&choe=UTF-8`;
+    if (!user) {
+        return res.status(404).json({ message: 'User not found.' });
+    }
 
-    // 4. Return the key and QR code URL to the client
-    res.json({ 
-        secret: secretBase32, 
-        qrCodeUrl: qrCodeUrl 
+    if (user.is2faEnabled) {
+        return res.status(400).json({ message: '2FA already enabled.' });
+    }
+    
+    // 🚨 Security Enhancement: Ensure user has a name/email for the QR URI
+    if (!user.name || !user.email) {
+        return res.status(400).json({ message: 'User must have a name or email set to setup 2FA.' });
+    }
+
+    const secret = totpController.generateSecret();
+
+    const issuer = "LollysCollection";
+    const account = user.name; // Use username as the account identifier
+
+    // otpauth://totp/ISSUER:ACCOUNT_NAME?secret=SECRET_KEY&issuer=ISSUER
+    const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret.base32}&issuer=${encodeURIComponent(issuer)}`;
+
+    const qrImage = await QRCode.toDataURL(otpauth);
+
+    // TEMP store secret until verification
+    req.session.temp2faSecret = secret.base32;
+
+    res.json({
+        qrCodeUrl: qrImage,
+        secret: secret.base32
     });
 });
 
+
 app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
+    const { token } = req.body;
     const userId = req.session.userId;
-    const { secret, token } = req.body;
-    
-    if (!secret || !token) {
-        return res.status(400).json({ message: 'Missing secret or verification code.' });
+    const secret = req.session.temp2faSecret;
+
+    if (!token || !secret) {
+        return res.status(400).json({ message: 'Setup session expired.' });
     }
-    
-    // 1. Verify the code provided by the user using the generated secret
+
+    // 🚨 FIX: Call verifyTotpCode directly, it now returns a boolean
     const verified = totpController.totp.verify({
-        secret: secret,
-        encoding: 'base32',
-        token: token,
-        window: 1 // Check neighboring time steps for tolerance
+        secret,
+        token,
+        window: 1
     });
-    
-    if (verified && verified.verified) {
-        // 2. Save the secret and enable the flag in the database
-        await db.update2faStatus(userId, secret, true);
-        res.json({ message: 'Two-Factor Authentication enabled successfully!' });
-    } else {
-        res.status(401).json({ message: 'Invalid verification code. Setup failed.' });
+
+    if (!verified) {
+        return res.status(401).json({ message: 'Invalid verification code.' });
     }
+
+    await db.update2faStatus(userId, secret, true);
+    delete req.session.temp2faSecret;
+
+    res.json({ message: '2FA enabled successfully.' });
 });
 
 app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
@@ -804,14 +801,15 @@ app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
     }
     
     // 1. Verify the code provided by the user using the saved secret
+    // 🚨 FIX: Call verifyTotpCode directly, it now returns a boolean
     const verified = totpController.totp.verify({
         secret: user.twoFactorSecret,
-        encoding: 'base32',
         token: token,
         window: 1
     });
 
-    if (verified && verified.verified) {
+    // 🚨 FIX: Change condition from `verified && verified.verified` to `verified`
+    if (verified) {
         // 2. Clear the secret and disable the flag in the database
         await db.update2faStatus(userId, null, false);
         res.json({ message: 'Two-Factor Authentication disabled successfully.' });
