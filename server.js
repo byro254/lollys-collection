@@ -475,6 +475,8 @@ app.post('/api/signup', async (req, res) => {
     }
 });
 
+// server.js (~line 480)
+
 app.post('/api/login', async (req, res) => {
     // Note: auth.html sends nationalId for the primary login credential
     const { nationalId, password } = req.body;
@@ -489,14 +491,19 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid National ID or Password.' });
         }
 
-        const match = await bcrypt.compare(password, user.password_hash);
-       // 🚨 FIX: Ensure password hash exists before comparison to prevent server crash
+       // 🚨 FIX: Move null check BEFORE bcrypt.compare to prevent "data and hash arguments required" error
         if (!user.password_hash) {
             console.error(`User ${nationalId} found but has no password hash.`);
+            // Return 401 as the credentials effectively failed
             return res.status(401).json({ message: 'Invalid National ID or Password.' });
         }
 
+        const match = await bcrypt.compare(password, user.password_hash);
         
+        if (!match) {
+            // Handle failed login match
+            return res.status(401).json({ message: 'Invalid National ID or Password.' });
+        }
 
         // 🚨 NEW: 2FA Check Logic
         if (user.is2faEnabled) {
@@ -516,8 +523,7 @@ app.post('/api/login', async (req, res) => {
         }
         // END NEW 2FA Check Logic
         
-        // 4. Successful Login (Standard Auth): Clear attempts and set session
-        delete loginAttempts[attemptKey];
+      
         req.session.isAuthenticated = true;
         req.session.isAdmin = user.is_admin;
         req.session.userId = user.id; 
@@ -553,52 +559,8 @@ function handleFailedLogin(res, attemptKey, message) {
         message: `${message} Attempt ${loginAttempts[attemptKey].count} of ${MAX_ATTEMPTS}.` 
     });
 }
-app.post('/api/admin/login', async (req, res) => {
-    const { email, password } = req.body;
 
-    // 1. Check against hardcoded .env admin first
-    if (email === ADMIN_EMAIL) {
-        try {
-            const match = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
-            if (match) {
-                req.session.isAuthenticated = true;
-                req.session.isAdmin = true;
-                req.session.userId = ADMIN_CHAT_ID; // Use global const
-                req.session.fullName = ADMIN_FULL_NAME;
-                return res.json({ 
-                    message: 'Admin login successful.', 
-                    user: { full_name: ADMIN_FULL_NAME, is_admin: true } 
-                });
-            }
-        } catch (error) {
-            console.error('Admin ENV Login hash check error:', error);
-        }
-    }
-    
-    // 2. Check for DB user with admin flag
-    try {
-        // 🚨 FIX: Fetch 'username' instead of 'full_name'
-        const user = await findUserByEmail(email); // Still use email for admin check
-
-        if (user && user.is_admin) {
-            const match = await bcrypt.compare(password, user.password_hash);
-            if (match) {
-                req.session.isAuthenticated = true;
-                req.session.isAdmin = true;
-                req.session.userId = user.id;
-                req.session.fullName = user.username; // Use username
-                return res.json({ 
-                    message: 'Admin login successful.', 
-                    user: { full_name: user.username, is_admin: true } 
-                });
-            }
-        }
-    } catch (error) {
-        console.error('Admin DB Login error:', error);
-    }
-    
-    return res.status(401).json({ message: 'Invalid Admin Credentials.' });
-});
+   
 
 
 app.post('/api/logout', (req, res) => {
@@ -622,6 +584,9 @@ app.post('/api/forgot-password', async (req, res) => {
 });
 
 // 🚨 NEW: 2FA Verification Endpoint
+// server.js (~line 580)
+
+// 🚨 NEW: 2FA Verification Endpoint
 app.post('/api/2fa/verify-login', async (req, res) => {
     const { nationalId, password, totpCode } = req.body;
     
@@ -629,25 +594,33 @@ app.post('/api/2fa/verify-login', async (req, res) => {
         // Re-verify credentials (important safety check)
         const user = await db.findUserById(nationalId);
 
-        if (!user || !user.is_2fa_enabled) {
+        if (!user || !user.is2faEnabled) { // Use user.is2faEnabled from findUserById
             return res.status(401).json({ message: 'Invalid credentials or 2FA setup.' });
         }
         
-        // 🚨 FIX: Ensure password hash exists before comparison to prevent server crash
-        if (!user.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
+        // 🚨 FIX: Ensure password hash exists BEFORE comparison
+        if (!user.password_hash) {
+            console.error(`User ${nationalId} found but has no password hash during 2FA verify.`);
+            return res.status(401).json({ message: 'Invalid credentials or 2FA setup.' });
+        }
+
+        const match = await bcrypt.compare(password, user.password_hash);
+        if (!match) {
              return res.status(401).json({ message: 'Invalid credentials or 2FA setup.' });
         }
 
         // Verify TOTP code using the secret stored in the user record
         const verified = totpController.totp.verify({
-            secret: user.two_fa_secret,
+            secret: user.twoFactorSecret, // Use twoFactorSecret from findUserById mapping
             token: totpCode,
         });
 
         if (verified) {
             // 2FA successful: Create session
+            req.session.isAuthenticated = true; // Add isAuthenticated flag
             req.session.userId = nationalId; 
             req.session.isAdmin = user.is_admin;
+            req.session.fullName = user.name; // Use the name from findUserById
             return res.json({ message: '2FA and Login successful.' });
         } else {
             return res.status(401).json({ message: 'Invalid 2FA code.' });
@@ -658,6 +631,7 @@ app.post('/api/2fa/verify-login', async (req, res) => {
     }
 });
 
+// server.js (~line 630 - Second Admin Login Route)
 
 // ---------------------------------------------------------------- //
 // 🚨 NEW: ADMIN LOGIN ROUTE (via Email)
@@ -673,7 +647,7 @@ app.post('/api/admin/login', async (req, res) => {
             return res.status(401).json({ message: 'Invalid credentials or user is not an admin.' });
         }
 
-        // 🚨 FIX: Ensure password hash exists before comparison
+        // 🚨 FIX: Ensure password hash exists BEFORE comparison
         if (!user.password_hash) {
             console.error(`Admin user ${email} found but has no password hash.`);
             return res.status(500).json({ message: 'Admin account configuration error.' });
@@ -687,8 +661,10 @@ app.post('/api/admin/login', async (req, res) => {
         }
 
         // Admin Login successful: Create session
+        req.session.isAuthenticated = true; // Add isAuthenticated flag
         req.session.userId = user.id; 
         req.session.isAdmin = true;
+        req.session.fullName = user.username; // Use username for session
         return res.json({ message: 'Admin login successful.' });
 
     } catch (error) {
@@ -696,7 +672,6 @@ app.post('/api/admin/login', async (req, res) => {
         return res.status(500).json({ message: 'An internal server error occurred.' });
     }
 });
-
 
 // =========================================================
 //                   NEW 2FA API ROUTES (User Profile)

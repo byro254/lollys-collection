@@ -281,6 +281,8 @@ async function findUserByPhone(phone) {
 // ---------------------------------------------------------------- //
 // --- Profile Management Functions (Used by profile.html) ---
 // ---------------------------------------------------------------- //
+// db.js (FindUserById - Corrected to explicitly include password_hash)
+
 /**
  * Retrieves a user object by their ID (National ID).
  * @param {string} userId - The ID of the user.
@@ -288,9 +290,9 @@ async function findUserByPhone(phone) {
  */
 async function findUserById(userId) {
     try {
-        // 🚨 MODIFIED: Select new 2FA fields AND is_admin
+        // 🚨 MODIFIED: Select new 2FA fields AND is_admin, AND CRITICALLY password_hash for login check
         const [rows] = await pool.execute(
-            'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled, is_admin FROM users WHERE id = ?',
+            'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled, is_admin, password_hash FROM users WHERE id = ?',
             [userId]
         );
         
@@ -309,7 +311,9 @@ async function findUserById(userId) {
             twoFactorSecret: rows[0].two_factor_secret,
             is2faEnabled: rows[0].is_2fa_enabled,
             // 🚨 FIX: Include is_admin for session promotion safety in 2FA flow
-            is_admin: rows[0].is_admin 
+            is_admin: rows[0].is_admin,
+            // CRITICAL: Include the hash for server-side verification
+            password_hash: rows[0].password_hash
         };
 
     } catch (error) {
@@ -318,9 +322,8 @@ async function findUserById(userId) {
     }
 }
 
-/**
- * Updates the editable profile fields (phone number and profile picture URL). (NEW)
- */
+// * Updates the editable profile fields (phone number and profile picture URL). (NEW)
+ 
 async function updateUserProfile(userId, phoneNumber, profilePictureUrl) {
     const fields = [];
     const values = [];
