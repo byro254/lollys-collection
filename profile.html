@@ -1792,7 +1792,7 @@
         // 🚨 NEW: 2FA CONTROL LOGIC
         // -----------------------------------------------------
 
-        // Handle "Begin Setup" button click
+         // Handle "Begin Setup" button click
         document.getElementById('2fa-setup-btn').addEventListener('click', async () => {
             // Reset the message area
             showMessage('', 'info');
@@ -1817,6 +1817,13 @@
                 const data = await response.json();
                 current2faSecret = data.secret;
                 
+                // 🚨 FIX 2: Log received data for debugging the blank QR code issue
+                console.log("2FA Setup Data Received:", {
+                    secret: data.secret,
+                    qrCodeLength: data.qrCodeUrl ? data.qrCodeUrl.length : 0,
+                    qrCodeUrlStart: data.qrCodeUrl ? data.qrCodeUrl.substring(0, 50) : 'N/A'
+                });
+                
                 // Display QR code and secret
                 document.getElementById('2fa-qr-code').src = data.qrCodeUrl;
                 document.getElementById('2fa-secret-key').textContent = data.secret;
@@ -1831,7 +1838,7 @@
 
             } catch (error) {
                 console.error('2FA setup error:', error);
-                showMessage('Error during 2FA setup initiation.', 'error');
+                showMessage('Error during 2FA setup initiation. Check browser console.', 'error');
                 // Hide on error
                 document.getElementById('setup-qr-area').style.display = 'none';
             } finally {
@@ -1841,7 +1848,6 @@
                 }
             }
         });
-
         // Handle form submission (Enable/Disable)
         document.getElementById('2fa-form').addEventListener('submit', async function(e) {
             e.preventDefault();

@@ -752,7 +752,8 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const account = user.name; // Use username as the account identifier
 
     // otpauth://totp/ISSUER:ACCOUNT_NAME?secret=SECRET_KEY&issuer=ISSUER
-    const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret.base32}&issuer=${encodeURIComponent(issuer)}`;
+    // 🚨 FIX: Added algorithm, digits, and period for robustness, as Google Authenticator expects them.
+    const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret.base32}&algorithm=SHA1&digits=6&period=30&issuer=${encodeURIComponent(issuer)}`;
 
     const qrImage = await QRCode.toDataURL(otpauth);
 
@@ -760,7 +761,7 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     req.session.temp2faSecret = secret.base32;
 
     res.json({
-        qrCodeUrl: qrImage,
+        qrCodeUrl: qrImage, 
         secret: secret.base32
     });
 });
@@ -822,7 +823,6 @@ app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
         res.status(401).json({ message: 'Invalid verification code. Disable failed.' });
     }
 });
-
 // ------------------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
