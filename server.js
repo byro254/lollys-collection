@@ -234,6 +234,7 @@ const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, g
 
 const passwordResetCache = {}; 
 
+// 🚨 FIX: Add SSL configuration to session store options to match db.js
 const sessionStoreOptions = {
      host: process.env.DB_HOST, // 🚨 Updated
     user: process.env.DB_USER, // 🚨 Updated
@@ -242,6 +243,10 @@ const sessionStoreOptions = {
     port: process.env.DB_PORT,
    database: process.env.DB_NAME,
     // Additional options can be added here
+    ssl: { 
+        // Must match the settings in db.js to handle connection stability
+        rejectUnauthorized: false
+    }
 };
 // 🚨 FIX: Initialize MySQLStore with configuration options, not the session object
 const sessionStore = new MySQLStore(sessionStoreOptions);
@@ -722,7 +727,7 @@ app.post('/api/2fa/verify', async (req, res) => {
 //                   NEW 2FA API ROUTES (User Profile)
 // =========================================================
 
-
+const QRCode = require('qrcode');
 
 app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -2796,6 +2801,7 @@ server.listen(port, async () => {
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {
+        // Log the failure to connect without crashing
         console.error("Warning: Database connection failed:", error);
     }
 });
