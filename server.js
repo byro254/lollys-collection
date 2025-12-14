@@ -21,107 +21,30 @@ const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
 // ==========================================================
-// 🚨 CRITICAL FIX: REAL TOTP (Time-Based One-Time Password) IMPLEMENTATION
-// Uses native Node.js crypto module for HMAC-SHA1, replacing the 'speakeasy' mock.
+// 🚨 UPDATED: Speakeasy TOTP (Time-Based One-Time Password) IMPLEMENTATION
+// Replaces the native crypto manual implementation with the speakeasy library.
 // ==========================================================
-
-/**
- * Converts a Base32 string to a Buffer (required for crypto module).
- */
-function base32ToBuffer(base32) {
-    const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    let buffer = Buffer.alloc(0);
-    let bits = 0;
-    let value = 0;
-
-    for (let i = 0; i < base32.length; i++) {
-        const char = base32[i];
-        const index = ALPHABET.indexOf(char);
-        
-        if (index === -1) continue; 
-        
-        value = (value << 5) | index;
-        bits += 5;
-
-        if (bits >= 8) {
-            bits -= 8;
-            buffer = Buffer.concat([buffer, Buffer.from([(value >>> bits) & 0xFF])]);
-        }
-    }
-    return buffer;
-}
-
-/**
- * Generates a TOTP code using the HMAC-SHA1 algorithm.
- */
-function generateTotpCode(secret, epoch_ms, step_s = 30, digits = 6) {
-    const T = Math.floor(epoch_ms / 1000 / step_s);
-    const T_Buffer = Buffer.alloc(8);
-    // CRITICAL: Need BigInt for 64-bit counter value (even though JS can only reliably use up to 53-bit integers)
-    // Using Buffer.writeBigInt64BE is the standard TOTP approach.
-    try {
-        T_Buffer.writeBigInt64BE(BigInt(T));
-    } catch (e) {
-        // Fallback for older environments or unusual BigInt constraints
-        T_Buffer.writeUInt32BE(0, 0); 
-        T_Buffer.writeUInt32BE(T, 4);
-    }
-    
-    const key = base32ToBuffer(secret);
-    const hmac = crypto.createHmac('sha1', key);
-    hmac.update(T_Buffer);
-    const hash = hmac.digest();
-
-    // Dynamically Truncate (RFC 4226)
-    const offset = hash[19] & 0x0f;
-    let binary = 
-        ((hash[offset] & 0x7f) << 24) |
-        ((hash[offset + 1] & 0xff) << 16) |
-        ((hash[offset + 2] & 0xff) << 8) |
-        (hash[offset + 3] & 0xff);
-
-    const otp = binary % Math.pow(10, digits);
-    return String(otp).padStart(digits, '0');
-}
-
-/**
- * Verifies a user-provided token against the secret, checking current and neighboring steps.
- */
-function verifyTotpCode({ secret, token, window = 1 }) {
-    const now = Date.now();
-
-    // Check current time step (window 0)
-    const currentCode = generateTotpCode(secret, now);
-    if (currentCode === token) {
-        return true;
-    }
-
-    // Check neighboring time steps (window > 0)
-    for (let i = 1; i <= window; i++) {
-        // Check prev and next steps for clock drift
-        const prevCode = generateTotpCode(secret, now - i * 30 * 1000);
-        const nextCode = generateTotpCode(secret, now + i * 30 * 1000);
-
-        if (prevCode === token || nextCode === token) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-// Global object for TOTP operations
 const totpController = {
     /**
-     * Generates a random Base32 secret string.
+     * Generates a random Base32 secret string using speakeasy.
      */
     generateSecret: () => {
-        // Generates 16 random bytes and encodes them to a 26-character Base32 string
-        const base32 = crypto.randomBytes(16).toString('base64').replace(/=/g, '').substring(0, 26).toUpperCase();
-        return { base32 };
+        // Generates a secret and returns the base32 string
+        const secret = speakeasy.generateSecret({ length: 20 });
+        return { base32: secret.base32 };
     },
     totp: {
-        verify: verifyTotpCode
+        /**
+         * Verifies a user-provided token against the secret using speakeasy.
+         */
+        verify: ({ secret, token, window = 1 }) => {
+            return speakeasy.totp.verify({
+                secret: secret,
+                encoding: 'base32',
+                token: token,
+                window: window // Supports clock drift (1 = +/- 30s)
+            });
+        }
     }
 };
 
@@ -734,29 +657,19 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const user = await findUserById(userId);
 
-    if (!user) {
-        return res.status(404).json({ message: 'User not found.' });
-    }
-
-    if (user.is2faEnabled) {
-        return res.status(400).json({ message: '2FA already enabled.' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found.' });
+    if (user.is2faEnabled) return res.status(400).json({ message: '2FA already enabled.' });
     
-    if (!user.name || !user.email) {
-        return res.status(400).json({ message: 'User must have a name or email set to setup 2FA.' });
-    }
+    // Generate secret using speakeasy
+    const secret = speakeasy.generateSecret({
+        length: 20,
+        name: `LollysCollection:${user.username || user.email}`
+    });
 
-    const secret = totpController.generateSecret();
+    // speakeasy provides the otpauth_url automatically
+    const qrImage = await QRCode.toDataURL(secret.otpauth_url);
 
-    const issuer = "LollysCollection";
-    const account = user.name; 
-
-    // Generate the otpauth URI with all required parameters
-    const otpauth = `otpauth://totp/${encodeURIComponent(issuer)}:${encodeURIComponent(account)}?secret=${secret.base32}&algorithm=SHA1&digits=6&period=30&issuer=${encodeURIComponent(issuer)}`;
-
-    const qrImage = await QRCode.toDataURL(otpauth);
-
-    // TEMP store secret until verification
+    // Store secret in session for the verification step
     req.session.temp2faSecret = secret.base32;
 
     res.json({
@@ -764,7 +677,6 @@ app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
         secret: secret.base32
     });
 });
-
 
 app.post('/api/user/2fa/enable', isAuthenticated, async (req, res) => {
     const { token } = req.body;

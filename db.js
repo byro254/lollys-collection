@@ -351,20 +351,26 @@ async function updateUserStatus(userId, newStatus) {
     }
 }
 
-// 🚨 NEW: 2FA Status Update Function
-async function update2faStatus(userId, secret, isEnabled) {
+/**
+ * Updates the 2FA status and secret key for a user.
+ * @param {string} userId - The ID of the user.
+ * @param {boolean} isEnabled - Whether 2FA is enabled.
+ * @param {string|null} secret - The Base32 secret key, or null to clear it.
+ * @returns {Promise<void>}
+ */
+async function update2faStatus(userId, isEnabled, secret = null) {
     try {
-        const [result] = await pool.execute(
-            `UPDATE users SET two_factor_secret = ?, is_2fa_enabled = ? WHERE id = ?`,
-            [secret, isEnabled, userId]
-        );
-        return result.affectedRows;
+        const sql = `
+            UPDATE users
+            SET is_2fa_enabled = ?, two_factor_secret = ?
+            WHERE id = ?
+        `;
+        await pool.execute(sql, [isEnabled ? 1 : 0, secret, userId]);
     } catch (error) {
-        console.error('Database error updating 2FA status:', error);
+        console.error('Database error in update2faStatus:', error);
         throw error;
     }
 }
-
 
 // ---------------------------------------------------------------- //
 // --- Wallet & Transaction Functions (NEW) ---
