@@ -406,7 +406,7 @@
                         showModule('two-factor-module');
                     } else if (response.ok) { // This handles 200 OK
                         showToast('✅ Login successful! Redirecting...', 'success');
-                        setTimeout(() => window.location.href = '/', 1500); // Redirect to base URL
+                        setTimeout(() => window.location.href = '/index.html', 1500); // Redirect to base URL
                     } else {
                          showToast(`❌ Error: ${result.message || 'Login failed.'}`, 'error');
                     }
