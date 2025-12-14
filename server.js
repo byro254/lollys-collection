@@ -722,7 +722,7 @@ app.post('/api/2fa/verify', async (req, res) => {
 //                   NEW 2FA API ROUTES (User Profile)
 // =========================================================
 
-const QRCode = require('qrcode');
+
 
 app.get('/api/user/2fa/setup', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
