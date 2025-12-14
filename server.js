@@ -43,7 +43,9 @@ const speakeasy = {
     }
 };
 
-
+// --- PRODUCTION-READY SMS SERVICE INTEGRATION ---
+// Using the API Key and SDK pattern provided by the user.
+// Key provided in the image/conversation: UTBFBZFWLQH12HT3ULYJQLZOJKT9VQE
 const FRAUDLABSPRO_API_KEY = process.env.FRAUDLABSPRO_API_KEY ; 
 
 // Production-ready client logic structured to match the SDK usage (sendSMS)
@@ -243,7 +245,7 @@ app.use(session({
 }));
 // Authentication Middleware
 function isAuthenticated(req, res, next) {
-    if (req.session.isAuthenticated) {
+    if (req.session && req.session.isAuthenticated) { // 🚨 FIX: Add req.session null check
         return next();
     }
     if (req.originalUrl.startsWith('/api/')) {
@@ -254,7 +256,7 @@ function isAuthenticated(req, res, next) {
 }
 
 function isAdmin(req, res, next) {
-    if (req.session.isAuthenticated && req.session.isAdmin) {
+    if (req.session && req.session.isAuthenticated && req.session.isAdmin) { // 🚨 FIX: Add req.session null check
         return next();
     }
     if (req.originalUrl.startsWith('/api/')) {
@@ -298,7 +300,7 @@ function verifyPasswordResetToken(email, vtoken) {
  */
 const requireAuth = (req, res, next) => {
     // If the user ID is in the session, they are logged in.
-    if (req.session.userId) {
+    if (req.session && req.session.userId) { // 🚨 FIX: Add req.session null check
         next(); // Proceed to the route handler
     } else {
         // If not logged in, return an authentication error
@@ -316,7 +318,7 @@ const requireAuth = (req, res, next) => {
  * 🚨 ROUTING LOGIC: Landing Page (/)
  */
 app.get('/', (req, res) => { 
-    if (!req.session.isAuthenticated) {
+    if (!req.session || !req.session.isAuthenticated) {
         return res.redirect('/auth'); 
     }
     if (req.session.isAdmin) {
@@ -329,7 +331,7 @@ app.get('/', (req, res) => {
  * 🚨 ROUTING LOGIC: Authentication Page (/auth)
  */
 app.get('/auth', (req, res) => {
-    if (req.session.isAuthenticated) {
+    if (req.session && req.session.isAuthenticated) {
         return res.redirect('/'); 
     }
     res.sendFile(path.join(__dirname, 'auth.html'));
@@ -757,7 +759,7 @@ app.put('/api/admin/customers/:id/status', isAdmin, async (req, res) => {
  * Checks if a user is logged in (session.userId exists).
  */
 app.get('/api/auth/status', (req, res) => {
-    if (req.session.userId) {
+    if (req.session && req.session.userId) {
         // 200 OK if a user is logged in
         return res.status(200).json({ status: 'authenticated' });
     } else {
@@ -2581,7 +2583,7 @@ server.on('upgrade', (req, socket, head) => {
         // ⬇️ FIX 2: WebSocket Mismatch Fix
         let finalCustomerId = customerIdFromUrl;
         
-        if (role === 'customer' && req.session.userId) {
+        if (role === 'customer' && req.session && req.session.userId) {
             // If the user is logged in, force the use of their DB ID as the session key.
             // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
             finalCustomerId = String(req.session.userId);
@@ -2594,7 +2596,8 @@ server.on('upgrade', (req, socket, head) => {
         const isCustomerRequest = role === 'customer';
 
         if (isAdminRequest) {
-            if (!req.session.isAuthenticated || !req.session.isAdmin) {
+            // 🚨 FIX: Add req.session null check
+            if (!req.session || !req.session.isAuthenticated || !req.session.isAdmin) {
                 console.log('Admin WebSocket Auth Failed.');
                 socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
                 socket.destroy();
@@ -2602,7 +2605,7 @@ server.on('upgrade', (req, socket, head) => {
             }
         } else if (isCustomerRequest) {
             // 🚨 CRITICAL FIX: Enforce logged-in session for customer chat
-            if (!req.session.userId) { 
+            if (!req.session || !req.session.userId) { 
                  console.log('Customer WebSocket Auth Failed: Not Logged In.');
                  socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
                  socket.destroy();
@@ -2662,7 +2665,7 @@ app.get('/api/chat/history/:customerId', async (req, res) => {
 
     // FIX 3: Centralize logic to determine if the customerId is valid for this request.
     const isAnon = customerId.startsWith('anon-');
-    const isMatchingLoggedInUser = req.session.userId && (sessionUserId === customerId);
+    const isMatchingLoggedInUser = req.session && req.session.userId && (sessionUserId === customerId);
     
     if (isAnon || isMatchingLoggedInUser) {
         try {
@@ -2690,7 +2693,7 @@ server.listen(port, async () => {
 
     try {
         // 🚨 CRITICAL: Run database migrations before starting the server process
-       
+     
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {
