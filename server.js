@@ -2690,7 +2690,7 @@ server.listen(port, async () => {
 
     try {
         // 🚨 CRITICAL: Run database migrations before starting the server process
-        await runMigrations();
+       
         const [rows] = await pool.query('SELECT 1');
         console.log("Database connected successfully.");
     } catch (error) {
