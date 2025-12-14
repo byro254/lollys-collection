@@ -867,6 +867,34 @@ async function processManualMpesaDeposit(userId, transactionCode, amount) {
         connection.release();
     }
 }
+/**
+ * 🚨 NEW: Saves or updates the 2FA secret for a user.
+ * @param {string} userId - The user's database ID.
+ * @param {string} secret - The Base32 secret key.
+ */
+async function save2faSecret(userId, secret) {
+    let connection;
+    try {
+        connection = await pool.getConnection();
+        await connection.beginTransaction();
+
+        // Ensure the national_id column exists in your 'users' table in the database!
+        await connection.execute(
+            'UPDATE users SET two_factor_secret = ? WHERE id = ?',
+            [secret, userId]
+        );
+
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Database error saving 2FA secret:', error);
+        throw error;
+    } finally {
+        if (connection) connection.release();
+    }
+}
+
+
 // ---------------------------------------------------------------- //
 // --- MODULE EXPORTS (Updated to include new functions) ---
 // ---------------------------------------------------------------- //

@@ -20,6 +20,45 @@ const speakeasy = require('speakeasy');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
+
+
+
+// ==========================================================
+// 🚨 NEW: Password Reset/OTP State Management and Helpers
+// Map to store temporary password reset data: { email: { otp: '123456', otpExpires: Date, vtoken: 'uuid', vtokenExpires: Date } }
+const passwordResetData = new Map();
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes for OTP
+const VTOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes for verification token
+
+const generateSecureToken = () => crypto.randomBytes(32).toString('hex');
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// Middleware for OTP Rate Limiting
+const otpRequestAttempts = new Map(); // { email: { count: number, lastAttempt: Date } }
+const MAX_OTP_REQUESTS = 3;
+const OTP_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour cooldown after 3 failures
+
+const otpRateLimiter = (req, res, next) => {
+    const { email } = req.body;
+    const now = Date.now();
+    const attempt = otpRequestAttempts.get(email) || { count: 0, lastAttempt: now };
+
+    if (now - attempt.lastAttempt > OTP_COOLDOWN_MS) {
+        // Reset count after cooldown
+        attempt.count = 0;
+    }
+
+    if (attempt.count >= MAX_OTP_REQUESTS) {
+        return res.status(429).json({ message: 'Too many OTP requests. Please try again in an hour.' });
+    }
+
+    // Update attempt data for this request
+    attempt.count += 1;
+    attempt.lastAttempt = now;
+    otpRequestAttempts.set(email, attempt);
+    next();
+};
+
 // ==========================================================
 // 🚨 UPDATED: Speakeasy TOTP (Time-Based One-Time Password) IMPLEMENTATION
 // Replaces the native crypto manual implementation with the speakeasy library.
@@ -437,48 +476,24 @@ app.post('/api/signup', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-    // 🚨 UPDATED: Log in with username, not email
-    const { username, password } = req.body;
-    const attemptKey = username.toLowerCase();
-    const now = Date.now();
-    
-    if (!username || !password) {
-        return res.status(400).json({ message: 'Username and Password are required.' });
-    }
-    
-    // 1. Check Rate Limit / Lockout
-    if (loginAttempts[attemptKey] && loginAttempts[attemptKey].lockoutTime > now) {
-        return res.status(401).json({ 
-            message: `Too many failed attempts. Try again in ${Math.ceil((loginAttempts[attemptKey].lockoutTime - now) / 60000)} minutes.` 
-        });
-    }
-    
-    // 2. Clear old attempts if successful login or lockout time passed
-    if (loginAttempts[attemptKey] && loginAttempts[attemptKey].lockoutTime <= now) {
-        loginAttempts[attemptKey] = { count: 0, lockoutTime: 0 };
-    }
-
+    // Note: auth.html sends nationalId for the primary login credential
+    const { nationalId, password } = req.body;
 
     try {
-        // 🚨 CRITICAL: Use the new function to find the user by username
-        const user = await findUserByUsername(username); 
+        // Assume National ID is stored as the primary ID (user.id)
+        const user = await db.findUserById(nationalId);
 
         if (!user) {
-            // Use a slight delay to mitigate timing attacks
-            await new Promise(resolve => setTimeout(resolve, 500)); 
-            return handleFailedLogin(res, attemptKey, 'Invalid username or password.');
+            // Log failure for security analysis (e.g., rate limiting)
+            console.warn(`Login attempt failure for ID: ${nationalId}`);
+            return res.status(401).json({ message: 'Invalid National ID or Password.' });
         }
 
         const match = await bcrypt.compare(password, user.password_hash);
         if (!match) {
-            return handleFailedLogin(res, attemptKey, 'Invalid username or password.');
-        }
-        
-        // 3. Check Account Status
-        if (!user.is_active) {
-            return res.status(403).json({ 
-                message: 'Your account has been deactivated. Please contact admin.' 
-            });
+            // Log failure for security analysis
+            console.warn(`Password mismatch for ID: ${nationalId}`);
+            return res.status(401).json({ message: 'Invalid National ID or Password.' });
         }
 
         // 🚨 NEW: 2FA Check Logic
@@ -2122,155 +2137,126 @@ app.get('/api/admin/messages', isAuthenticated, isAdmin, async (req, res) => {
     }
 });
 
-/**
- * Endpoint to request OTP for password reset.
- * Replaces mock with a real-world API integration structure.
- */
-app.post("/api/request-otp", async (req, res) => {
-    const { phone } = req.body; // Primary lookup field
-    
-    if (!phone) {
-        return res.status(400).json({ message: 'Phone number is required to send OTP.' });
-    }
-    
-    // 1. Find user by phone number 
-    const user = await db.findUserByPhone(phone); 
-    
-    if (!user) {
-        // Do not leak user existence
-        return res.status(200).json({ message: 'If the account exists, an OTP has been sent.' });
-    }
-    
-    // 2. Determine the cache key (the phone number)
-    const normalizedKey = phone.toLowerCase().trim();
+// ==========================================================
+// 🚨 UPDATED: PASSWORD RESET ROUTES (Using Resend for Email)
+// ==========================================================
 
+// 1. Request OTP via Email (Rate Limited)
+app.post('/api/request-otp', otpRateLimiter, async (req, res) => {
+    const { email } = req.body;
+
+    // 🚨 PRODUCTION READY CHECK: Ensure email service is configured
+    if (!resend || !process.env.SENDER_EMAIL) {
+        console.error("CRITICAL: Email service not configured (missing RESEND_API_KEY or SENDER_EMAIL). Cannot send OTP.");
+        return res.status(503).json({ message: 'Email service is currently unavailable. Please contact support.' });
+    }
+    
     try {
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const expiry = Date.now() + 5 * 60 * 1000;
-
-        // 3. Save OTP in memory 
-        // Store userId and email for the final reset step lookup, keyed by phone number
-        otpCache[normalizedKey] = { otp, expiry, userId: user.id, email: user.email }; 
-
-        // 4. Send SMS using the dedicated provider client
-        // Normalize phone to E.164 format for external services (e.g., +2547XXXXXXXX)
-        const e164Phone = normalizedKey.startsWith('+') ? normalizedKey : `+${normalizedKey}`;
-
-
-        const smsResponse = await smsServiceProvider.sendSMSVerifyCode({ 
-            phoneNumber: e164Phone,
-            verifyCode: otp,
-        });
-
-        if (smsResponse.success) {
-            res.status(200).json({ message: 'OTP sent successfully. Please check your phone for the SMS.' });
-        } else {
-            // Log the error from the service client
-            console.error('SMS Service Error:', smsResponse.error || 'Unknown SMS error');
-            // Return server error to client
-            res.status(500).json({ message: 'Error processing OTP request via SMS provider. Please try again later.' });
+        const user = await db.findUserByEmail(email);
+        
+        // Always return a success-like message for security reasons (don't expose if email exists)
+        if (!user) {
+            console.log(`Password reset requested for unknown email: ${email}`);
+            // Still return success message to prevent user enumeration
+            return res.json({ message: 'If the email exists, a code has been sent.' });
         }
 
+        const otp = generateOTP();
+        const expiry = Date.now() + OTP_EXPIRY_MS;
+        
+        // Store OTP in memory tied to the email
+        passwordResetData.set(email, { otp, otpExpires: expiry });
+
+        // =================================================================
+        // 🚨 REAL EMAIL SENDING LOGIC
+        // =================================================================
+        try {
+            await resend.emails.send({
+                from: process.env.SENDER_EMAIL,
+                to: email,
+                subject: 'Password Reset Code - Lolly\'s Collection',
+                html: `
+                    <p>Your password reset code is:</p>
+                    <h1 style="color: #E91E63; font-size: 32px;">${otp}</h1>
+                    <p>This code expires in 5 minutes. If you did not request this, please ignore this email.</p>
+                `,
+            });
+            console.log(`[REAL EMAIL] Sent OTP to ${email}`);
+        } catch (emailError) {
+            console.error(`Resend failed to send email to ${email}:`, emailError);
+            // If the email fails to send, return a server error
+            return res.status(500).json({ message: 'Failed to send verification email. Please try again later.' });
+        }
+        // =================================================================
+        
+        return res.json({ message: 'Verification code sent to email.' });
     } catch (error) {
-        console.error('OTP Request Error:', error);
-        res.status(500).json({ message: 'Error processing OTP request.' });
+        console.error('Request OTP error:', error);
+        return res.status(500).json({ message: 'An internal error occurred.' });
     }
 });
 
-
-// 🚨 VERIFY OTP - Debugging & Normalization
-app.post("/api/verify-otp", (req, res) => {
-    const { phone, otp } = req.body; // Uses phone for lookup
+// 2. Verify OTP
+app.post('/api/verify-otp', async (req, res) => {
+    const { email, otp } = req.body;
+    const data = passwordResetData.get(email);
     
-    if (!phone || !otp) {
-        return res.status(400).json({ message: 'Phone and OTP are required.' });
-    }
-    
-    // Keying by phone number
-    const verificationKey = phone.toLowerCase().trim();
-
-    const entry = otpCache[verificationKey]; 
-    
-    if (!entry) return res.status(400).json({ message: "No OTP found or session expired." });
-
-    if (Date.now() > entry.expiry) {
-        delete otpCache[verificationKey];
-        return res.status(400).json({ message: "OTP expired." });
+    if (!data || data.otp !== otp || data.otpExpires < Date.now()) {
+        // If data exists, but OTP is wrong, reset the rate limit count and last attempt time.
+        if (data) {
+            const attempt = otpRequestAttempts.get(email);
+            if (attempt) otpRequestAttempts.set(email, { ...attempt, count: attempt.count + 1, lastAttempt: Date.now() });
+        }
+        return res.status(401).json({ message: 'Invalid or expired OTP.' });
     }
 
-    if (String(entry.otp) !== String(otp)) {
-        return res.status(400).json({ message: "Invalid OTP." });
-    }
+    // OTP is valid. Generate temporary verification token (vtoken).
+    const vtoken = generateSecureToken();
+    const vtokenExpires = Date.now() + VTOKEN_EXPIRY_MS;
     
-    // 4. Success: Generate verification token for the next step (password reset)
-    const verificationToken = crypto.randomBytes(32).toString('hex');
-    const expiry = Date.now() + 10 * 60 * 1000; 
+    // Update map to store the new vtoken, remove the OTP
+    passwordResetData.set(email, { vtoken, vtokenExpires });
 
-    // Store user ID, email, and phone (as resetKey) in the verification cache
-    verificationCache[verificationToken] = { userId: entry.userId, email: entry.email, resetKey: verificationKey, expiry };
-    delete otpCache[verificationKey];
-
-    res.json({ 
-        message: "OTP verified!", 
-        verified: true, 
-        verificationToken: verificationToken,
-        resetKey: verificationKey // Send the phone number back to the client
-    });
+    // Success: Return the token to the client for the final step
+    return res.json({ message: 'OTP verified successfully.', verificationToken: vtoken });
 });
 
-// Route to handle password reset submission (Step 2: Update Password)
-app.post('/api/reset-password', async (req, res) => {
-    // Client must send verificationToken, resetKey (now phone number), and newPassword
-    const { verificationToken, resetKey, newPassword } = req.body; 
-    
-    // 2. Validate input and password strength
-    if (!verificationToken || !resetKey || !newPassword) {
-        return res.status(400).json({ message: 'Missing required reset information (token, key, or password).' });
-    }
-    
-    if (newPassword.length < 8) {
-        return res.status(400).json({ message: 'New password must be at least 8 characters long.' });
-    }
+// 3. Update Password (Final Step)
+app.post('/api/update-password', async (req, res) => {
+    const { email, password, vtoken } = req.body;
+    const data = passwordResetData.get(email);
 
-    // 3. Check the verification cache for the token
-    const verificationEntry = verificationCache[verificationToken];
-
-    if (!verificationEntry) {
-        return res.status(400).json({ message: 'Password reset session is invalid or has expired. Please request a new OTP.' });
+    // 1. Validate vtoken
+    if (!data || data.vtoken !== vtoken || data.vtokenExpires < Date.now()) {
+        return res.status(403).json({ message: 'Invalid or expired verification token. Please restart the process.' });
     }
     
-    // 4. Validate Token Expiration and Reset Key Match
-    if (Date.now() > verificationEntry.expiry || verificationEntry.resetKey !== resetKey) {
-        delete verificationCache[verificationToken];
-        return res.status(400).json({ message: 'Password reset session has expired or the key provided does not match.' });
+    if (!password || password.length < 8) {
+        return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
     }
 
     try {
-        // Use the userId saved during the OTP request step
-        const userIdToUpdate = verificationEntry.userId;
+        // 2. Hash the new password
+        const hashedPassword = await bcrypt.hash(password, 10);
         
-        // 5. Hash the new password securely
-        const saltRounds = 10;
-        const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-        
-        // 6. Update password using the stored user ID
-        const updated = await db.updatePassword(userIdToUpdate, hashedPassword);
+        // 3. Update in database
+        const success = await db.updatePassword(email, hashedPassword); 
 
-        // 7. CRUCIAL: Clear the verification token immediately after successful use
-        delete verificationCache[verificationToken]; 
-
-        if (updated) {
-            res.status(200).json({ message: 'Password successfully updated. You can now log in.' });
+        if (success) {
+            // 4. Clean up the token and rate limiter
+            passwordResetData.delete(email);
+            otpRequestAttempts.delete(email); 
+            return res.json({ message: 'Password updated successfully.' });
         } else {
-            throw new Error("Database update failed (0 rows affected).");
+            return res.status(500).json({ message: 'Failed to update password in database.' });
         }
     } catch (error) {
-        console.error('Password Reset Error:', error);
-        // Clear the token even on hash/DB update failure for security
-        delete verificationCache[verificationToken]; 
-        res.status(500).json({ message: 'Failed to reset password, please try again later.' });
+        console.error('Password update failed:', error);
+        return res.status(500).json({ message: 'An internal error occurred during password update.' });
     }
 });
+
+
 // =========================================================
 //                   REAL-TIME CHAT SETUP
 // =========================================================
