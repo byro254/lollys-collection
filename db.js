@@ -870,8 +870,7 @@ module.exports = {
     findTransactionByRef,
     // 🚨 Manual Deposit
     processManualMpesaDeposit, 
-    // 🚨 Migration Function
-    runMigrations, 
+   
     // 🚨 NEW 2FA Function
     update2faStatus, 
 };
