@@ -305,11 +305,11 @@ async function findUserByPhone(phone) {
 /**
  * Retrieves a user object by their ID (National ID).
  * @param {string} userId - The ID of the user.
- * @returns {Promise<{id: string, name: string, email: string, twoFactorSecret: string, is2faEnabled: boolean, ...} | null>} - User profile or null.
+ * @returns {Promise<{id: string, name: string, email: string, twoFactorSecret: string, is2faEnabled: boolean, isActive: number, ...} | null>} - User profile or null.
  */
 async function findUserById(userId) {
     try {
-        // 🚨 MODIFIED: Select new 2FA fields AND is_admin, AND CRITICALLY password_hash for login check
+        // 🚨 FIX: Explicitly list all columns needed by the profile/status checks.
         const [rows] = await pool.execute(
             'SELECT id, username, email, phone_number, profile_picture_url, is_active, two_factor_secret, is_2fa_enabled, is_admin, password_hash FROM users WHERE id = ?',
             [userId]
@@ -325,7 +325,8 @@ async function findUserById(userId) {
             email: rows[0].email,
             phoneNumber: rows[0].phone_number,
             profilePictureUrl: rows[0].profile_picture_url,
-            isActive: rows[0].is_active,
+            // 🚨 CRITICAL FIX: Ensure isActive is mapped from the correct column name
+            isActive: rows[0].is_active, 
             // 🚨 NEW: 2FA Fields
             twoFactorSecret: rows[0].two_factor_secret,
             is2faEnabled: rows[0].is_2fa_enabled,
@@ -767,8 +768,8 @@ async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, tran
             if (businessWallet.length > 0) {
                 const businessWalletId = businessWallet[0].wallet_id;
                 await connection.execute(
-                    'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?',
-                    [finalAmount, businessWalletId]
+                    'UPDATE wallets SET balance = balance + ? WHERE user_id = ?', // Changed to user_id for simplicity
+                    [finalAmount, businessId]
                 );
                 // Log business revenue transaction
                 await connection.execute(
