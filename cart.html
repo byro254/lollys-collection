@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lolly's Collection: Cart & Checkout</title>
+    <title>Cart & Account | Lolly's Collection</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/x-icon" href="images/icons/favicon.ico">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
@@ -11,19 +11,19 @@
     <style>
         /* --- Dark Pink & White Color Theme --- */
         :root { 
-            --color-bg-light: #FFFFFF; /* Pure White background */
-            --color-pink-dark: #C2185B; /* A rich, dark pink */
-            --color-pink-accent: #E91E63; /* A brighter pink accent */
-            --color-text-dark: #333333; /* Dark gray for main text */
-            --color-text-subtle: #757575; /* Lighter gray for secondary text */
-            --color-border-light: #F0F0F0; /* Very light border */
-            --color-border-medium: #E0E0E0; /* Slightly darker border */
-            --color-shadow: rgba(0,0,0,0.08); /* Soft shadow */
-            --color-danger: #dc3545; /* Added danger color for modal/error */
-            --color-success: #28a745; /* Success color */
-            --color-warning: #ffc107; /* Warning color */
+            --color-bg-light: #FFFFFF;
+            --color-bg-page: #F4F4F9;
+            --color-pink-dark: #C2185B;
+            --color-pink-accent: #E91E63;
+            --color-text-dark: #333333;
+            --color-text-subtle: #757575;
+            --color-border-medium: #E0E0E0;
+            --color-shadow: rgba(0,0,0,0.08);
+            --color-danger: #dc3545;
+            --color-success: #28a745;
+            --color-warning: #ffc107;
+            --color-info: #17a2b8; /* Blue/Teal for info/tracking */
 
-            /* Typography */
             --font-heading: 'Playfair Display', serif;
             --font-body: 'Poppins', sans-serif;
         }
@@ -32,17 +32,16 @@
         body { 
             margin: 0; 
             font-family: var(--font-body); 
-            background-color: #F4F4F9; /* Adjusted page background for contrast */
+            background-color: var(--color-bg-page); 
             color: var(--color-text-dark); 
             line-height: 1.6; 
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
+            min-height: 100vh;
+            display: flex; 
+            flex-direction: column;
         }
-        h1, h2, h3, h4, h5, h6 {
+        h1, h2, h3, h4 {
             font-family: var(--font-heading);
-            color: var(--color-text-dark);
-            margin-top: 0;
-            margin-bottom: 0.8em;
+            color: var(--color-pink-dark);
         }
         a {
             color: var(--color-pink-accent);
@@ -52,8 +51,33 @@
         a:hover {
             color: var(--color-pink-dark);
         }
+
+        /* Form Group styling */
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: var(--color-pink-dark);
+        }
+        .form-group input, .form-group select, .form-select {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid var(--color-border-medium);
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .form-group input:focus, .form-group select:focus, .form-select:focus {
+            border-color: var(--color-pink-accent);
+            box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.2);
+            outline: none;
+        }
         
-        /* --- GATING CSS: Blurring and Disabling Content --- */
+        /* --- GATING CSS --- */
         .gated-content {
             transition: filter 0.3s, opacity 0.3s;
         }
@@ -63,99 +87,187 @@
             opacity: 0.7;
         }
 
-        /* --- HEADER STYLING --- */
+        /* --- HEADER & NAVIGATION --- */
         .site-header {
             background-color: lightpink;
             box-shadow: 0 2px 4px var(--color-shadow);
             padding: 10px 15px;
             display: flex;
-            justify-content: space-between; 
+            justify-content: flex-start; /* Aligns items to start for hamburger positioning */
             align-items: center;
             position: sticky;
             top: 0;
-            z-index: 100;
+            z-index: 1000;
         }
         .logo-link {
             font-family: var(--font-heading);
-            font-size: 1.2em;
+            font-size: 1.6em;
             font-weight: 700;
             color: var(--color-pink-dark);
             text-decoration: none;
-            letter-spacing: 1px;
-            text-transform: uppercase;
             flex-shrink: 0; 
+            margin-left: auto; /* Push logo to the center/right on mobile */
             margin-right: 15px;
         }
         .header-nav {
             display: flex;
-            gap: 5px;
+            align-items: center;
+            gap: 15px;
+            margin-left: 0;
         }
         .nav-icon {
-            display: inline-flex; 
-            align-items: center; 
-            justify-content: center; 
-            padding: 8px;
-            border-radius: 50%;
-            font-size: 1.2em;
-            color: var(--color-text-dark);
-            transition: background-color 0.2s, color 0.2s;
-            text-decoration: none;
+            color: var(--color-pink-dark);
+            font-size: 1.2rem;
+            padding: 5px;
+            transition: color 0.3s, transform 0.2s;
         }
         .nav-icon:hover {
             color: var(--color-pink-accent);
-            background-color: var(--color-border-light);
+            transform: scale(1.1);
         }
-        .cart-icon-with-count {
-            border-radius: 12px;
-            padding: 8px 10px;
-        }
-        .cart-icon-with-count i {
-             font-size: 1.2em;
-        }
-        .cart-icon-with-count span {
-            font-size: 0.8em; 
-            font-weight: 600;
-            color: var(--color-pink-accent);
-        }
-        /* --- END HEADER STYLING --- */
-
-
-        /* --- Main Layout Container --- */
-        .cart-container { 
-            padding: 20px 5%;
-            min-height: 80vh; 
-            max-width: 1200px;
-            margin: 0 auto; 
-            display: grid;
-            gap: 30px;
-            grid-template-areas: "items" "summary" "form";
-        }
-        
-        /* --- Cart Items Section --- */
-        .cart-items-section { 
-            grid-area: items; 
-            background-color: var(--color-bg-light);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px var(--color-shadow);
-        }
-        .cart-items-section h2 { 
-            font-size: 1.8rem;
-            margin-bottom: 20px; 
+        .hamburger-icon {
+            display: block; /* Always visible on mobile/tablet */
+            background: none;
+            border: none;
+            font-size: 1.5rem;
             color: var(--color-pink-dark);
+            cursor: pointer;
+            padding: 5px;
+            z-index: 1002;
+        }
+
+        /* --- Sidebar Styles --- */
+        .sidebar {
+            width: 250px;
+            background-color: var(--color-pink-dark);
+            color: white;
+            padding: 20px 0;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100%;
+            overflow-y: auto;
+            z-index: 999;
+            transform: translateX(-100%); /* Hidden by default on mobile */
+            transition: transform 0.3s ease-in-out;
+        }
+        .sidebar.mobile-open {
+            transform: translateX(0);
+        }
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px 20px 20px;
+            font-weight: 600;
+            font-size: 1.2rem;
+            color: var(--color-bg-light);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .sidebar-close-icon {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+        }
+        .sidebar-nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .sidebar-nav li a {
+            display: flex;
+            align-items: center;
+            padding: 15px 20px;
+            text-decoration: none;
+            color: white;
+            transition: background-color 0.3s;
+            font-size: 1rem;
+        }
+        .sidebar-nav li a i {
+            margin-right: 15px;
+            width: 20px;
             text-align: center;
         }
+        .sidebar-nav li a:hover,
+        .sidebar-nav li a.active {
+            background-color: var(--color-pink-accent);
+        }
+
+        /* --- Main Content Layout --- */
+        .main-content-wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+        .main-content {
+            margin-left: 0;
+            padding: 20px 5%;
+            flex-grow: 1;
+            max-width: 1000px;
+            width: 100%;
+            transition: margin-left 0.3s; /* Smooth transition for desktop layout change */
+        }
         
-        /* --- Individual Cart Item (REDUCED SIZE/DENSITY) --- */
+        /* --- Section Styling --- */
+        .page-section {
+            display: none;
+            animation: fadeIn 0.5s;
+            margin-bottom: 40px;
+        }
+        .page-section.active {
+            display: block;
+        }
+        .section-header {
+            font-size: 2rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--color-pink-dark);
+            display: flex;
+            align-items: center;
+        }
+        .section-header i {
+            margin-right: 15px;
+            color: var(--color-pink-accent);
+        }
+        
+        /* --- General Card & Item Styles --- */
+        .card {
+            background-color: var(--color-bg-light);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 5px 25px var(--color-shadow); 
+            margin-bottom: 30px;
+        }
+        .update-button {
+             background-color: var(--color-pink-dark);
+             color: white;
+             padding: 10px 20px;
+             border: none;
+             border-radius: 6px;
+             font-weight: 600;
+             cursor: pointer;
+             transition: background-color 0.3s;
+        }
+        .update-button:hover {
+            background-color: var(--color-pink-accent);
+        }
+
+        /* --- Cart & Payment Section Specifics (Keeping cart.html style blocks) --- */
+        .cart-items-section {
+            padding: 0;
+            box-shadow: none;
+            background-color: transparent;
+        }
         .cart-item { 
             display: flex; 
             align-items: center; 
             padding: 15px 0;
-            border-bottom: 1px solid var(--color-border-light); 
+            border-bottom: 1px solid var(--color-border-medium); 
             position: relative;
         }
-        .cart-item:last-child { border-bottom: none; }
-        
         .item-image { 
             width: 70px;
             height: 70px;
@@ -165,20 +277,7 @@
             border: 1px solid var(--color-border-medium);
             flex-shrink: 0;
         }
-        .item-details { 
-            flex-grow: 1; 
-            text-align: left; 
-        }
-        .item-details strong { 
-            font-size: 1rem;
-            color: var(--color-text-dark); 
-            display: block;
-            margin-bottom: 3px;
-        }
-        .item-meta { 
-            font-size: 0.85rem;
-            color: var(--color-text-subtle); 
-        }
+        .item-details { flex-grow: 1; }
         .item-total-price { 
             font-size: 1.2rem;
             font-weight: 600; 
@@ -187,54 +286,16 @@
             text-align: right;
             margin-left: 10px;
         }
-
-        /* --- Delete Button --- */
         .delete-btn {
-            background: none;
-            border: none;
-            color: var(--color-text-subtle);
-            cursor: pointer;
-            font-size: 1.2rem;
-            position: absolute;
-            top: 5px;
-            right: 5px;
-            padding: 5px;
-            transition: color 0.2s ease;
-            line-height: 1;
+            background: none; border: none; color: var(--color-text-subtle);
+            cursor: pointer; font-size: 1.2rem; position: absolute;
+            top: 5px; right: 5px; padding: 5px;
         }
-        .delete-btn:hover {
-            color: var(--color-pink-accent);
-            transform: scale(1.1);
+        .summary-total { 
+            font-size: 1.5rem; font-weight: 700; color: var(--color-pink-dark);
+            border-top: 2px solid var(--color-pink-accent); padding-top: 15px;
+            margin-top: 15px; display: flex; justify-content: space-between;
         }
-        
-        /* --- Cart Summary Section --- */
-        .cart-summary-section { 
-            grid-area: summary;
-            background-color: var(--color-bg-light); 
-            padding: 25px;
-            border-radius: 12px; 
-            box-shadow: 0 5px 20px var(--color-shadow);
-            height: fit-content;
-        }
-        .cart-summary-section h2 { 
-            font-size: 1.6rem;
-            border-bottom: 1px solid var(--color-border-medium); 
-            padding-bottom: 15px;
-            margin-bottom: 20px;
-            color: var(--color-pink-dark);
-            text-align: center;
-        }
-        .summary-line { 
-            display: flex; 
-            justify-content: space-between; 
-            padding: 8px 0;
-            font-size: 1rem;
-            color: var(--color-text-dark);
-        }
-        .summary-line span:first-child {
-            font-weight: 500;
-        }
-        /* --- New Wallet Display --- */
         .wallet-balance-line {
             display: flex;
             justify-content: space-between;
@@ -245,97 +306,107 @@
             border-bottom: 1px dashed var(--color-border-medium);
             margin-bottom: 10px;
         }
-        .summary-total { 
-            font-size: 1.5rem;
-            font-weight: 700; 
-            color: var(--color-pink-dark);
-            border-top: 2px solid var(--color-pink-accent); 
-            padding-top: 15px;
-            margin-top: 15px;
-            display: flex;
-            justify-content: space-between;
-        }
-        .summary-total span:last-child {
-            color: var(--color-pink-accent);
-        }
 
-        /* --- Checkout Form Section --- */
-        .checkout-form-section { 
-            grid-area: form; 
-            background-color: var(--color-bg-light);
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px var(--color-shadow);
+        /* --- Tracking Status Styles --- */
+        #delivery-status-display {
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid var(--color-info);
+            background-color: #e6f7ff;
+            text-align: center;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--color-info);
         }
-        .checkout-form-section h2 { 
+        .tracking-stage-container {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .tracking-stage {
             display: flex;
             align-items: center;
-            gap: 10px;
-            font-size: 2.2rem; 
-            margin-bottom: 20px; 
-            color: var(--color-pink-dark);
+            font-size: 1rem;
+            padding: 10px;
+            border-left: 3px solid var(--color-border-medium);
+            position: relative;
+        }
+        .tracking-stage.complete {
+            border-left-color: var(--color-success);
+        }
+        .tracking-stage i {
+            font-size: 1.2rem;
+            margin-right: 15px;
+            color: var(--color-text-subtle);
+        }
+        .tracking-stage.complete i {
+            color: var(--color-success);
+        }
+
+        /* --- MODAL STYLES --- */
+        .modal { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background-color: rgba(0, 0, 0, 0.7); 
+            /* Start hidden by default, managed by JS */
+            display: none; 
+            opacity: 0;
+            visibility: hidden;
+            justify-content: center; 
+            align-items: center; 
+            z-index: 10000;
+            padding: 10px; 
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .modal.is-open { 
+            display: flex; /* Crucial: Make visible */
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 40px; 
+            border-radius: 12px;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
             text-align: center;
         }
-        
-        /* --- Form Groups and Icons --- */
 
-        /* Container for input + icon */
-        .form-group {
-            position: relative;
-            margin-bottom: 20px;
-        }
-
-        /* The icon itself */
-        .form-icon {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--color-pink-accent);
-            font-size: 1.1rem;
-            z-index: 2;
-        }
-
-        /* Input fields (Modified to accommodate icon padding) */
-        .form-group input, 
-        .form-select {
-            width: 100%;
-            padding: 14px 14px 14px 45px;
-            margin-bottom: 0;
-            border: 1px solid var(--color-border-medium);
-            border-radius: 8px;
-            box-sizing: border-box;
-            font-size: 1rem;
-            font-family: var(--font-body);
-            color: var(--color-text-dark);
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
-        }
-
-        .form-select {
-            padding-left: 15px;
-            margin-bottom: 20px;
-        }
-
-        /* Focus state: Pink border and shadow */
-        .form-group input:focus, 
-        .form-select:focus {
-            border-color: var(--color-pink-accent);
-            outline: none;
-            box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.2);
+        /* --- Media Queries for Desktop --- */
+        @media (min-width: 900px) {
+            .sidebar {
+                transform: translateX(0); /* Always visible on desktop */
+            }
+            .main-content {
+                margin-left: 280px; /* Offset for sidebar */
+                padding: 30px;
+            }
+            .site-header {
+                padding-left: 280px; /* Header starts after the sidebar */
+                justify-content: space-between; 
+            }
+            .hamburger-icon, .sidebar-close-icon {
+                display: none;
+            }
+            .logo-link {
+                margin-left: 0; 
+                margin-right: auto;
+            }
+            
+            /* Cart Grid Layout for Checkout */
+            #cart-payment-section .page-content-grid {
+                 display: grid;
+                 grid-template-columns: 2fr 1.2fr;
+                 gap: 30px;
+            }
         }
         
-        /* Notification Prompt Styling */
-        .notification-prompt {
-            font-weight: 600;
-            font-size: 0.95rem;
-            margin-bottom: 15px;
-            color: var(--color-pink-dark);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* --- Order Button (Enhanced) --- */
+        /* Order Button Styles */
         .order-button {
             background-color: var(--color-pink-dark);
             color: white;
@@ -354,7 +425,6 @@
             align-items: center;
             gap: 10px;
         }
-        /* Style for insufficient funds button state */
         .order-button[disabled] {
             background-color: var(--color-warning);
             color: var(--color-text-dark);
@@ -365,224 +435,21 @@
             background-color: var(--color-pink-accent);
             transform: translateY(-2px);
         }
-        .order-button:active:not([disabled]) {
-            transform: translateY(0);
-        }
-
-        .order-message { 
-            margin-top: 25px; 
-            padding: 18px; 
-            border-radius: 8px; 
-            font-weight: 600; 
-            font-size: 1.05rem;
-            text-align: center;
-        }
-        .success { background-color: #e8f5e9; color: var(--color-success); border: 1px solid #c8e6c9; }
-        .error { background-color: #ffebee; color: var(--color-danger); border: 1px solid #ef9a9a; }
-        
-        /* --- MODAL STYLES --- */
-        .modal { 
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background-color: rgba(0, 0, 0, 0.7); 
-            display: flex; 
-            opacity: 0;
-            visibility: hidden;
-            justify-content: center; 
-            align-items: center; 
-            z-index: 10000;
-            padding: 10px; 
-            transition: opacity 0.3s, visibility 0.3s;
-        }
-        .modal.is-open { 
-            opacity: 1;
-            visibility: visible;
-        }
-        .modal-content {
-            background-color: white;
-            padding: 40px; 
-            border-radius: 12px;
-            width: 90%;
-            max-width: 450px;
-            box-shadow: 0 5px 25px rgba(0,0,0,0.5);
-            text-align: center;
-        }
-        #access-required-modal .modal-content h3 {
-            font-size: 1.8rem;
-            color: var(--color-pink-dark);
-            margin-top: 10px;
-        }
-        #access-required-modal .modal-content button {
-            background-color: var(--color-pink-accent);
-            padding: 10px 20px;
-            margin-top: 15px;
-            color: white;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-
-        /* CRITICAL DEACTIVATION MODAL STYLES */
-        #deactivated-alert-modal .modal-content {
-            max-width: 450px;
-            border: 2px solid var(--color-danger);
-        }
-        #deactivated-alert-modal .modal-content h3 {
-            color: var(--color-danger);
-        }
-        
-        /* --- Media Queries for Responsive Layout --- */
-        @media (min-width: 768px) {
-            
-            /* Restore desktop specific sizes/padding */
-            .cart-items-section { padding: 30px; }
-            .cart-summary-section { padding: 35px; }
-            .checkout-form-section { padding: 30px; }
-            .cart-items-section h2 { font-size: 2.8rem; text-align: left; }
-            .checkout-form-section h2 { font-size: 2.5rem; text-align: left; }
-            .cart-summary-section h2 { font-size: 1.8rem; text-align: left; }
-            .cart-container { padding: 60px 5%; gap: 60px; }
-            
-            /* Grid layout for desktop */
-            .cart-container {
-                grid-template-columns: 2fr 1.2fr;
-                grid-template-areas: 
-                    "items summary" 
-                    "form summary";
-                padding: 60px 8%;
-                gap: 60px;
-            }
-
-            /* Restore item sizes for desktop clarity */
-            .cart-item { padding: 20px 0; }
-            .item-image { width: 90px; height: 90px; margin-right: 25px; }
-            .item-details strong { font-size: 1.2rem; }
-            .item-total-price { font-size: 1.4rem; min-width: 90px; margin-left: 15px; }
-            
-            /* Corrected icon positioning for desktop padding */
-            .form-icon {
-                 left: 30px; 
-            }
-            .form-group input {
-                padding-left: 60px;
-            }
-        }
-        
-        /* Further adjustments for larger screens */
-        @media (min-width: 1024px) {
-            .cart-container {
-                max-width: 1300px;
-            }
-        }
     </style>
 </head>
 <body>
-    <header class="site-header gated-content disabled">
-        <a href="/" class="logo-link">Lolly's Collection</a>
-        
-        <nav class="header-nav">
-            <a href="/" class="nav-icon" title="Home">
-                <i class="fa-solid fa-house"></i>
-            </a>
-            <a href="/products.html" class="nav-icon" title="Products">
-                <i class="fa-solid fa-tags"></i>
-            </a>
-            <a href="/profile.html#orders" class="nav-icon" title="My Orders">
-                <i class="fa-solid fa-list-alt"></i>
-            </a>
-            <a href="/cart.html" class="nav-icon cart-icon-with-count" title="Shopping Cart">
-                <i class="fa-solid fa-cart-shopping"></i> 
-                <span id="cart-count">0</span>
-            </a>
-        </nav>
-    </header>
-    <div class="cart-container gated-content disabled">
-        
-        <section class="cart-items-section">
-            <h2>Your Shopping Cart</h2>
-            <div id="cart-items">
-                <p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Loading cart...</p>
-            </div>
-        </section>
-
-        <section class="cart-summary-section">
-            <h2>Order Total</h2>
-            <!-- Wallet Balance Display -->
-            <div class="wallet-balance-line">
-                <span><i class="fas fa-wallet"></i> My Wallet Balance:</span> 
-                <span id="wallet-balance-amount">KES 0.00</span>
-            </div>
-            
-            <div class="summary-line"><span>Subtotal:</span> <span id="subtotal-amount">KES 0.00</span></div>
-            <div class="summary-line"><span>Shipping (Fixed):</span> <span id="shipping-fee"> KES 300.00</span></div>
-            <div class="summary-total"><span>Grand Total:</span> <span id="total-amount">KES 0.00</span></div>
-            
-            <div id="balance-warning" class="order-message error" style="display: none; margin-top: 15px;">
-                Insufficient funds. Please deposit KES <span id="needed-amount">0.00</span> to proceed.
-                <p style="font-size: 0.9em; margin-top: 5px;"><a href="/profile.html#wallet">Go to Wallet & Payments</a></p>
-            </div>
-        </section>
-
-        <section class="checkout-form-section">
-            <h2><i class="fas fa-shipping-fast"></i> Delivery & Contact Info</h2>
-            <form id="checkout-form">
-                
-                <div class="form-group">
-                    <i class="fas fa-user-alt form-icon"></i>
-                    <input type="text" id="delivery-name" placeholder="Your Full Name" required>
-                </div>
-                
-                <div class="form-group">
-                    <i class="fas fa-map-marker-alt form-icon"></i>
-                    <input type="text" id="delivery-location" placeholder="Delivery Location (City/Estate)" required>
-                </div>
-                
-                <div class="form-group">
-                    <i class="fas fa-phone-alt form-icon"></i>
-                    <input type="text" id="delivery-phone" placeholder="Phone Number (e.g., 07XXXXXXXX)" required pattern="[0-9]{9,12}">
-                </div>
-                
-                <div class="form-group">
-                    <i class="fas fa-envelope form-icon"></i>
-                    <input type="email" id="delivery-email" placeholder="Email (for confirmation)" required>
-                </div>
-                
-                <p class="notification-prompt">
-                    <i class="fas fa-bell"></i> Receive admin notification via:
-                </p>
-                
-                <select id="notification-method" class="form-select" required>
-                    <option value="email">Admin Email (Default)</option>
-                    <option value="whatsapp">Admin WhatsApp </option>
-                </select>
-
-                <button type="submit" class="order-button" id="place-order-btn">
-                    <i class="fas fa-wallet"></i> Pay KES 0.00 via Wallet
-                </button>
-                
-                <div id="order-message" class="order-message" style="display: none;"></div>
-            </form>
-        </section>
-
-    </div>
-
+    <!-- 🚨 MODALS -->
     <!-- ACCESS REQUIRED MODAL -->
     <div id="access-required-modal" class="modal">
         <div class="modal-content">
             <i class="fa-solid fa-user-lock" style="font-size: 3rem; color: var(--color-pink-dark); margin-bottom: 10px;"></i>
             <h3>Access Required</h3>
             <p>You must be logged in to manage your cart and proceed to checkout.</p>
-            <button onclick="redirectToAuthPage()">
+            <button class="update-button" onclick="redirectToAuthPage()">
                 <i class="fa-solid fa-sign-in-alt"></i> Go to Login / Register
             </button>
         </div>
     </div>
-    <!-- END ACCESS REQUIRED MODAL -->
-    
     <!-- CRITICAL DEACTIVATION ALERT MODAL -->
     <div id="deactivated-alert-modal" class="modal">
         <div class="modal-content" style="max-width: 450px;">
@@ -591,12 +458,183 @@
             <p id="deactivated-message-content" style="margin-bottom: 20px;">
                 Your account status was detected as <b style="color: var(--color-danger);">DEACTIVATED</b> by the administrator. Your current session must now end.
             </p>
-            <button id="alert-ok-button" class="order-button" style="width: auto; padding: 10px 30px;">
+            <button id="alert-ok-button" class="update-button" style="width: auto; padding: 10px 30px;">
                 OK
             </button>
         </div>
     </div>
-    <!-- END CRITICAL DEACTIVATION ALERT MODAL -->
+    <!-- END MODALS -->
+
+    <!-- 🚨 HEADER -->
+    <header class="site-header gated-content disabled">
+        <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
+            <i class="fas fa-bars"></i>
+        </button>
+        <a href="/" class="logo-link">Lolly's</a>
+        
+        <nav class="header-nav">
+             <a href="/profile.html" class="nav-icon" title="My Account">
+                <i class="fa-solid fa-user-circle"></i>
+            </a>
+            <a href="/products.html" class="nav-icon" title="Products">
+                <i class="fa-solid fa-tags"></i>
+            </a>
+            <a href="#" class="nav-icon" id="logout-link" title="Logout">
+                <i class="fas fa-sign-out-alt"></i>
+            </a>
+        </nav>
+    </header>
+
+    <!-- 🚨 SIDEBAR (GATED) -->
+    <aside class="sidebar gated-content disabled" id="sidebar">
+        <div class="sidebar-header">
+            <span>Cart & Account</span>
+            <button class="sidebar-close-icon" id="sidebar-close-icon" aria-label="Close menu">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <ul>
+                <li><a href="#cart-payment" class="nav-link active" data-target="cart-payment"><i class="fas fa-shopping-cart"></i> Cart & Payment</a></li>
+                <li><a href="#delivery-info" class="nav-link" data-target="delivery-info"><i class="fas fa-map-marked-alt"></i> Delivery Info</a></li>
+                <li><a href="#delivery-track" class="nav-link" data-target="delivery-track"><i class="fas fa-truck-fast"></i> Delivery Track</a></li>
+            </ul>
+        </nav>
+    </aside>
+
+    <!-- 🚨 MAIN CONTENT AREA -->
+    <div class="main-content-wrapper">
+        <main class="main-content gated-content disabled" id="main-content">
+            
+            <!-- ============================================== -->
+            <!-- 1. CART & PAYMENT SECTION (Existing Cart Content) -->
+            <!-- ============================================== -->
+            <section id="cart-payment" class="page-section active">
+                <h2 class="section-header"><i class="fas fa-shopping-cart"></i> Cart & Payment</h2>
+                <div class="page-content-grid">
+                    
+                    <!-- LEFT COLUMN: Cart Items -->
+                    <div class="cart-items-column">
+                         <div class="card cart-items-section">
+                            <div id="cart-items">
+                                <p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Loading cart...</p>
+                            </div>
+                        </div>
+                        
+                        <div class="card checkout-form-section">
+                            <h3>Delivery & Contact Info</h3>
+                            <form id="checkout-form">
+                                <!-- Form groups from original cart.html -->
+                                <div class="form-group"><input type="text" id="delivery-name" placeholder="Your Full Name" required></div>
+                                <div class="form-group"><input type="text" id="delivery-location" placeholder="Delivery Location (City/Estate)" required></div>
+                                <div class="form-group"><input type="text" id="delivery-phone" placeholder="Phone Number (e.g., 07XXXXXXXX)" required pattern="[0-9]{9,12}"></div>
+                                <div class="form-group"><input type="email" id="delivery-email" placeholder="Email (for confirmation)" required></div>
+                                
+                                <p class="notification-prompt"><i class="fas fa-bell"></i> Receive admin notification via:</p>
+                                <select id="notification-method" class="form-select" required>
+                                    <option value="email">Admin Email (Default)</option>
+                                    <option value="whatsapp">Admin WhatsApp </option>
+                                </select>
+
+                                <button type="submit" class="order-button" id="place-order-btn">
+                                    <i class="fas fa-wallet"></i> Pay KES 0.00 via Wallet
+                                </button>
+                                
+                                <div id="order-message" class="order-message" style="display: none;"></div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT COLUMN: Summary -->
+                    <div class="cart-summary-column">
+                        <div class="card cart-summary-section">
+                            <h3>Order Summary</h3>
+                            <div class="wallet-balance-line">
+                                <span><i class="fas fa-wallet"></i> My Wallet Balance:</span> 
+                                <span id="wallet-balance-amount">KES 0.00</span>
+                            </div>
+                            
+                            <div class="summary-line"><span>Subtotal:</span> <span id="subtotal-amount">KES 0.00</span></div>
+                            <div class="summary-line"><span>Shipping (Fixed):</span> <span id="shipping-fee"> KES 300.00</span></div>
+                            <div class="summary-total"><span>Grand Total:</span> <span id="total-amount">KES 0.00</span></div>
+                            
+                            <div id="balance-warning" class="order-message error" style="display: none; margin-top: 15px;">
+                                Insufficient funds. Please deposit KES <span id="needed-amount">0.00</span> to proceed.
+                                <p style="font-size: 0.9em; margin-top: 5px;"><a href="/profile.html#wallet">Go to Wallet & Payments</a></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================== -->
+            <!-- 2. DELIVERY INFO SECTION (NEW) -->
+            <!-- ============================================== -->
+            <section id="delivery-info" class="page-section">
+                <h2 class="section-header"><i class="fas fa-map-marked-alt"></i> Delivery Information</h2>
+                <div class="card">
+                    <p style="color: var(--color-text-subtle); margin-bottom: 20px;">
+                        These details are mandatory and will be used to calculate shipping and facilitate delivery for all your orders.
+                    </p>
+                    <form id="delivery-info-form">
+                        <div class="form-group">
+                            <label for="country">Country:</label>
+                            <input type="text" id="country" required value="Kenya" readonly>
+                        </div>
+                        <div class="form-group">
+                            <label for="county">County:</label>
+                            <input type="text" id="county" placeholder="e.g., Nairobi, Mombasa" required>
+                        </div>
+                         <div class="form-group">
+                            <label for="streetAddress">Street / Estate / Building:</label>
+                            <input type="text" id="streetAddress" placeholder="e.g., Ngong Road, Kileleshwa" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="postalCode">Postal Code:</label>
+                            <input type="text" id="postalCode" placeholder="e.g., 00100" required>
+                        </div>
+                        <button type="submit" class="update-button" id="update-delivery-btn">
+                            <i class="fas fa-save"></i> Save Delivery Details
+                        </button>
+                        <div id="delivery-message" class="order-message" style="display: none;"></div>
+                    </form>
+                </div>
+            </section>
+            
+            <!-- ============================================== -->
+            <!-- 3. DELIVERY TRACK SECTION (NEW) -->
+            <!-- ============================================== -->
+            <section id="delivery-track" class="page-section">
+                <h2 class="section-header"><i class="fas fa-truck-fast"></i> Delivery Track</h2>
+                <div class="card">
+                    <form id="delivery-track-form" style="display: flex; gap: 10px; margin-bottom: 25px;">
+                        <input type="number" id="tracking-order-id" placeholder="Enter Order ID (e.g., 1001)" required style="flex-grow: 1;">
+                        <button type="submit" class="update-button" id="track-order-btn" style="width: auto;">
+                            <i class="fas fa-magnifying-glass"></i> Track Order
+                        </button>
+                    </form>
+
+                    <div id="tracking-result-area" class="card" style="display: none; padding: 20px;">
+                        <div id="delivery-status-display">Status: <span id="tracking-status-text">...</span></div>
+                        <p style="margin-top: 15px; font-weight: 500;">
+                            Estimated Delivery: <span id="tracking-eta">...</span>
+                        </p>
+
+                        <div class="tracking-stage-container" id="tracking-stages">
+                            <!-- Stages injected here by JS -->
+                        </div>
+                        <div id="tracking-error-message" class="order-message error" style="display: none;"></div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+    
+    <footer style="text-align: center; font-size: 0.85rem; padding: 20px;">
+        &copy; 2025 Lolly's Collection.
+    </footer>
 
     <script>
         /**
@@ -605,30 +643,38 @@
         const CART_API_URL = '/api/cart';
         const ORDER_API_URL = '/api/order';
         const USER_PROFILE_API_URL = '/api/user/profile'; 
-        const WALLET_BALANCE_API_URL = '/api/wallet/balance'; // NEW API
+        const WALLET_BALANCE_API_URL = '/api/wallet/balance';
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const LOGOUT_API_URL = '/api/logout';
+        const DELIVERY_INFO_API_URL = '/api/profile/delivery'; // 🚨 NEW
+        const DELIVERY_TRACK_API_URL = '/api/user/delivery-status'; // 🚨 NEW
+        
         const SHIPPING_COST = 300.00; 
         const ADMIN_WHATSAPP = '254742041208'; 
-        const REFRESH_INTERVAL_MS = 1800000; // Increased interval for background refresh
+        const REFRESH_INTERVAL_MS = 1800000; // 30 minutes
 
         // Global variable to hold the current cart items, total, and balance
         window.currentCart = { items: [], total: SHIPPING_COST, balance: 0.00 }; 
         
         let isUserAuthenticated = false; 
 
-        // --- GATING LOGIC ---
+        // --- DOM Elements ---
+        const sidebar = document.getElementById('sidebar');
+        const hamburgerIcon = document.getElementById('hamburger-icon');
+        const sidebarCloseIcon = document.getElementById('sidebar-close-icon');
+        const mainContent = document.getElementById('main-content');
+        const logoutLink = document.getElementById('logout-link');
+
+        // --- GATING / AUTHENTICATION LOGIC ---
         
         function redirectToAuthPage() {
-            window.location.href = '/auth'; // Redirect to the authentication route
+            window.location.href = '/auth';
         }
 
-        /**
-         * Checks base authentication status and gates the page.
-         */
         async function checkAuthenticationStatus() {
             const header = document.querySelector('.site-header');
-            const container = document.querySelector('.cart-container');
+            const container = document.querySelector('.main-content');
+            const sidebarEl = document.getElementById('sidebar');
             const accessModal = document.getElementById('access-required-modal');
 
             try {
@@ -638,15 +684,22 @@
                     isUserAuthenticated = true;
                     header.classList.remove('disabled');
                     container.classList.remove('disabled');
+                    sidebarEl.classList.remove('disabled');
+                    
+                    // 🚨 MODAL FIX: Hide access modal if authenticated
                     accessModal.classList.remove('is-open'); 
+                    accessModal.style.display = 'none';
                     document.body.style.overflow = 'auto'; 
                     return true;
                 } else {
-                    // Unauthenticated initially: Gate the page.
                     isUserAuthenticated = false;
                     header.classList.add('disabled');
                     container.classList.add('disabled');
+                    sidebarEl.classList.add('disabled');
+                    
+                    // 🚨 MODAL FIX: Show access modal if unauthenticated
                     accessModal.classList.add('is-open');
+                    accessModal.style.display = 'flex'; // Ensure display is flex for visibility
                     document.body.style.overflow = 'hidden';
                     return false;
                 }
@@ -655,31 +708,35 @@
                 isUserAuthenticated = false;
                 header.classList.add('disabled');
                 container.classList.add('disabled');
+                sidebarEl.classList.add('disabled');
+                
+                // 🚨 MODAL FIX: Show access modal on network error
                 accessModal.classList.add('is-open');
+                accessModal.style.display = 'flex'; // Ensure display is flex for visibility
                 document.body.style.overflow = 'hidden';
                 return false;
             }
         }
         
-        /**
-         * Executes server logout, displays a modal, and redirects.
-         */
         function logoutUser(forceRedirect, message) {
-            // 1. Clear the status check interval
             if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             
-            // 2. Display the modal and freeze the screen
             const modal = document.getElementById('deactivated-alert-modal');
+            
+            // 1. Display the modal and freeze the screen
             document.getElementById('deactivated-message-content').innerHTML = message;
             
-            // Ensure the main page is disabled/blurred just in case
+            // Ensure the main page is disabled/blurred
             document.querySelector('.site-header').classList.add('disabled');
-            document.querySelector('.cart-container').classList.add('disabled');
+            document.querySelector('.main-content').classList.add('disabled');
+            document.getElementById('sidebar').classList.add('disabled');
             
+            // 🚨 MODAL FIX: Show deactivation modal
             modal.classList.add('is-open');
+            modal.style.display = 'flex'; // Ensure display is flex for visibility
             document.body.style.overflow = 'hidden';
 
-            // 3. Set up the handler for the OK button
+            // 2. Set up the handler for the OK button
             document.getElementById('alert-ok-button').onclick = () => {
                 // Attempt to destroy session on server (fire and forget)
                 fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
@@ -691,28 +748,20 @@
             };
         }
 
-        /**
-         * Checks profile status and refreshes balance in the background.
-         */
         async function checkProfileStatusAndLogout() {
             if (!isUserAuthenticated) return;
             
-            // Refresh wallet balance
-            await fetchWalletBalance();
+            await fetchWalletBalance(); 
 
             try {
-                // Use the profile API to get user details including isActive status
                 const response = await fetch(USER_PROFILE_API_URL);
                 
                 if (response.status === 401 || response.status === 404) {
-                    // Session expired or user profile vanished
                     logoutUser(true, "Your session has expired. Please log in again.");
                     return;
                 }
                 
                 const userData = await response.json();
-                
-                // CHECK DEACTIVATION FLAG
                 const isActive = userData.isActive === true || userData.isActive === 1;
                 
                 if (!isActive) {
@@ -720,37 +769,81 @@
                 }
 
             } catch (error) {
-                // Ignore silent errors during background refresh
                 console.error("Background status check error:", error.message);
             }
         }
 
-        // --- 1. Cart Utility Functions ---
+        // --- UI UTILITIES (Sidebar/Section Navigation) ---
+        
+        function toggleSidebar() {
+            sidebar.classList.toggle('mobile-open');
+        }
+
+        function showSection(targetId) {
+            document.querySelectorAll('.page-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            const targetSection = document.getElementById(targetId);
+            const targetLink = document.querySelector(`.nav-link[data-target="${targetId}"]`);
+            
+            if (targetSection) targetSection.classList.add('active');
+            if (targetLink) targetLink.classList.add('active');
+            
+            if (window.innerWidth <= 900) {
+                 sidebar.classList.remove('mobile-open');
+            }
+
+            // Load data based on section
+            if (targetId === 'cart-payment') {
+                renderCart();
+                fetchWalletBalance();
+                initFormFields();
+            } else if (targetId === 'delivery-info') {
+                fetchDeliveryInfo();
+            }
+            // Delivery track doesn't need auto-load, user initiates search
+
+            history.pushState(null, '', `#${targetId}`);
+        }
+        
+        // --- MESSAGE UTILITY ---
+        function showMessage(elementId, message, type) {
+            const messageEl = document.getElementById(elementId);
+            messageEl.textContent = message;
+            messageEl.className = `order-message ${type}`;
+            messageEl.style.display = 'block';
+            setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
+        }
+
+        // --- CART & PAYMENT LOGIC ---
+
         function updateCartCountInNav(cart) {
             const cartCount = cart ? cart.length : 0;
             const cartNavEl = document.getElementById('cart-count');
             if(cartNavEl) cartNavEl.textContent = cartCount;
         }
 
-        // --- NEW: Balance and Payment Check UI Updater ---
         function updatePaymentUI() {
             const total = window.currentCart.total;
             const balance = window.currentCart.balance;
             const orderBtn = document.getElementById('place-order-btn');
             const warningEl = document.getElementById('balance-warning');
             const neededEl = document.getElementById('needed-amount');
+            const itemsEmpty = window.currentCart.items.length === 0;
 
             orderBtn.innerHTML = `<i class="fas fa-wallet"></i> Pay KES ${total.toFixed(2)} via Wallet`;
             
-            // Check if cart is empty or logged out
-            if (window.currentCart.items.length === 0 || !isUserAuthenticated) {
+            if (itemsEmpty || !isUserAuthenticated) {
                  orderBtn.disabled = true;
-                 orderBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> Cart Empty`;
+                 orderBtn.innerHTML = `<i class="fas fa-shopping-cart"></i> Cart Empty / Login Req`;
                  warningEl.style.display = 'none';
                  return;
             }
 
-            // Check for insufficient funds
             if (balance < total) {
                 const needed = total - balance;
                 neededEl.textContent = needed.toFixed(2);
@@ -763,7 +856,6 @@
             }
         }
         
-        // --- NEW: Fetch Wallet Balance ---
         async function fetchWalletBalance() {
             if (!isUserAuthenticated) return;
             
@@ -779,7 +871,6 @@
                     window.currentCart.balance = balance;
                     balanceEl.textContent = 'KES ' + balance.toFixed(2);
                     
-                    // Update the UI immediately after fetching the balance
                     updatePaymentUI();
                 } else {
                     window.currentCart.balance = 0.00;
@@ -793,25 +884,20 @@
                 updatePaymentUI();
             }
         }
-
-        // --- 2. DELETE Functionality (The real DELETE API call) ---
-        async function deleteItem(productId) {
+        
+        async function deleteItem(productId, size = null) {
             if (!isUserAuthenticated) {
                  document.getElementById('access-required-modal').classList.add('is-open');
                  return;
             }
 
-            // Replacing confirm() with console warning as per guidelines
-            console.log("Item deletion initiated. Proceeding with removal.");
+            console.log(`Deleting item ${productId} with size ${size}...`);
             
-            // Note: The backend API only handles deletion by product_id currently, 
-            // and relies on that product_id being unique in the cart. 
-            // In a fully correct implementation, a unique cart item ID (or product_id + size combination) 
-            // should be used for deletion. Since the current API uses only product_id, 
-            // we proceed with that for compatibility, but note that it deletes ALL instances of that product ID.
+            // Construct the URL with size as a query parameter for unique deletion
+            const url = `${CART_API_URL}/${productId}` + (size ? `?size=${encodeURIComponent(size)}` : '');
             
             try {
-                const response = await fetch(`${CART_API_URL}/${productId}`, { method: 'DELETE' });
+                const response = await fetch(url, { method: 'DELETE' });
                 
                 if (response.ok) {
                     renderCart(); 
@@ -823,16 +909,11 @@
                 }
             } catch (error) {
                 console.error('API Error:', error);
-                console.error("An error occurred connecting to the server. Check console for details.");
             }
         }
 
-        // --- 3. Render Cart and Summary (The real GET API call) ---
         async function renderCart() {
-            if (!isUserAuthenticated) {
-                document.getElementById('cart-items').innerHTML = '<p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Please log in to view your cart items.</p>';
-                return;
-            }
+            if (!isUserAuthenticated) return;
             
             const itemsContainer = document.getElementById('cart-items');
             const subtotalEl = document.getElementById('subtotal-amount');
@@ -849,22 +930,22 @@
                         checkAuthenticationStatus(); 
                         return;
                     }
-                    throw new Error(`Failed to fetch cart: ${response.status} ${response.statusText}`);
+                    throw new Error(`Failed to fetch cart.`);
                 }
                 
                 cart = await response.json(); 
 
             } catch (error) {
                 console.error('Error fetching cart:', error);
-                itemsContainer.innerHTML = '<p style="text-align: center; color: red;">Failed to load cart. Please ensure your backend is running correctly.</p>';
+                // Fallback UI update
+                itemsContainer.innerHTML = '<p style="text-align: center; color: red;">Failed to load cart. Check backend API status.</p>';
                 subtotalEl.textContent = 'KES 0.00';
                 totalEl.textContent = 'KES ' + SHIPPING_COST.toFixed(2);
-                document.getElementById('checkout-form').style.display = 'none';
                 window.currentCart = { items: [], total: SHIPPING_COST, balance: window.currentCart.balance };
+                updatePaymentUI();
                 return;
             }
 
-            // --- Rendering Logic ---
             itemsContainer.innerHTML = '';
             updateCartCountInNav(cart);
 
@@ -872,14 +953,11 @@
                 itemsContainer.innerHTML = '<p style="text-align: center; padding: 20px 0; color: var(--color-text-subtle);">Your cart is empty. <a href="/products">Start shopping now!</a></p>';
                 subtotalEl.textContent = 'KES 0.00';
                 totalEl.textContent = 'KES ' + SHIPPING_COST.toFixed(2);
-                document.getElementById('checkout-form').style.display = 'none';
                 window.currentCart = { items: [], total: SHIPPING_COST, balance: window.currentCart.balance };
                 updatePaymentUI();
                 return;
             }
             
-            document.getElementById('checkout-form').style.display = 'block';
-
             cart.forEach(item => {
                 const price = parseFloat(item.price) || 0;
                 const quantity = parseInt(item.quantity) || 1;
@@ -887,16 +965,13 @@
                 subtotal += itemTotal;
                 
                 const productImageUrl = item.image_url || '/images/products/placeholder.jpg'; 
-                
-                // 🚨 MODIFIED: Include size in the item meta if it exists
                 const sizeInfo = item.size ? ` | Size: ${item.size}` : '';
-
+                
                 const itemDiv = document.createElement('div');
                 itemDiv.classList.add('cart-item');
-                itemDiv.dataset.productId = item.id; 
                 
                 itemDiv.innerHTML = `
-                    <button class="delete-btn" onclick="deleteItem(${item.id})">&times;</button>
+                    <button class="delete-btn" onclick="deleteItem(${item.id}, '${item.size || ''}')">&times;</button>
                     
                     <img src="${productImageUrl}" 
                          alt="${item.name}" 
@@ -914,95 +989,50 @@
                 itemsContainer.appendChild(itemDiv);
             });
 
-            // --- Update Summary Totals ---
             const total = subtotal + SHIPPING_COST;
             subtotalEl.textContent = 'KES ' + subtotal.toFixed(2);
             totalEl.textContent = 'KES ' + total.toFixed(2);
             
-            // Store cart data globally for submission AND update payment UI
             window.currentCart.items = cart;
             window.currentCart.total = total;
-            updatePaymentUI(); // Crucial call to update button state
+            updatePaymentUI();
         }
         
-        // --- New Function: Fetch User Details and Pre-fill Form ---
         async function initFormFields() {
             if (!isUserAuthenticated) return;
-            
-            const nameEl = document.getElementById('delivery-name');
-            const emailEl = document.getElementById('delivery-email');
-            const phoneEl = document.getElementById('delivery-phone');
-            const locationEl = document.getElementById('delivery-location');
-
-            // Set initial placeholders/state for manual fields
-            phoneEl.placeholder = "Phone Number (e.g., 07XXXXXXXX)"; 
-            locationEl.placeholder = "Delivery Location (City/Estate)";
-
+            // The logic to pre-fill name/email/phone from profile data is fine for Cart & Payment.
             try {
                 const response = await fetch(USER_PROFILE_API_URL);
-                
                 if (response.ok) {
                     const userData = await response.json(); 
-
-                    // Pre-fill Name and Email
-                    nameEl.value = userData.name || ''; 
-                    nameEl.readOnly = true;
-                    emailEl.value = userData.email || '';
-                    emailEl.readOnly = true;
-                    // Pre-fill Phone Number (FIXED)
-                    phoneEl.value = userData.phoneNumber || '';
-                    phoneEl.readOnly = true;
-                    nameEl.placeholder = 'Your Full Name (Pre-filled)';
-                    emailEl.placeholder = 'Email (Pre-filled)';
-                    phoneEl.placeholder = 'Phone Number (Pre-filled)';
+                    document.getElementById('delivery-name').value = userData.name || ''; 
+                    document.getElementById('delivery-email').value = userData.email || '';
+                    document.getElementById('delivery-phone').value = userData.phoneNumber || '';
                     
-                    console.log('Form fields pre-filled with user data.');
-
-                } else if (response.status === 401) {
-                    checkAuthenticationStatus();
-                } else {
-                    console.warn('User profile not available. Leaving fields blank for manual entry.');
-                    nameEl.placeholder = "Your Full Name (REQUIRED)";
-                    emailEl.placeholder = "Email (for confirmation) (REQUIRED)";
+                    document.getElementById('delivery-name').readOnly = true;
+                    document.getElementById('delivery-email').readOnly = true;
+                    document.getElementById('delivery-phone').readOnly = true;
                 }
-
-            } catch (error) {
-                console.error('Error fetching user profile:', error);
-                nameEl.placeholder = "Your Full Name (REQUIRED)";
-                emailEl.placeholder = "Email (for confirmation) (REQUIRED)";
+            } catch (e) {
+                console.error("Failed to pre-fill form fields:", e);
             }
         }
         
-        // --- 4. Order Submission Handler (The real POST API call) ---
+        // --- Order Submission Handler ---
         document.getElementById('checkout-form').addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            if (!isUserAuthenticated) {
-                 document.getElementById('access-required-modal').classList.add('is-open');
-                 return;
-            }
+            if (!isUserAuthenticated) return;
             
             const orderBtn = document.getElementById('place-order-btn');
-            const messageEl = document.getElementById('order-message');
             const cartData = window.currentCart;
 
-            if (!cartData || cartData.items.length === 0) {
-                messageEl.textContent = 'Your cart is empty. Cannot place order.';
-                messageEl.className = 'order-message error';
-                messageEl.style.display = 'block';
-                return;
-            }
-            
-            // Client-side final balance check
             if (cartData.balance < cartData.total) {
-                messageEl.textContent = `Order failed: Insufficient funds in your wallet (KES ${cartData.balance.toFixed(2)}).`;
-                messageEl.className = 'order-message error';
-                messageEl.style.display = 'block';
+                showMessage('order-message', `Order failed: Insufficient funds in your wallet.`, 'error');
                 updatePaymentUI();
                 return;
             }
 
-            // Construct the final order data to send to the server
             const orderData = {
                 name: document.getElementById('delivery-name').value, 
                 phone: document.getElementById('delivery-phone').value,
@@ -1010,15 +1040,13 @@
                 location: document.getElementById('delivery-location').value,
                 
                 items: cartData.items, 
-                subtotal: (cartData.total - SHIPPING_COST).toFixed(2), // Calculate subtotal
+                subtotal: (cartData.total - SHIPPING_COST).toFixed(2),
                 shipping: SHIPPING_COST.toFixed(2),
-                total: cartData.total.toFixed(2), // Final amount to be deducted
+                total: cartData.total.toFixed(2),
                 notificationMethod: document.getElementById('notification-method').value
             };
             
-            messageEl.textContent = 'Processing your order...';
-            messageEl.className = 'order-message';
-            messageEl.style.display = 'block';
+            showMessage('order-message', 'Processing your order...', 'info');
             orderBtn.disabled = true;
 
             try {
@@ -1033,63 +1061,189 @@
                 if (response.ok) {
                     renderCart(); 
                     
-                    messageEl.textContent = `Order #${result.orderId || 'CONFIRMED'} placed! ${result.message || 'Details sent to your email.'}`;
-                    messageEl.className = 'order-message success';
+                    showMessage('order-message', `Order #${result.orderId} placed! Tracking details now available.`, 'success');
+                    document.getElementById('tracking-order-id').value = result.orderId; // Pre-fill tracking ID
 
                     if (orderData.notificationMethod === 'whatsapp') {
-                        const whatsappMessage = encodeURIComponent(
-                            `NEW ORDER #${result.orderId || 'CONFIRMED'} received from ${orderData.name} at ${orderData.location}. Total: KES${orderData.total}.\n\nPlease check your admin system for full details.`
-                        );
+                        const whatsappMessage = encodeURIComponent(`Order #${result.orderId} confirmed for delivery to ${orderData.location}. Total: KES${orderData.total}. Tracking available via Order ID.`);
                         window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${whatsappMessage}`, '_blank');
                     }
                     
                     this.reset();
-                    initFormFields(); // Re-fetch user data to quickly repopulate form
-
-                } else if (response.status === 401) {
-                    checkAuthenticationStatus();
-                } else if (response.status === 400 && result.message.includes('Insufficient funds')) {
-                    // Specific handling for Insufficient funds error from backend
-                    messageEl.textContent = `Order Failed: ${result.message}`;
-                    messageEl.className = 'order-message error';
+                    initFormFields();
                 } else {
-                    messageEl.textContent = `Order failed: ${result.message || 'Server error. Please try again.'}`;
-                    messageEl.className = 'order-message error';
+                    showMessage('order-message', `Order failed: ${result.message || 'Server error. Please try again.'}`, 'error');
                 }
 
             } catch (error) {
                 console.error('Network Error:', error);
-                messageEl.textContent = 'An error occurred connecting to the server.';
-                messageEl.className = 'order-message error';
+                showMessage('order-message', 'An error occurred connecting to the server.', 'error');
             } finally {
                 orderBtn.disabled = false;
                 updatePaymentUI();
+                fetchWalletBalance(); // Re-fetch wallet balance after payment
             }
         });
-// --- 5. Initialization ---
+        
+        // --- DELIVERY INFO LOGIC (NEW) ---
+
+        async function fetchDeliveryInfo() {
+            if (!isUserAuthenticated) return;
+            const btn = document.getElementById('update-delivery-btn');
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch(USER_PROFILE_API_URL);
+                if (response.ok) {
+                    const userData = await response.json();
+                    document.getElementById('country').value = userData.country || 'Kenya';
+                    document.getElementById('county').value = userData.county || '';
+                    document.getElementById('streetAddress').value = userData.streetAddress || '';
+                    document.getElementById('postalCode').value = userData.postalCode || '';
+                }
+            } catch (e) {
+                showMessage('delivery-message', 'Failed to load existing delivery information.', 'error');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('delivery-info-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btn = document.getElementById('update-delivery-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+            const payload = {
+                country: document.getElementById('country').value,
+                county: document.getElementById('county').value,
+                streetAddress: document.getElementById('streetAddress').value,
+                postalCode: document.getElementById('postalCode').value
+            };
+
+            try {
+                const response = await fetch(DELIVERY_INFO_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage('delivery-message', result.message, 'success');
+                } else {
+                    showMessage('delivery-message', result.message || 'Failed to save details.', 'error');
+                }
+            } catch (error) {
+                showMessage('delivery-message', 'Network error saving delivery details.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save"></i> Save Delivery Details';
+            }
+        });
+
+        // --- DELIVERY TRACKING LOGIC (NEW) ---
+
+        document.getElementById('delivery-track-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const orderId = document.getElementById('tracking-order-id').value.trim();
+            const resultArea = document.getElementById('tracking-result-area');
+            const trackBtn = document.getElementById('track-order-btn');
+            const originalBtnHtml = trackBtn.innerHTML;
+            
+            resultArea.style.display = 'none';
+            document.getElementById('tracking-error-message').style.display = 'none';
+            
+            if (!orderId) return;
+
+            trackBtn.disabled = true;
+            trackBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+
+            try {
+                const response = await fetch(`${DELIVERY_TRACK_API_URL}/${orderId}`);
+                const result = await response.json();
+
+                if (response.ok) {
+                    renderTrackingStatus(result);
+                    resultArea.style.display = 'block';
+                } else {
+                    document.getElementById('tracking-error-message').textContent = result.message || 'Order ID not found or access denied.';
+                    document.getElementById('tracking-error-message').style.display = 'block';
+                }
+            } catch (error) {
+                document.getElementById('tracking-error-message').textContent = 'Network error while tracking order.';
+                document.getElementById('tracking-error-message').style.display = 'block';
+                console.error('Tracking error:', error);
+            } finally {
+                trackBtn.disabled = false;
+                trackBtn.innerHTML = originalBtnHtml;
+            }
+        });
+
+        function renderTrackingStatus(data) {
+            const statusTextEl = document.getElementById('tracking-status-text');
+            const etaEl = document.getElementById('tracking-eta');
+            const stagesContainer = document.getElementById('tracking-stages');
+            const displayEl = document.getElementById('delivery-status-display');
+
+            const stages = [
+                { name: "Order Received", icon: "fas fa-receipt" },
+                { name: "Processing", icon: "fas fa-cogs" },
+                { name: "Delivering", icon: "fas fa-shipping-fast" },
+                { name: "Delivered", icon: "fas fa-box-open" }
+            ];
+
+            const currentStatus = data.currentStatus;
+            let currentStageIndex = stages.findIndex(s => s.name === currentStatus);
+            if (currentStageIndex === -1) currentStageIndex = 0; // Default to first stage
+
+            statusTextEl.textContent = currentStatus;
+            displayEl.style.borderColor = currentStatus === 'Delivered' ? 'var(--color-success)' : 'var(--color-info)';
+            displayEl.style.color = currentStatus === 'Delivered' ? 'var(--color-success)' : 'var(--color-info)';
+            etaEl.textContent = data.estimatedDelivery;
+            
+            stagesContainer.innerHTML = '';
+            
+            stages.forEach((stage, index) => {
+                const isComplete = index <= currentStageIndex;
+                const stageDiv = document.createElement('div');
+                stageDiv.className = `tracking-stage ${isComplete ? 'complete' : ''}`;
+                stageDiv.innerHTML = `<i class="${stage.icon}"></i> ${stage.name}`;
+                stagesContainer.appendChild(stageDiv);
+            });
+        }
+
+
+        // --- Final Initialization ---
         document.addEventListener('DOMContentLoaded', async () => {
-            // 1. Check auth status and gate the page (most important step)
+            hamburgerIcon.addEventListener('click', toggleSidebar);
+            sidebarCloseIcon.addEventListener('click', toggleSidebar);
+            logoutLink.addEventListener('click', (e) => { e.preventDefault(); logoutUser(true, "Logging out..."); });
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    showSection(this.getAttribute('data-target'));
+                });
+            });
+            
             const loggedIn = await checkAuthenticationStatus(); 
             
-            // 2. Only run data fetching/form initialization if authenticated
             if (loggedIn) {
-                // Must fetch balance first, then render cart to update total, then update payment UI
-                await fetchWalletBalance(); 
-                renderCart();
-                initFormFields();
+                // Determine initial section from hash or default to cart-payment
+                const initialHash = window.location.hash ? window.location.hash.substring(1) : 'cart-payment';
+                showSection(initialHash);
                 
-                // 3. Start 5-second background security check loop (refreshes balance)
+                // Start background check loop
                 window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS);
-            } else {
-                if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             }
             
-            // Failsafe: Clear interval if user navigates away
             window.onbeforeunload = function() {
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             };
 
             window.redirectToAuthPage = redirectToAuthPage;
+            window.deleteItem = deleteItem; // Expose deleteItem globally for item buttons
         });
     </script>
 </body>

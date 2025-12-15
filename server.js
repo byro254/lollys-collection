@@ -193,7 +193,7 @@ const smsServiceProvider = {
 const otpCache = {};
 // Import DB functions
 // 🚨 MODIFIED: findUserByUsername and runMigrations are imported
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserPasswordById, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserPasswordById, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername, getDeliveryInfo, saveDeliveryInfo } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -890,7 +890,12 @@ const DEFAULT_PROFILE_PIC_SERVER = '/images/profiles/default_profile.png';
 app.get('/api/user/profile', isAuthenticated, async (req, res) => {
     try {
         const userId = req.session.userId;
+        
+        // Fetch user data from the 'users' table
         const user = await db.findUserById(userId);
+        
+        // Fetch delivery information from 'user_delivery_info'
+        const deliveryInfo = await db.getDeliveryInfo(userId);
 
         if (user) {
              // 🚨 FIX: Ensure a fallback is always set for the profile picture
@@ -908,8 +913,11 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
                 isActive: user.isActive,
                 is2faEnabled: user.is2faEnabled,
                 
-                // Delivery Info Fields (assuming these are attached by findUserById or fetched separately if needed)
-                // For simplicity, relying on data structure from existing findUserById if extended
+                // Delivery Info Fields (from separate query)
+                country: deliveryInfo?.country || '',
+                county: deliveryInfo?.county || '',
+                streetAddress: deliveryInfo?.street_address || '',
+                postalCode: deliveryInfo?.postal_code || '',
             };
             return res.json(profileData);
         } else {
@@ -979,6 +987,7 @@ app.post('/api/profile/delivery', isAuthenticated, async (req, res) => {
 
     try {
         const userId = req.session.userId;
+        // The saveDeliveryInfo function uses the database-friendly column names
         const success = await db.saveDeliveryInfo(userId, {
             country,
             county,
@@ -1009,6 +1018,59 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
     } catch (error) {
         console.error('Error fetching user orders:', error);
         res.status(500).json({ message: 'Failed to retrieve user orders, please try again later.' });
+    }
+});
+
+// ---------------------------------------------------------------- //
+// 🚨 NEW: Order Tracking API Route (Simulated)
+// ---------------------------------------------------------------- //
+app.get('/api/user/delivery-status/:orderId', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const orderId = req.params.orderId;
+    
+    if (!orderId || isNaN(parseInt(orderId))) {
+        return res.status(400).json({ message: 'Invalid Order ID format.' });
+    }
+    
+    try {
+        // 1. Check if the order exists and belongs to the user
+        const [orderCheck] = await pool.query(
+            'SELECT id, status, customer_name FROM orders WHERE id = ? AND user_id = ?',
+            [orderId, userId]
+        );
+
+        if (orderCheck.length === 0) {
+            return res.status(404).json({ message: 'Order not found or does not belong to your account.' });
+        }
+        
+        // 2. Determine a simulated delivery status based on the order ID modulo
+        const orderStatusMap = [
+            'Order Received', 
+            'Processing', 
+            'Delivering', 
+            'Delivered'
+        ];
+        
+        // Use a persistent value (order ID) to give a consistent, simulated status
+        const orderNumber = parseInt(orderId);
+        let simulatedIndex = orderNumber % orderStatusMap.length;
+        
+        // If the database status is 'Completed', always simulate 'Delivered'
+        if (orderCheck[0].status === 'Completed') {
+            simulatedIndex = orderStatusMap.length - 1; 
+        }
+
+        res.json({
+            orderId: orderId,
+            currentStatus: orderStatusMap[simulatedIndex],
+            orderStatus: orderCheck[0].status, // Actual DB status (e.g., Pending, Completed)
+            lastUpdate: new Date().toISOString(),
+            estimatedDelivery: (simulatedIndex < 3) ? '2-4 Business Days' : 'N/A'
+        });
+
+    } catch (error) {
+        console.error('Delivery tracking error:', error);
+        res.status(500).json({ message: 'Failed to retrieve delivery status.' });
     }
 });
 
@@ -1731,26 +1793,20 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         const product = productRows[0];
         
         // Determine if product requires size logic
-        const requiresSize = product.category && 
-                             product.category.toLowerCase() !== 'electronic' && 
-                             product.category.toLowerCase() !== 'tools';
-
-        // Validation for required size
-        if (requiresSize && (!size || size === '')) {
-             return res.status(400).json({ message: 'A size selection is required for this product category.' });
-        }
+        // NOTE: The cart endpoint shouldn't validate for mandatory size if the client sends a size.
+        // It only needs to ensure that if a size is sent, it's used as a filter/identifier.
 
         // 🚨 CRITICAL FIX: The cart lookup now includes the size.
         // This ensures that adding 'Small Shirt' and 'Large Shirt' are treated as two distinct items.
         let cartQuery = 'SELECT quantity FROM cart WHERE user_id = ? AND product_id = ?';
         let cartParams = [userId, productId];
         
-        if (requiresSize) {
-            // For items requiring size, match on size
+        // If a size is provided, use it to distinguish the cart item.
+        if (size && size !== '') {
             cartQuery += ' AND size = ?';
             cartParams.push(size);
         } else {
-            // For items without size, ensure size is NULL (or not set)
+            // If no size is provided, ensure size is NULL (or not set)
             cartQuery += ' AND size IS NULL';
         }
         
@@ -1772,7 +1828,9 @@ app.post('/api/cart', isAuthenticated, async (req, res) => {
         if (cartRows.length > 0) {
             // Update quantity of existing item
             // We use the original cartParams (which contains the size filter) to locate the unique cart item
-            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?' + (requiresSize ? ' AND size = ?' : ' AND size IS NULL'), [newQuantity, userId, productId, ...cartParams.slice(2)]);
+            // The length of cartParams is 3 if size is present, 2 if size is null.
+            const sizeClause = (size && size !== '') ? ' AND size = ?' : ' AND size IS NULL';
+            await connection.execute('UPDATE cart SET quantity = ? WHERE user_id = ? AND product_id = ?' + sizeClause, [newQuantity, userId, productId, ...cartParams.slice(2)]);
             
         } else {
             // Insert new item
@@ -1800,8 +1858,21 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
     const productId = req.params.productId;
     
+    // 🚨 IMPORTANT: The front-end needs to send the size as a query parameter for unique deletion
+    const size = req.query.size || null; 
+    
+    let sql = 'DELETE FROM cart WHERE user_id = ? AND product_id = ?';
+    let params = [userId, productId];
+    
+    if (size) {
+        sql += ' AND size = ?';
+        params.push(size);
+    } else {
+        sql += ' AND size IS NULL';
+    }
+    
     try {
-        const [result] = await pool.execute('DELETE FROM cart WHERE user_id = ? AND product_id = ?', [userId, productId]);
+        const [result] = await pool.execute(sql, params);
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Cart item not found.' });
         }
@@ -2815,4 +2886,4 @@ server.listen(port, async () => {
         // Log the failure to connect without crashing
         console.error("Warning: Database connection failed:", error);
     }
-});
+});hehehe
