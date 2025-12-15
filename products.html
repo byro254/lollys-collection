@@ -115,38 +115,50 @@
             position: relative;
         }
         
-        /* --- Search Bar Styles --- */
+        /* --- Search Bar Styles (POPUP) --- */
         .search-container {
             position: relative;
             display: flex;
             align-items: center;
-            margin-left: 1rem;
+            margin-left: auto; /* Push to right */
         }
         #search-input {
             width: 0; /* Initially hidden */
             opacity: 0;
-            transition: width 0.3s ease, opacity 0.3s ease;
-            padding: 5px 10px;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 8px 15px;
             border: 1px solid var(--color-border-medium);
-            border-radius: 20px;
+            border-radius: 25px;
             font-size: 1rem;
             box-sizing: border-box;
-            height: 35px;
-            margin-right: 5px;
+            height: 40px;
+            
+            /* 🚨 POPUP STYLING */
+            position: absolute;
+            right: 40px; /* Position to the left of the icon */
+            top: 50%;
+            transform: translateY(-50%);
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            z-index: 100;
         }
         #search-input.active {
-            width: 200px; 
+            width: 220px; 
             opacity: 1;
-            padding-left: 15px;
-            margin-right: 10px;
+            visibility: visible;
+            right: 0; /* Move into place if needed, or keep right:40px to stay beside icon */
+            right: 35px; /* Slight gap from icon */
         }
         #search-icon {
             cursor: pointer;
             font-size: 1.5rem; 
             color: var(--color-pink-dark);
+            z-index: 101; /* Above input */
+            padding: 5px;
         }
 
-        /* --- 🚨 NEW: Horizontal Scrollable Category Header --- */
+        /* --- Horizontal Scrollable Category Header --- */
         .category-scroll-container {
             display: flex;
             overflow-x: auto;
@@ -323,6 +335,7 @@
             top: 10px; 
             right: 15px; 
             font-size: 1.8rem !important; 
+            z-index: 10;
         }
 
         /* Modal Body CSS */
@@ -451,6 +464,25 @@
             filter: blur(50px);
             pointer-events: none;
             opacity: 0.7;
+        }
+        
+        /* 🚨 RESPONSIVE MODAL TWEAKS FOR MOBILE */
+        @media (max-width: 768px) {
+            #modal-content {
+                padding: 15px; /* Reduced padding */
+                width: 95%;
+                max-height: 85vh; /* slightly less height to avoid cutoffs */
+            }
+            #modal-body h3 {
+                font-size: 1.5rem; /* Smaller Title */
+            }
+            .product-image-modal {
+                max-height: 200px; /* Smaller image on mobile */
+            }
+            .controls-group {
+                flex-direction: column; /* Stack controls on very small screens */
+                gap: 10px;
+            }
         }
 
         /* --- Media Query for Tablet/Desktop (Header/Modal) --- */
@@ -771,15 +803,25 @@
             const categoryFilter = activeCategory.toLowerCase();
 
             const filtered = allProducts.filter(product => {
+                // Search Matching
                 const matchesSearch = product.name.toLowerCase().includes(searchQuery) ||
                                       product.description.toLowerCase().includes(searchQuery) ||
-                                      product.category.toLowerCase().includes(searchQuery);
+                                      (product.category || '').toLowerCase().includes(searchQuery);
                 
+                // Category Matching (More robust)
                 let matchesCategory = true;
                 if (categoryFilter !== 'all') {
-                    // Flexible matching: check if product category contains the button text
-                    // e.g. "Phone Accessories" matches "Accessories" or exact string
-                    matchesCategory = (product.category || '').toLowerCase().includes(categoryFilter);
+                    const prodCat = (product.category || '').toLowerCase();
+                    
+                    // 🚨 BI-DIRECTIONAL CHECK: 
+                    // 1. Does product category contain filter? (e.g. "Phone Accessories" contains "Accessories")
+                    // 2. Does filter contain product category? (e.g. "Dresses" contains "Dress")
+                    matchesCategory = prodCat.includes(categoryFilter) || categoryFilter.includes(prodCat);
+                    
+                    // Fallback: If no match yet, check if filter word appears in name (useful for "Topwares" finding "Tops" if named so)
+                    if (!matchesCategory && categoryFilter.length > 3) {
+                         matchesCategory = product.name.toLowerCase().includes(categoryFilter);
+                    }
                 }
                 
                 return matchesSearch && matchesCategory;
