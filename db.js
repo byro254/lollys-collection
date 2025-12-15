@@ -911,6 +911,51 @@ async function save2faSecret(userId, secret) {
         if (connection) connection.release();
     }
 }
+/**
+ * Fetches the delivery information for a given user ID.
+ * @param {string} userId - The user's National ID.
+ * @returns {Promise<Object | null>} - Delivery object or null if not found.
+ */
+async function getDeliveryInfo(userId) {
+    try {
+        const [rows] = await pool.execute(
+            'SELECT country, county, street_address, postal_code FROM user_delivery_info WHERE user_id = ?',
+            [userId]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.error('Database error fetching delivery info:', error);
+        throw error;
+    }
+}
+
+/**
+ * Saves or updates the delivery information for a user.
+ * It uses INSERT ... ON DUPLICATE KEY UPDATE structure.
+ * @param {string} userId - The user's National ID.
+ * @param {{country: string, county: string, street_address: string, postal_code: string}} info 
+ * @returns {Promise<boolean>} - True if successful.
+ */
+async function saveDeliveryInfo(userId, { country, county, street_address, postal_code }) {
+    try {
+        const query = `
+            INSERT INTO user_delivery_info (user_id, country, county, street_address, postal_code)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                country = VALUES(country),
+                county = VALUES(county),
+                street_address = VALUES(street_address),
+                postal_code = VALUES(postal_code)
+        `;
+        const [result] = await pool.execute(query, [userId, country, county, street_address, postal_code]);
+        // affectedRows will be 1 for INSERT or 2 for UPDATE, so checking for > 0 is sufficient
+        return result.affectedRows > 0;
+    } catch (error) {
+        console.error('Database error saving delivery info:', error);
+        throw error;
+    }
+}
+
 
 
 // ---------------------------------------------------------------- //
@@ -951,4 +996,7 @@ module.exports = {
    
     // 🚨 NEW 2FA Function
     update2faStatus, 
+    getDeliveryInfo,
+    saveDeliveryInfo,
+
 };

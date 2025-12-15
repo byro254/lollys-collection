@@ -837,27 +837,40 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
  * GET /api/user/profile
  * Retrieves full user profile information, including new fields.
  */
+// 1. Fetch User Profile Data (including Delivery Info)
 app.get('/api/user/profile', isAuthenticated, async (req, res) => {
-    const userId = req.session.userId; 
-
     try {
-        // findUserById now fetches 2FA status, which is exactly what we need here.
-        const userProfile = await db.findUserById(userId); 
+        const userId = req.session.userId;
+        const user = await db.findUserById(userId);
 
-        if (userProfile) {
-            return res.json(userProfile);
+        if (user) {
+             // 🚨 UPDATED: Include delivery fields in the response.
+             // Delivery fields are country, county, street_address, postal_code
+            const profileData = {
+                username: user.username,
+                email: user.email,
+                id: user.id, // National ID
+                profilePictureUrl: user.profile_picture_url || '/images/default-avatar.png',
+                is2faEnabled: user.is_2fa_enabled,
+                
+                // Delivery Info Fields
+                country: user.country || '',
+                county: user.county || '',
+                streetAddress: user.street_address || '',
+                postalCode: user.postal_code || '',
+            };
+            return res.json(profileData);
         } else {
-            return res.status(404).json({ 
-                message: 'User profile not found.' 
-            });
+            // This should not happen if isAuthenticated passed, but as a safeguard
+            req.session.destroy();
+            return res.status(404).json({ message: 'User not found.' });
         }
     } catch (error) {
-        console.error('Error fetching user profile:', error);
-        return res.status(500).json({ 
-            message: 'Server error fetching user data.' 
-        });
+        console.error('Error fetching profile:', error);
+        return res.status(500).json({ message: 'Failed to retrieve profile data.' });
     }
 });
+
 
 /**
  * POST /api/user/profile
@@ -899,6 +912,36 @@ app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), 
     } catch (error) {
         console.error('Profile update error:', error);
         return res.status(500).json({ message: 'Server error during profile update.' });
+    }
+});
+// ---------------------------------------------------------------- //
+// 🚨 NEW: Delivery Information API Route
+// ---------------------------------------------------------------- //
+app.post('/api/profile/delivery', isAuthenticated, async (req, res) => {
+    const { country, county, streetAddress, postalCode } = req.body;
+    
+    // Basic validation
+    if (!country || !county || !streetAddress || !postalCode) {
+        return res.status(400).json({ message: 'All delivery fields are required.' });
+    }
+
+    try {
+        const userId = req.session.userId;
+        const success = await db.saveDeliveryInfo(userId, {
+            country,
+            county,
+            street_address: streetAddress, // Mapped to DB column name
+            postal_code: postalCode // Mapped to DB column name
+        });
+
+        if (success) {
+            return res.json({ message: 'Delivery information updated successfully.' });
+        } else {
+            return res.status(500).json({ message: 'Failed to save delivery information.' });
+        }
+    } catch (error) {
+        console.error('Error saving delivery info:', error);
+        return res.status(500).json({ message: 'An internal error occurred.' });
     }
 });
 
