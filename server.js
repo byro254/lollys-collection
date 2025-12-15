@@ -16,13 +16,17 @@ const db = require('./db');
 const crypto = require('crypto');
 const cors = require('cors');
 const speakeasy = require('speakeasy');
-
+const { v2: cloudinary } = require('cloudinary');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 
 
 
-
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET
+});
 // ==========================================================
 // 🚨 NEW: Password Reset/OTP State Management and Helpers
 // Map to store temporary password reset data: { email: { otp: '123456', otpExpires: Date, vtoken: 'uuid', vtokenExpires: Date } }
@@ -246,10 +250,12 @@ const BUSINESS_WALLET_USER_ID = '0';
 
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+
 // --- Multer and Nodemailer setup ---
 const UPLOAD_DIR = path.join(__dirname, 'public/images/products');
 const PROFILE_UPLOAD_DIR = path.join(__dirname, 'public/images/profiles');
-// 🚨 FIX: Create 'products' directory if it doesn't exist
+
 if (!fs.existsSync(UPLOAD_DIR)) {
     console.log("Creating missing directory: public/images/products");
     fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -259,13 +265,8 @@ if (!fs.existsSync(PROFILE_UPLOAD_DIR)) {
     fs.mkdirSync(PROFILE_UPLOAD_DIR, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => { cb(null, UPLOAD_DIR); },
-    filename: (req, file, cb) => {
-        const ext = path.extname(file.originalname);
-        cb(null, uuidv4() + ext);
-    }
-});
+
+const storage = multer.memoryStorage(); // Store file in memory buffer
 const upload = multer({ storage: storage });
 
 
@@ -278,13 +279,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // 🚨 STATIC FILE FIX: Ensure main public content and specific upload paths are correctly mapped.
 app.use(express.static(path.join(__dirname, 'public'))); 
-app.use('/images/products', express.static(UPLOAD_DIR));
-app.use('/images/profiles', express.static(PROFILE_UPLOAD_DIR));
+
 
 app.use(express.static(__dirname)); 
-app.use('public/images/products', express.static(path.join(__dirname, 'products')));
-app.use('public/images/profiles', express.static(path.join(__dirname, 'profiles')));
-// ---------------------------------------------------------------------------------
+
+
 
 // Configure session middleware
 app.use(session({
@@ -936,18 +935,29 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
  * POST /api/user/profile
  * Handles profile updates (Phone Number and Profile Picture).
  */
+
 app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), async (req, res) => {
     const userId = req.session.userId; 
     const { phoneNumber, currentProfilePictureUrl } = req.body;
     
-    // 🚨 FIX: Profile Picture persistence logic:
-    // If no new file is uploaded, keep the existing URL from the database/hidden field.
     let newProfilePictureUrl = currentProfilePictureUrl; 
 
     // 1. Handle file upload (if req.file exists)
     if (req.file) {
-        // Assuming /public/images/profiles is mapped correctly
-        newProfilePictureUrl = `/images/profiles/${req.file.filename}`; 
+        // 🚨 CRITICAL CHANGE: Upload to Cloudinary
+         try {
+            const cloudinaryResult = await cloudinary.uploader.upload(
+                'data:image/jpeg;base64,' + req.file.buffer.toString('base64'),
+                {
+                    folder: 'lollys_profiles', 
+                    resource_type: "image",
+                }
+            );
+            newProfilePictureUrl = cloudinaryResult.secure_url; 
+        } catch (uploadError) {
+            console.error('Cloudinary upload failed:', uploadError);
+            return res.status(500).json({ message: 'Failed to upload profile picture to cloud storage.' });
+        }
     }
 
     // 2. Simple phone validation
@@ -956,14 +966,13 @@ app.post('/api/user/profile', isAuthenticated, upload.single('profilePicture'), 
     }
 
     try {
-        // 3. Update database using db.updateUserProfile
-        // We pass newProfilePictureUrl which is either the old URL or the new upload path.
+        // 3. Update database using db.updateUserProfile (using the Cloudinary URL)
         const affectedRows = await db.updateUserProfile(userId, phoneNumber, newProfilePictureUrl);
 
         if (affectedRows > 0) {
             return res.json({ 
                 message: 'Profile updated successfully!', 
-                profilePictureUrl: newProfilePictureUrl // Send back the URL for client update
+                profilePictureUrl: newProfilePictureUrl 
             });
         } else {
             return res.status(200).json({ message: 'No changes detected or user not found.' });
@@ -1629,11 +1638,9 @@ app.get('/api/products/:id', async (req, res) => {
 app.post('/api/products', isAdmin, upload.single('productImage'), async (req, res) => {
     try {
         const { name, price, category, description, stock } = req.body;
-        const imageFile = req.file; // Multer puts the file info here
+        const imageFile = req.file; 
         
-        // 🚨 CRITICAL SERVER-SIDE VALIDATION FIX 🚨
         if (!name || !price || !category || !stock || !imageFile) {
-            // Return a specific error that the client can display
             return res.status(400).json({ 
                 message: 'Missing one or more required fields: name, price, category, stock, or image file.' 
             });
@@ -1644,7 +1651,17 @@ app.post('/api/products', isAdmin, upload.single('productImage'), async (req, re
             return res.status(400).json({ message: 'Price and Stock must be valid numbers.' });
         }
         
-        const imagePath = `/images/products/${imageFile.filename}`;
+        // 🚨 CRITICAL CHANGE: Upload the image buffer to Cloudinary
+        const cloudinaryResult = await cloudinary.uploader.upload(
+            'data:image/jpeg;base64,' + imageFile.buffer.toString('base64'), // Convert buffer to base64
+            {
+                folder: 'lollys_products', // Organization folder
+                resource_type: "image",
+            }
+        );
+        
+        // Use the persistent secure URL from Cloudinary
+        const imagePath = cloudinaryResult.secure_url; 
         
         // Insert the product into the database (using 'stock' column name)
         const [result] = await pool.query(
