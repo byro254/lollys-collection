@@ -871,7 +871,8 @@
                         <img src="${product.imageUrl}" alt="${product.name}" class="product-image" onerror="this.onerror=null;this.src='https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys'">
                         <div class="product-details">
                             <p class="product-name">${product.name}</p>
-                        </div>
+                            <p class="product-price">${formattedPrice}</p>
+                            </div>
                     `;
                     
                     const openDetails = () => showProductDetails(product);
