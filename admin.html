@@ -2766,8 +2766,6 @@ async function handleWithdrawalSubmission(e) {
 // NEW REAL-TIME CHAT LOGIC (Rearranged to fix ReferenceError)
 // -----------------------------------------------------
 
-// Function: appendMessage
-// Place this updated function in your admin.html <script> section.
 
 /**
  * Appends a message to the chat window and scrolls to the bottom.
@@ -2804,7 +2802,7 @@ function appendMessage(sender, messageText) {
  * @param {number} customerId - The ID of the customer.
  */
 // Function: loadChatHistory
-// Place this updated function in your admin.html <script> section.
+
 
 async function loadChatHistory(customerId) {
     const chatMessages = document.getElementById('chat-messages');
@@ -2936,18 +2934,15 @@ function initializeAdminNotificationSocket() {
     
    async function sendBusyNotification(customerId) {
         try {
-            // Note: This API endpoint is assumed but not defined in server.js. 
-            // In a complete solution, this endpoint would trigger a system message to the customer.
-            // For now, we only log a warning.
-            console.warn(`Simulating sending busy notification to customer ${customerId}`);
+           
 
-            /*
+            
             await fetch(`${API_BASE_URL}/admin/chat/notify-busy`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ customerId })
             });
-            */
+            
         } catch (error) {
             console.error('Failed to send busy notification', error);
         }
