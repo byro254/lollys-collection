@@ -11,12 +11,12 @@
     <style>
         /* --- Dark Pink & White Color Theme --- */
         :root { 
-            --color-bg-light: #FFFFFF; /* Pure White background */
-            --color-bg-page: #F4F4F9; /* Light gray page background */
-            --color-pink-dark: #C2185B; /* A rich, dark pink for headings/primary actions */
-            --color-pink-accent: #E91E63; /* A brighter pink accent */
-            --color-text-dark: #333333; /* Dark gray for main text */
-            --color-text-subtle: #757575; /* Lighter gray for secondary text */
+            --color-bg-light: #FFFFFF;
+            --color-bg-page: #F4F4F9; 
+            --color-pink-dark: #C2185B; 
+            --color-pink-accent: #E91E63; 
+            --color-text-dark: #333333; 
+            --color-text-subtle: #757575; 
             --color-border-light: #F0F0F0; 
             --color-border-medium: #E0E0E0;
             --color-shadow: rgba(0,0,0,0.08);
@@ -71,7 +71,7 @@
             position: sticky; 
             top: 0; 
             z-index: 50; 
-            height: 60px; /* Fixed height for calculation */
+            height: 55px; /* Fixed height for calculation */
         }
         .logo { 
             font-family: var(--font-heading); 
@@ -285,7 +285,15 @@
             /* Center align name since it's the only text */
             text-align: center;
         } 
-        /* Price and category hidden in grid view via JS now */
+        /* 🚨 Updated Price Styling: Reduced Size */
+        .product-price { 
+            color: var(--color-pink-accent); 
+            font-size: 0.9rem; /* Reduced from 1.1rem */
+            font-weight: 700; 
+            margin-top: 2px;
+            display: block;
+            text-align: center;
+        }
 
         /* --- Modal Styling --- */
         .modal { 
@@ -866,13 +874,15 @@
                     card.dataset.productId = product.id; 
                     card.setAttribute('tabindex', '0');
                     
-                    // 🚨 CHANGED: Showing only Image and Name (Price/Category Removed from Grid)
+                    // 🚨 CHANGED: Added Price Back (Smaller Font)
+                    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES', }).format(product.price);
+
                     card.innerHTML = `
                         <img src="${product.imageUrl}" alt="${product.name}" class="product-image" onerror="this.onerror=null;this.src='https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys'">
                         <div class="product-details">
                             <p class="product-name">${product.name}</p>
                             <p class="product-price">${formattedPrice}</p>
-                            </div>
+                        </div>
                     `;
                     
                     const openDetails = () => showProductDetails(product);
