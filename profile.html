@@ -68,6 +68,16 @@
             box-shadow: 0 0 0 3px rgba(233, 30, 99, 0.2);
             outline: none;
         }
+        
+        /* Readonly styling */
+        .form-group input[readonly], .form-group input[readonly]:focus {
+            background-color: #f8f8f8;
+            color: var(--color-text-subtle);
+            border-color: #e0e0e0;
+            box-shadow: none;
+            cursor: default;
+        }
+
 
         /* --- GATING CSS (Causes blur and unresponsiveness) --- */
         .gated-content {
@@ -864,23 +874,26 @@
                             <input type="file" id="file-input" name="profilePicture" accept="image/*">
                         </div>
                         
-                        <!-- ... Name and Email (Read Only) ... -->
+                        <!-- ... Name and Email (Read Only - AUTOFILL) ... -->
                         <div class="form-group">
                             <label for="full-name">Full Name (Username):</label>
+                            <!-- AUTOFILL: Readonly set to prevent editing name/username -->
                             <input type="text" id="full-name" name="name" readonly required>
                         </div>
                         <div class="form-group">
                             <label for="email">Email Address:</label>
+                            <!-- AUTOFILL: Readonly set to prevent editing email -->
                             <input type="email" id="email" name="email" readonly required>
                         </div>
                         
-                        <!-- ... Phone Number (Editable) ... -->
+                        <!-- ... Phone Number (Editable - NOT AUTOFILL) ... -->
                         <div class="form-group">
                             <label for="phone-number">Phone Number:</label>
+                            <!-- NOT AUTOFILL: Editable for user to set/change -->
                             <input type="text" id="phone-number" name="phoneNumber" placeholder="e.g., 07XXXXXXXX">
                         </div>
 
-                        <!-- ... Status Display ... -->
+                        <!-- ... Status Display (DYNAMIC BADGE) ... -->
                         <div class="form-group">
                             <label>Account Status:</label>
                             <span id="account-status-display" class="status-display">
@@ -897,7 +910,7 @@
             </section>
 
             <section id="orders" class="profile-section">
-                <h2 class="section-header"><i class="fas fa-box-open"></i> My Orders</h2>
+                <h2 class="section-header"><i class="fas fa-list-alt"></i> My Orders</h2>
                 <div class="card">
                     <p style="color: var(--color-text-subtle);">View all your past and pending purchases.</p>
                     <div id="orders-list-container">
@@ -1221,7 +1234,7 @@
         async function checkProfileStatusAndLogout() {
             if (!isUserAuthenticated) return;
             
-            await refreshDynamicData(); // Refresh dynamic content
+            // Check status, but don't force data refresh on every single background check
             
             try {
                 const response = await fetch(PROFILE_API_URL);
@@ -1308,9 +1321,11 @@
         }
 
         function populateForm(data) {
-            // FIX: Use data.name which is now the username
+            // 🚨 CORE FIX: Autofill name and email fields and make them readonly
             document.getElementById('full-name').value = data.name || '';
             document.getElementById('email').value = data.email || '';
+            
+            // 🚨 CORE FIX: Only autofill phone number if the value exists in the database
             document.getElementById('phone-number').value = data.phoneNumber || '';
             
             // 🚨 FIX: Set the profile picture URL and the hidden field for persistence
@@ -1324,6 +1339,7 @@
             const statusDisplay = document.getElementById('account-status-display');
             const isActive = data.isActive === 1 || data.isActive === true;
             
+            // 🚨 CORE FIX: Dynamically display ACTIVE/DEACTIVATED badge
             statusDisplay.textContent = isActive ? 'ACTIVE' : 'DEACTIVATED';
             statusDisplay.className = `status-display status-${isActive ? 'active' : 'deactivated'}`;
             
@@ -1523,22 +1539,20 @@
          * @param {string} targetId Optional section ID to refresh immediately.
          */
         async function refreshDynamicData(targetId) {
-            const activeSectionId = targetId || document.querySelector('.profile-section.active')?.id;
             
-            // Wallet and History are often updated by background services, so refresh them every cycle
-            fetchAndRenderWallet();
-            
-            if (activeSectionId === 'orders' || activeSectionId === 'all') {
+            // Only refresh the active section data on tab switch for efficiency
+            if (targetId === 'wallet' || targetId === 'all') {
+                fetchAndRenderWallet();
+            }
+            if (targetId === 'orders' || targetId === 'all') {
                 fetchAndRenderOrders();
             }
-            if (activeSectionId === 'history' || activeSectionId === 'all') {
+            if (targetId === 'history' || targetId === 'all') {
                 fetchAndRenderPaymentHistory();
             }
-            if (activeSectionId === 'details' || activeSectionId === 'all') {
-                fetchProfileData();
-            }
-            if (activeSectionId === 'settings' || activeSectionId === 'all') {
-                fetchProfileData(); // Re-fetches user data including 2FA status
+            if (targetId === 'details' || targetId === 'all' || targetId === 'settings') {
+                // Settings tab also relies on this data fetch for 2FA status
+                await fetchProfileData();
             }
         }
 

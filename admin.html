@@ -312,11 +312,14 @@
             color: var(--color-bg-light);
             text-align: center;
         }
-        .status-badge.pending { background-color: var(--color-warning); color: var(--color-text-dark); }
+        .status-badge.pending { background-color: #ffc107; color: var(--color-text-dark); }
+        .status-badge.processing { background-color: #17a2b8; color: var(--color-bg-light); }
+        .status-badge.in-progress { background-color: #6c757d; color: var(--color-bg-light); }
         .status-badge.completed, .status-badge.delivered, .status-badge.active { 
             background-color: var(--color-success); 
             color: var(--color-bg-light); 
         }
+        .status-badge.cancelled { background-color: var(--color-danger); }
         .status-badge.shipped { background-color: var(--color-info); }
         .status-badge.deactivated { 
             background-color: var(--color-danger); 
@@ -365,6 +368,16 @@
             color: white; 
         }
 
+        /* Status Dropdown in Delivery Mgt */
+        .status-select {
+            padding: 6px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--color-border-medium);
+            background-color: var(--color-bg-light);
+            cursor: pointer;
+            min-width: 150px;
+            font-size: 0.9rem;
+        }
         
         /* --- Message Section Styles --- */
         .messages-grid {
@@ -628,7 +641,9 @@
     <ul>
         <li><a href="#dashboard" class="nav-link" data-target="dashboard"><i class="fas fa-tachometer-alt"></i> <span>Dashboard</span></a></li>
         <li><a href="#orders" class="nav-link active" data-target="orders"><i class="fas fa-shopping-cart"></i> <span>Orders</span></a></li>
-        <!-- 🚨 NEW MONEY TRACKER LINK -->
+        <!-- 🚨 NEW DELIVERY MANAGEMENT LINK -->
+        <li><a href="#delivery-management" class="nav-link" data-target="delivery-management"><i class="fas fa-box-open"></i> <span>Delivery Mgt</span></a></li>
+        <!-- END NEW LINK -->
         <li><a href="#finance" class="nav-link" data-target="finance"><i class="fas fa-money-bill-wave"></i> <span>Finance</span></a></li>
         <!-- END NEW LINK -->
         <li><a href="#products" class="nav-link" data-target="products"><i class="fas fa-boxes"></i> <span>Products</span></a></li>
@@ -740,6 +755,38 @@
             </div>
         </section>
         
+        <!-- 🚨 NEW DELIVERY MANAGEMENT SECTION -->
+        <section id="delivery-management" class="content-section">
+            <h2>
+                <i class="fas fa-box-open"></i> Delivery Management
+            </h2>
+            <div class="card">
+                <h3>Order Status Tracker</h3>
+                <p style="color: var(--color-text-subtle); margin-bottom: 20px;">
+                    Update the delivery status for customer inquiries. Note: 'Completed' is for final accounting, 'Delivered' is for physical delivery confirmation.
+                </p>
+                <div class="scrollable-table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Customer (ID)</th>
+                                <th>Email</th>
+                                <th>Total</th>
+                                <th>Order Date</th>
+                                <th>Current Status</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="delivery-management-tbody">
+                            <tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Loading delivery orders...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        <!-- END NEW DELIVERY MANAGEMENT SECTION -->
+
         <!-- 🚨 NEW FINANCE SECTION -->
         <section id="finance" class="content-section">
             <h2>
@@ -1019,7 +1066,7 @@
 
             <div class="detail-item" style="font-size: 1.2rem; margin-top: 20px; border-top: 2px solid var(--color-pink-accent);">
                 <span>Grand Total:</span> <strong id="modal-total-amount"></strong>
-            </div>
+           </div>
             
             <p id="modal-loading-message" style="text-align: center; color: var(--color-text-subtle); margin-top: 15px; display: none;"></p>
         </div>
@@ -1147,6 +1194,8 @@ const API_BASE_URL = '/api';
 // 🚨 NEW: Admin Wallet API
 const ADMIN_FINANCE_HISTORY_URL = `${API_BASE_URL}/admin/finance/history`;
 const ADMIN_EXPENDITURE_URL = `${API_BASE_URL}/admin/finance/expenditure`;
+// 🚨 NEW: Delivery Management API
+const ADMIN_DELIVERIES_URL = `${API_BASE_URL}/admin/deliveries`;
 
 // Chart instance reference
 let salesChartInstance = null;
@@ -1260,7 +1309,6 @@ async function autoRefreshFinance() {
     await fetchFinancialData();
 }
 
-
 /**
  * Manages the automatic refresh for a given section.
  * @param {string | null} sectionId - The ID of the section to manage ('dashboard', 'orders', or 'finance').
@@ -1293,6 +1341,9 @@ function manageAutoRefresh(sectionId) {
         // 🚨 NEW: Start finance interval
         autoRefreshFinance();
         window.financeIntervalId = setInterval(autoRefreshFinance, REFRESH_INTERVAL_MS);
+    } else if (sectionId === 'delivery-management') { // 🚨 NEW
+        // Delivery management is not set to auto-refresh frequently, just fetch on view
+        fetchAndRenderDeliveries();
     }
 }
 
@@ -1460,7 +1511,7 @@ async function showSection(targetId) {
     if (targetLink) targetLink.classList.add('active');
 
     // Manage Auto-Refresh based on active section
-    if (targetId === 'dashboard' || targetId === 'orders' || targetId === 'finance') {
+    if (targetId === 'dashboard' || targetId === 'orders' || targetId === 'finance' || targetId === 'delivery-management') {
         manageAutoRefresh(targetId);
     } else {
         manageAutoRefresh(null); // Stop refresh on other tabs
@@ -1472,6 +1523,7 @@ async function showSection(targetId) {
     if (targetId === 'messages') fetchMessages(); 
     if (targetId === 'chat') fetchAndRenderChatUsers(); // NEW
     if (targetId === 'finance') fetchFinancialData();
+    // 🚨 NEW: Delivery Management fetch is handled inside manageAutoRefresh(targetId)
 }
 
 // --- DOM Content Loaded Listener ---
@@ -1713,8 +1765,8 @@ async function fetchAndRenderOrders() {
          // Mock data if API call fails/is empty for demonstration
         const mockOrders = [
             { id: 101, customer_name: 'Bob Smith', delivery_location: 'New York', total: 55.99, created_at: '2025-07-20', status: 'Pending', items: [{ product_name: 'Ring', quantity: 1, unit_price: 55.99 }] },
-            { id: 102, customer_name: 'Eva Green', delivery_location: 'London', total: 120.00, created_at: '2025-07-18', status: 'Shipped', items: [{ product_name: 'Dress', quantity: 2, unit_price: 60.00 }] },
-            { id: 103, customer_name: 'Charlie Brown', delivery_location: 'Paris', total: 29.99, created_at: '2025-07-10', status: 'Completed', items: [{ product_name: 'Shoes', quantity: 1, unit_price: 29.99 }] },
+            { id: 102, customer_name: 'Eva Green', delivery_location: 'London', total: 120.00, created_at: '2025-07-18', status: 'In Progress', items: [{ product_name: 'Dress', quantity: 2, unit_price: 60.00 }] },
+            { id: 103, customer_name: 'Charlie Brown', delivery_location: 'Paris', total: 29.99, created_at: '2025-07-10', status: 'Delivered', items: [{ product_name: 'Shoes', quantity: 1, unit_price: 29.99 }] },
         ];
         
         const response = await fetch(`${API_BASE_URL}/orders`); 
@@ -1732,9 +1784,10 @@ async function fetchAndRenderOrders() {
         let completedCount = 0;
 
         orders.forEach(o => {
-            const statusText = o.status.toUpperCase();
+            const statusText = o.status.toUpperCase().replace(/_/g, ' ');
             const statusClass = statusText.toLowerCase().replace(/[^a-z]/g, '-');
-            const isPending = o.status === 'Pending' || o.status === 'Shipped';
+            // Treat Pending, Processing, In Progress as 'Pending' in the old table
+            const isPending = o.status === 'Pending' || o.status === 'Processing' || o.status === 'In Progress';
             
             const row = document.createElement('tr');
             row.dataset.orderId = o.id;
@@ -1746,8 +1799,8 @@ async function fetchAndRenderOrders() {
                 <td>${new Date(o.order_date || o.created_at).toLocaleDateString()}</td>
                 <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td>
-                    ${isPending ? 
-                        `<button class="action-btn btn-complete" onclick="markOrderAsCompleted(${o.id}, event)">Mark as Completed</button>` :
+                    ${(o.status !== 'Completed' && o.status !== 'Delivered' && o.status !== 'Cancelled') ? 
+                        `<button class="action-btn btn-complete" onclick="markOrderAsCompleted(${o.id}, event)">Mark as Delivered</button>` :
                         `<button class="table-action-btn btn-view" onclick="viewOrderDetails(${o.id}, event)"><i class="fas fa-eye"></i></button>`
                     }
                 </td>
@@ -1789,7 +1842,8 @@ window.markOrderAsCompleted = async function(orderId, event) {
     if (!(await checkAdminAuthentication())) return; 
     event.stopPropagation(); 
     
-    const isConfirmed = await showCustomConfirmation(`Are you sure you want to mark Order #${orderId} as COMPLETED?`);
+    // 🚨 MODIFIED: Change prompt to mark as Delivered (the last step before Completed/Accounting)
+    const isConfirmed = await showCustomConfirmation(`Are you sure you want to mark Order #${orderId} as DELIVERED? This will indicate physical completion.`);
     if (!isConfirmed) return;
     
     const button = event.target;
@@ -1797,27 +1851,32 @@ window.markOrderAsCompleted = async function(orderId, event) {
     button.textContent = '...';
 
     try {
+        // 🚨 MODIFIED: Send 'Delivered' status
         const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'Completed' })
+            body: JSON.stringify({ status: 'Delivered' })
         });
 
         if (response.ok) {
             fetchAndRenderOrders(); 
-            fetchDashboardStats(); 
-            showToast(`Order #${orderId} marked as completed.`, 'success');
+            // Don't fetch dashboard stats here, they only rely on 'Completed' status.
+            showToast(`Order #${orderId} marked as DELIVERED.`, 'success');
+            // Also refresh Delivery Mgt tab if it's active
+            if (document.getElementById('delivery-management').classList.contains('active')) {
+                 fetchAndRenderDeliveries();
+            }
         } else {
             const result = await response.json();
             showCustomMessage(`Failed to update order: ${result.message}`, 'error');
             button.disabled = false;
-            button.textContent = 'Mark as Completed';
+            button.textContent = 'Mark as Delivered';
         }
     } catch (error) {
         console.error('Update status error:', error);
         showCustomMessage('Network error while updating order status.', 'error');
         button.disabled = false;
-        button.textContent = 'Mark as Completed';
+        button.textContent = 'Mark as Delivered';
     }
 }
 
@@ -1902,6 +1961,10 @@ window.onclick = function(event) {
     if (event.target == document.getElementById('chat-modal')) {
         closeChatModal();
     }
+     // Also close withdrawal modal if clicked outside
+    if (event.target == document.getElementById('withdrawal-modal')) {
+        document.getElementById('withdrawal-modal').style.display = "none";
+    }
 }
 
 // --- PRODUCT MANAGEMENT (Existing logic maintained) ---
@@ -1982,12 +2045,16 @@ async function handleProductUpload(e) {
 
         if (response.ok) {
             uploadStatus.style.color = 'var(--color-success)';
+            // 🚨 COMPLETING MISSING LOGIC
             uploadStatus.textContent = `✅ Product "${formData.get('name')}" uploaded successfully!`;
             form.reset(); 
             await fetchAndRenderAdminProducts(); 
+            // END COMPLETION
         } else {
+             // 🚨 COMPLETING MISSING LOGIC
             uploadStatus.style.color = 'var(--color-danger)';
             uploadStatus.textContent = `❌ Upload failed: ${result.message || 'Server error.'}`;
+            // END COMPLETION
         }
     } catch (error) {
         console.error('Upload Error:', error);
@@ -2378,6 +2445,144 @@ async function sendReply(e) {
         sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Reply';
     }
 }
+
+// -----------------------------------------------------
+// 🚨 NEW DELIVERY MANAGEMENT LOGIC
+// -----------------------------------------------------
+const DELIVERY_STATUSES = ['Pending', 'Processing', 'In Progress', 'Delivered', 'Completed', 'Cancelled'];
+
+/**
+ * Renders the status dropdown for a given order.
+ * @param {number} orderId
+ * @param {string} currentStatus
+ */
+function renderStatusDropdown(orderId, currentStatus) {
+    const statusClass = currentStatus.toLowerCase().replace(/\s/g, '-');
+    let optionsHtml = '';
+    
+    DELIVERY_STATUSES.forEach(status => {
+        // Only allow status updates to 'Completed' from 'Delivered' or 'Pending' to any forward step
+        if (status === 'Completed' && currentStatus !== 'Delivered') return;
+        
+        const isSelected = status === currentStatus ? 'selected' : '';
+        // Skip 'Completed' and 'Cancelled' statuses if they are already applied and we are not forcing it to the next step
+        const isDisabled = (currentStatus === 'Completed' || currentStatus === 'Cancelled') && status !== currentStatus;
+
+        optionsHtml += `<option value="${status}" ${isSelected} ${isDisabled ? 'disabled' : ''}>${status.toUpperCase()}</option>`;
+    });
+
+    // Note: The `onchange` handler includes `event.target` to pass the select element itself.
+    return `
+        <select class="status-select" 
+                data-original-status="${currentStatus}"
+                onchange="handleStatusUpdate(${orderId}, this)">
+            ${optionsHtml}
+        </select>
+    `;
+}
+
+/**
+ * Handles the change event for the status dropdown, sending PUT request to update order status.
+ * @param {number} orderId 
+ * @param {HTMLSelectElement} selectElement 
+ */
+window.handleStatusUpdate = async function(orderId, selectElement) {
+    if (!(await checkAdminAuthentication())) return;
+    
+    const newStatus = selectElement.value;
+    const originalStatus = selectElement.dataset.originalStatus;
+    
+    if (newStatus === originalStatus) return; // No change
+
+    selectElement.disabled = true;
+    selectElement.style.opacity = 0.5;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
+        });
+        
+        if (response.ok) {
+            showToast(`Order #${orderId} status updated to ${newStatus}.`, 'success');
+            // Re-fetch and render the entire table to ensure consistency and badge updates
+            await fetchAndRenderDeliveries();
+            
+            // If the status was changed to 'Completed' (final stage for accounting), refresh dashboard stats too
+            if (newStatus === 'Completed') {
+                fetchDashboardStats(); 
+                fetchAndRenderOrders(); // Refresh order management tab too
+            }
+        } else {
+            const result = await response.json();
+            showToast(`Failed to update status: ${result.message || 'Server error.'}`, 'error');
+             // Revert UI change
+            selectElement.value = originalStatus;
+        }
+
+    } catch (error) {
+        console.error('Status update network error:', error);
+        showToast('Network error while updating status.', 'error');
+         // Revert UI change
+        selectElement.value = originalStatus;
+    }
+    selectElement.disabled = false;
+    selectElement.style.opacity = 1;
+};
+
+/**
+ * Fetches all orders intended for the delivery admin view and renders them.
+ */
+async function fetchAndRenderDeliveries() {
+    if (!(await checkAdminAuthentication())) return; 
+    
+    const tbody = document.getElementById('delivery-management-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-text-subtle);">Fetching live delivery data...</td></tr>';
+    
+    try {
+        const response = await fetch(ADMIN_DELIVERIES_URL);
+        const orders = await response.json();
+        
+        if (!response.ok) throw new Error(orders.message || 'Failed to fetch delivery data.');
+
+        tbody.innerHTML = '';
+        
+        if (orders.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="no-hover" style="text-align: center;">No orders requiring delivery management found.</td></tr>';
+            return;
+        }
+
+        orders.forEach(o => {
+            const formattedTotal = parseFloat(o.total).toFixed(2);
+            const statusClass = o.status.toLowerCase().replace(/\s/g, '-');
+            const row = document.createElement('tr');
+            
+            // Create a row element
+            row.innerHTML = `
+                <td>#${o.orderId}</td>
+                <td>${o.customerName} (ID: ${o.customerId})</td>
+                <td>${o.customerEmail}</td>
+                <td>KES ${formattedTotal}</td>
+                <td>${new Date(o.orderDate).toLocaleDateString()}</td>
+                <td>
+                   <span class="status-badge ${statusClass}">
+                      ${o.status.toUpperCase()}
+                   </span>
+                </td>
+                <td>
+                    ${renderStatusDropdown(o.orderId, o.status)}
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+    } catch (error) {
+        console.error('Error fetching delivery orders:', error);
+        tbody.innerHTML = `<tr><td colspan="7" class="no-hover" style="text-align: center; color: var(--color-danger);">❌ Failed to load delivery data. Check API endpoint.</td></tr>`;
+    }
+}
+
 
 // -----------------------------------------------------
 // FINANCE TRACKER LOGIC (UPDATED)

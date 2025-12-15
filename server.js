@@ -192,8 +192,8 @@ const smsServiceProvider = {
 
 const otpCache = {};
 // Import DB functions
-// 🚨 MODIFIED: findUserByUsername and runMigrations are imported
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserPasswordById, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername, getDeliveryInfo, saveDeliveryInfo } = require('./db'); 
+// 🚨 MODIFIED: getOrdersForDeliveryAdmin is now imported
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserPasswordById, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername, getDeliveryInfo, saveDeliveryInfo, getOrdersForDeliveryAdmin } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -1022,7 +1022,7 @@ app.get('/api/user/orders', isAuthenticated, async (req, res) => {
 });
 
 // ---------------------------------------------------------------- //
-// 🚨 NEW: Order Tracking API Route (Simulated)
+// 🚨 NEW: Order Tracking API Route (Uses actual status from DB)
 // ---------------------------------------------------------------- //
 app.get('/api/user/delivery-status/:orderId', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -1034,8 +1034,9 @@ app.get('/api/user/delivery-status/:orderId', isAuthenticated, async (req, res) 
     
     try {
         // 1. Check if the order exists and belongs to the user
+        // 🚨 MODIFIED: Fetch the actual status from the orders table
         const [orderCheck] = await pool.query(
-            'SELECT id, status, customer_name FROM orders WHERE id = ? AND user_id = ?',
+            'SELECT id, status, customer_name, created_at FROM orders WHERE id = ? AND user_id = ?',
             [orderId, userId]
         );
 
@@ -1043,29 +1044,31 @@ app.get('/api/user/delivery-status/:orderId', isAuthenticated, async (req, res) 
             return res.status(404).json({ message: 'Order not found or does not belong to your account.' });
         }
         
-        // 2. Determine a simulated delivery status based on the order ID modulo
-        const orderStatusMap = [
-            'Order Received', 
-            'Processing', 
-            'Delivering', 
-            'Delivered'
-        ];
+        const actualStatus = orderCheck[0].status;
         
-        // Use a persistent value (order ID) to give a consistent, simulated status
-        const orderNumber = parseInt(orderId);
-        let simulatedIndex = orderNumber % orderStatusMap.length;
+        // 2. Map the actual DB status to a progression stage for client display
+        const statusMap = {
+            'Pending': 'Order Received', // Initial status after purchase
+            'Processing': 'Processing', 
+            'In Progress': 'Delivering',
+            'Delivered': 'Delivered',
+            'Completed': 'Delivered', // Final accounting status
+            'Cancelled': 'Cancelled'
+        };
         
-        // If the database status is 'Completed', always simulate 'Delivered'
-        if (orderCheck[0].status === 'Completed') {
-            simulatedIndex = orderStatusMap.length - 1; 
+        const currentStatusDisplay = statusMap[actualStatus] || 'Order Status Unknown';
+        
+        let estimatedDelivery = '3-5 Business Days';
+        if (currentStatusDisplay === 'Delivered' || currentStatusDisplay === 'Cancelled') {
+            estimatedDelivery = 'N/A';
         }
 
         res.json({
             orderId: orderId,
-            currentStatus: orderStatusMap[simulatedIndex],
-            orderStatus: orderCheck[0].status, // Actual DB status (e.g., Pending, Completed)
+            currentStatus: currentStatusDisplay, // The current stage
+            orderStatus: actualStatus, // The literal DB status
             lastUpdate: new Date().toISOString(),
-            estimatedDelivery: (simulatedIndex < 3) ? '2-4 Business Days' : 'N/A'
+            estimatedDelivery: estimatedDelivery
         });
 
     } catch (error) {
@@ -1694,6 +1697,27 @@ app.put('/api/products/:id', isAdmin, upload.single('productImage'), async (req,
         res.status(500).json({ message: 'Failed to update product, please try again later.' });
     }
 });
+
+// ---------------------------------------------------------------- //
+// 🚨 NEW: Delivery Management API
+// ---------------------------------------------------------------- //
+/**
+ * GET /api/admin/deliveries
+ * Retrieves all orders with associated customer details for delivery management.
+ * Requires Admin privileges.
+ */
+app.get('/api/admin/deliveries', isAdmin, async (req, res) => {
+    try {
+        // Use the new function from db.js
+        const orders = await getOrdersForDeliveryAdmin(); 
+        res.json(orders);
+    } catch (error) {
+        console.error('API Error fetching delivery orders:', error);
+        res.status(500).json({ message: 'Failed to retrieve delivery orders.' });
+    }
+});
+
+
 app.get('/api/orders', isAdmin, async (req, res) => {
     const { status } = req.query; 
     let sql = 'SELECT id, customer_name, customer_email, delivery_location, total, status, created_at FROM orders';
@@ -1718,17 +1742,18 @@ app.get('/api/orders', isAdmin, async (req, res) => {
 });
 
 
-// server.js
+// server.js (Updated to validate the new delivery statuses)
 
 app.put('/api/orders/:orderId', isAdmin, async (req, res) => {
     const orderId = req.params.orderId;
     // 🚨 CRITICAL: Extract 'status' from the parsed body
     const { status } = req.body; 
 
-    // This is the validation that triggers a 400 if 'status' isn't found
-    if (!status) {
-        // If express.json() is missing or failed, req.body will be empty, and 'status' will be undefined.
-        return res.status(400).json({ message: 'Missing status field in request body (Ensure express.json() is used).' });
+    // 🚨 NEW: Define and Validate Allowed Statuses
+    const ALLOWED_STATUSES = ['Pending', 'Processing', 'In Progress', 'Delivered', 'Completed', 'Cancelled'];
+
+    if (!status || !ALLOWED_STATUSES.includes(status)) {
+        return res.status(400).json({ message: `Invalid or missing status field. Allowed statuses: ${ALLOWED_STATUSES.join(', ')}` });
     }
     
     // --- Execution ---
@@ -2770,8 +2795,7 @@ server.on('upgrade', (req, socket, head) => {
         let finalCustomerId = customerIdFromUrl;
         
         if (role === 'customer' && req.session && req.session.userId) {
-            // If the user is logged in, force the use of their DB ID as the session key.
-            // This prevents the logged-in user from creating a session keyed by 'anon-xyz'.
+           
             finalCustomerId = String(req.session.userId);
         }
         // ------------------------------------

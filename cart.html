@@ -77,6 +77,15 @@
             outline: none;
         }
         
+        /* 🚨 NEW: Readonly styling for autofilled fields */
+        .form-group input[readonly], .form-group input[readonly]:focus {
+            background-color: #f0f0f0; 
+            color: var(--color-text-subtle);
+            border-color: #e0e0e0;
+            box-shadow: none;
+            cursor: default;
+        }
+
         /* --- GATING CSS --- */
         .gated-content {
             transition: filter 0.3s, opacity 0.3s;
@@ -525,11 +534,25 @@
                         <div class="card checkout-form-section">
                             <h3>Delivery & Contact Info</h3>
                             <form id="checkout-form">
-                                <!-- Form groups from original cart.html -->
-                                <div class="form-group"><input type="text" id="delivery-name" placeholder="Your Full Name" required></div>
-                                <div class="form-group"><input type="text" id="delivery-location" placeholder="Delivery Location (City/Estate)" required></div>
-                                <div class="form-group"><input type="text" id="delivery-phone" placeholder="Phone Number (e.g., 07XXXXXXXX)" required pattern="[0-9]{9,12}"></div>
-                                <div class="form-group"><input type="email" id="delivery-email" placeholder="Email (for confirmation)" required></div>
+                                <!-- 🚨 FIX: Auto-filled and Read-Only fields -->
+                                <div class="form-group">
+                                    <label for="delivery-name">Customer Name:</label>
+                                    <input type="text" id="delivery-name" placeholder="Your Full Name" required readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="delivery-email">Email:</label>
+                                    <input type="email" id="delivery-email" placeholder="Email (for confirmation)" required readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label for="delivery-phone">Phone Number:</label>
+                                    <input type="text" id="delivery-phone" placeholder="Phone Number (e.g., 07XXXXXXXX)" required readonly pattern="[0-9]{9,12}">
+                                </div>
+                                
+                                <!-- Editable Delivery Location -->
+                                <div class="form-group">
+                                    <label for="delivery-location">Delivery Location (City/Estate):</label>
+                                    <input type="text" id="delivery-location" placeholder="e.g., Nairobi CBD, Kilimani" required>
+                                </div>
                                 
                                 <p class="notification-prompt"><i class="fas fa-bell"></i> Receive admin notification via:</p>
                                 <select id="notification-method" class="form-select" required>
@@ -801,7 +824,7 @@
             if (targetId === 'cart-payment') {
                 renderCart();
                 fetchWalletBalance();
-                initFormFields();
+                initFormFields(); // 🚨 REFRESH CONTACT FIELDS
             } else if (targetId === 'delivery-info') {
                 fetchDeliveryInfo();
             }
@@ -998,23 +1021,43 @@
             updatePaymentUI();
         }
         
+        // 🚨 FIX: Updated initFormFields to fetch user profile and pre-fill read-only fields
         async function initFormFields() {
             if (!isUserAuthenticated) return;
-            // The logic to pre-fill name/email/phone from profile data is fine for Cart & Payment.
+            
+            const nameInput = document.getElementById('delivery-name');
+            const emailInput = document.getElementById('delivery-email');
+            const phoneInput = document.getElementById('delivery-phone');
+            const locationInput = document.getElementById('delivery-location');
+
+            // Temporarily disable inputs while fetching
+            nameInput.disabled = true;
+            emailInput.disabled = true;
+            phoneInput.disabled = true;
+            locationInput.disabled = true;
+
             try {
                 const response = await fetch(USER_PROFILE_API_URL);
                 if (response.ok) {
                     const userData = await response.json(); 
-                    document.getElementById('delivery-name').value = userData.name || ''; 
-                    document.getElementById('delivery-email').value = userData.email || '';
-                    document.getElementById('delivery-phone').value = userData.phoneNumber || '';
                     
-                    document.getElementById('delivery-name').readOnly = true;
-                    document.getElementById('delivery-email').readOnly = true;
-                    document.getElementById('delivery-phone').readOnly = true;
+                    // Auto-fill Name, Email, Phone (Readonly)
+                    nameInput.value = userData.name || ''; 
+                    emailInput.value = userData.email || '';
+                    phoneInput.value = userData.phoneNumber || '';
+                    
+                    // The location field should remain editable for the current order
+                    locationInput.value = ''; // Clear for user input or set to last known location if desired
+                    
                 }
             } catch (e) {
                 console.error("Failed to pre-fill form fields:", e);
+                nameInput.value = 'N/A';
+                emailInput.value = 'N/A';
+                phoneInput.value = 'N/A';
+            } finally {
+                // Re-enable the one non-readonly field
+                locationInput.disabled = false;
             }
         }
         
@@ -1034,10 +1077,11 @@
             }
 
             const orderData = {
+                // Use values from the now read-only fields
                 name: document.getElementById('delivery-name').value, 
                 phone: document.getElementById('delivery-phone').value,
                 email: document.getElementById('delivery-email').value,
-                location: document.getElementById('delivery-location').value,
+                location: document.getElementById('delivery-location').value, // This is the only editable field
                 
                 items: cartData.items, 
                 subtotal: (cartData.total - SHIPPING_COST).toFixed(2),
@@ -1045,6 +1089,12 @@
                 total: cartData.total.toFixed(2),
                 notificationMethod: document.getElementById('notification-method').value
             };
+            
+            // Final check on required (non-location) fields, which should be autofilled
+            if (!orderData.name || !orderData.email || !orderData.phone) {
+                 showMessage('order-message', 'Missing required user details (Name, Email, Phone). Please update your Profile first.', 'error');
+                 return;
+            }
             
             showMessage('order-message', 'Processing your order...', 'info');
             orderBtn.disabled = true;
@@ -1069,8 +1119,8 @@
                         window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${whatsappMessage}`, '_blank');
                     }
                     
-                    this.reset();
-                    initFormFields();
+                    // Clear only the editable location field
+                    document.getElementById('delivery-location').value = ''; 
                 } else {
                     showMessage('order-message', `Order failed: ${result.message || 'Server error. Please try again.'}`, 'error');
                 }

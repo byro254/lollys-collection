@@ -272,6 +272,33 @@ async function findUserOrders(userId) {
 
     return ordersWithItems;
 }
+
+/**
+ * 🚨 NEW: Fetches all orders with customer details for the Delivery Admin view.
+ * @returns {Promise<Array<object>>} List of order objects with customer details.
+ */
+async function getOrdersForDeliveryAdmin() {
+    try {
+        const [rows] = await pool.execute(`
+            SELECT 
+                o.id AS orderId,
+                o.user_id AS customerId,
+                o.customer_name AS customerName,
+                o.total,
+                o.status,
+                o.created_at AS orderDate,
+                u.email AS customerEmail
+            FROM orders o
+            JOIN users u ON o.user_id = u.id
+            ORDER BY o.created_at DESC;
+        `);
+        return rows;
+    } catch (error) {
+        console.error('Database error fetching orders for delivery admin:', error);
+        throw error;
+    }
+}
+
 /**
  * Retrieves a user object by their phone number.
  * This is crucial for OTP-based password reset lookup.
@@ -998,6 +1025,8 @@ module.exports = {
     findUserByPhone, 
     // 🚨 NEW: Find by Username
     findUserByUsername,
+    // 🚨 NEW Delivery Admin function
+    getOrdersForDeliveryAdmin, // 🚨 NEW
    
     
     // 🚨 NEW Wallet & Transaction functions
