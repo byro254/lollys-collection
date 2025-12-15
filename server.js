@@ -193,7 +193,7 @@ const smsServiceProvider = {
 const otpCache = {};
 // Import DB functions
 // 🚨 MODIFIED: findUserByUsername and runMigrations are imported
-const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername } = require('./db'); 
+const { pool, findUserById, findAllUsers, saveContactMessage, findUserByPhone, getAllContactMessages, updateUserProfile, findUserOrders, findUserByEmail, updatePassword, updateUserPasswordById, updateUserStatus, saveChatMessage, getChatHistory, getWalletByUserId, performWalletTransaction, findPaymentHistory, logBusinessExpenditure,  getBusinessFinancialHistory, completeMpesaDeposit, findTransactionByRef, processManualMpesaDeposit, runMigrations, update2faStatus, findUserByUsername } = require('./db'); 
 
 const passwordResetCache = {}; 
 
@@ -414,6 +414,7 @@ app.get('/about', (req, res) => { res.sendFile(path.join(__dirname, 'about.html'
 
 app.get('/contact', (req, res) => { res.sendFile(path.join(__dirname, 'contact.html')); });
 
+app.get('/profile', isAuthenticated, (req, res) => { res.sendFile(path.join(__dirname, 'profile.html')); }); // 🚨 NEW: Profile route added to server
 
 // =========================================================
 //                   AUTHENTICATION API ROUTES (MODIFIED)
@@ -768,6 +769,52 @@ app.post('/api/user/2fa/disable', isAuthenticated, async (req, res) => {
         res.status(500).json({ message: 'An internal server error occurred.' });
     }
 });
+
+// ---------------------------------------------------------------- //
+// 🚨 NEW: CHANGE PASSWORD API ROUTE
+// ---------------------------------------------------------------- //
+app.post('/api/user/change-password', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword || newPassword.length < 8) {
+        return res.status(400).json({ message: 'Old and New password are required. New password must be at least 8 characters.' });
+    }
+
+    try {
+        // 1. Fetch user data (including current password hash)
+        const user = await db.findUserById(userId);
+
+        if (!user || !user.password_hash) {
+            return res.status(404).json({ message: 'User account not found.' });
+        }
+
+        // 2. Verify Old Password
+        const match = await bcrypt.compare(oldPassword, user.password_hash);
+        
+        if (!match) {
+            return res.status(401).json({ message: 'Invalid current password.' });
+        }
+
+        // 3. Hash New Password
+        const newPasswordHash = await bcrypt.hash(newPassword, saltRounds);
+
+        // 4. Update password in the database
+        const success = await db.updateUserPasswordById(userId, newPasswordHash);
+
+        if (success) {
+            // Optional: Destroy session to force re-login with new password
+            // req.session.destroy(); 
+            return res.json({ message: 'Password updated successfully. Please log in again if your session expires.' });
+        } else {
+            return res.status(500).json({ message: 'Failed to update password in database.' });
+        }
+
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ message: 'An internal server error occurred during password change.' });
+    }
+});
 //-----------------------------------------------------------
 // --- AUTH STATUS API ENDPOINTS (Updated) ---
 // ------------------------------------------------------------------
@@ -833,6 +880,8 @@ app.get('/api/auth/check', isAdmin, (req, res) => {
 // --- USER PROFILE API ENDPOINTS (For profile.html) ---
 // ------------------------------------------------------------------
 
+const DEFAULT_PROFILE_PIC_SERVER = '/images/profiles/default_profile.png';
+
 /**
  * GET /api/user/profile
  * Retrieves full user profile information, including new fields.
@@ -844,20 +893,23 @@ app.get('/api/user/profile', isAuthenticated, async (req, res) => {
         const user = await db.findUserById(userId);
 
         if (user) {
-             // 🚨 UPDATED: Include delivery fields in the response.
-             // Delivery fields are country, county, street_address, postal_code
-            const profileData = {
-                username: user.username,
+             // 🚨 FIX: Ensure a fallback is always set for the profile picture
+             const profilePictureUrl = user.profilePictureUrl && user.profilePictureUrl !== 'null' 
+                                      ? user.profilePictureUrl 
+                                      : DEFAULT_PROFILE_PIC_SERVER;
+                                      
+             const profileData = {
+                name: user.name, // The username field is mapped to 'name' in db.findUserById
                 email: user.email,
                 id: user.id, // National ID
-                profilePictureUrl: user.profile_picture_url || '/images/default-avatar.png',
-                is2faEnabled: user.is_2fa_enabled,
+                // 🚨 FIXED: Use the determined profilePictureUrl
+                profilePictureUrl: profilePictureUrl, 
+                phoneNumber: user.phoneNumber,
+                isActive: user.isActive,
+                is2faEnabled: user.is2faEnabled,
                 
-                // Delivery Info Fields
-                country: user.country || '',
-                county: user.county || '',
-                streetAddress: user.street_address || '',
-                postalCode: user.postal_code || '',
+                // Delivery Info Fields (assuming these are attached by findUserById or fetched separately if needed)
+                // For simplicity, relying on data structure from existing findUserById if extended
             };
             return res.json(profileData);
         } else {

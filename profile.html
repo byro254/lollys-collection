@@ -400,6 +400,7 @@
             object-fit: cover;
             border-radius: 50%;
             border: 4px solid var(--color-pink-accent);
+            /* 🚨 FIX: Using placeholder URL in HTML will fail here, relies on JS */
             image-rendering: -webkit-optimize-contrast; 
             image-rendering: crisp-edges; 
         }
@@ -613,6 +614,26 @@
             color: var(--color-text-dark);
             display: block;
             margin-top: 5px;
+        }
+        
+        /* Message Styling for forms */
+        .msg-success {
+            background-color: #e8f5e9; 
+            color: var(--color-success);
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
+        }
+        .msg-error {
+            background-color: #ffebee; 
+            color: var(--color-danger);
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 15px;
+            text-align: center;
+            font-weight: 500;
         }
     </style>
 </head>
@@ -961,8 +982,33 @@
             <!-- 🚨 NEW SETTINGS SECTION -->
             <section id="settings" class="profile-section">
                 <h2 class="section-header"><i class="fas fa-cog"></i> User Settings</h2>
+                
+                <!-- Change Password Card (NEW) -->
                 <div class="card">
-                    <h3 style="border-bottom: 1px solid var(--color-border-medium); margin-bottom: 20px; padding-bottom: 10px;"><i class="fas fa-lock"></i> Security & Two-Factor Authentication (2FA)</h3>
+                    <h3 style="border-bottom: 1px solid var(--color-border-medium); margin-bottom: 20px; padding-bottom: 10px;"><i class="fas fa-key"></i> Change Password</h3>
+                    <form id="change-password-form">
+                        <div class="form-group">
+                            <label for="old-password">Current Password:</label>
+                            <input type="password" id="old-password" name="oldPassword" required minlength="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="new-password">New Password (Min 8 characters):</label>
+                            <input type="password" id="new-password" name="newPassword" required minlength="8">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm-new-password">Confirm New Password:</label>
+                            <input type="password" id="confirm-new-password" name="confirmNewPassword" required minlength="8">
+                        </div>
+                        <button type="submit" class="update-button" id="change-password-btn">
+                            <i class="fas fa-lock"></i> Update Password
+                        </button>
+                        <div id="password-message" style="display: none;"></div>
+                    </form>
+                </div>
+
+                <!-- 2FA Card (Existing) -->
+                <div class="card">
+                    <h3 style="border-bottom: 1px solid var(--color-border-medium); margin-bottom: 20px; padding-bottom: 10px;"><i class="fas fa-lock"></i> Two-Factor Authentication (2FA)</h3>
                     
                     <div id="security-status-container">
                         <p style="font-weight: 600; font-size: 1.1rem; margin-bottom: 15px;">
@@ -1025,10 +1071,12 @@
         const CARD_DEPOSIT_API_URL = '/api/wallet/deposit/card'; 
         const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; 
         
-        // 🚨 NEW 2FA API ENDPOINTS
+        // 🚨 NEW API ENDPOINTS
         const SETUP_2FA_URL = '/api/user/2fa/setup';
         const ENABLE_2FA_URL = '/api/user/2fa/enable';
         const DISABLE_2FA_URL = '/api/user/2fa/disable';
+        const CHANGE_PASSWORD_URL = '/api/user/change-password'; // 🚨 NEW
+
         
         // 🚨 NEW: M-Pesa Status Query Endpoint
         const MPESA_STATUS_QUERY_API_URL = '/api/wallet/deposit/status'; 
@@ -1039,6 +1087,7 @@
         const POLLING_INTERVAL_MS = 3000; // Check status every 3 seconds
         const MAX_POLLING_ATTEMPTS = 20; // Max 60 seconds of polling
         
+        // 🚨 FIX: Corrected default profile picture URL
         const DEFAULT_PROFILE_PIC = '/images/profiles/default_profile.png';
         
         let isUserAuthenticated = false; 
@@ -1067,15 +1116,22 @@
         }
 
         /**
-         * Displays a temporary message in a specific modal's message area.
+         * Displays a temporary message in a specific message area.
+         * @param {string} id The message element ID (e.g., 'profile-message' or 'password-message').
+         * @param {string} message The text content.
+         * @param {string} type 'success' or 'error'.
          */
-        function showModalMessage(id, message, type) {
+        function showMessage(id, message, type) {
             const messageEl = document.getElementById(id);
             messageEl.textContent = message;
-            // Use existing CSS for styling messages
-            messageEl.className = type === 'success' ? 'message success' : 'message error';
+            messageEl.className = `msg-${type}`;
             messageEl.style.display = 'block';
             setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
+        }
+        
+        // Alias for backwards compatibility on 'profile-message'
+        function showProfileMessage(message, type) {
+            showMessage('profile-message', message, type);
         }
 
         function redirectToAuthPage() {
@@ -1233,19 +1289,22 @@
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
-                    showMessage('Failed to load profile data.', 'error');
+                    showProfileMessage('Failed to load profile data.', 'error');
                 }
             } catch (error) {
                 console.error('Fetch profile error:', error);
-                showMessage('Network error loading profile.', 'error');
+                showProfileMessage('Network error loading profile.', 'error');
             }
         }
 
         // 🚨 FIX: Profile picture always uses database URL
         function renderProfilePicture(imageUrl, elementId = 'current-profile-picture') {
             const imgElement = document.getElementById(elementId);
-            const finalUrl = imageUrl && imageUrl.trim() !== '' && imageUrl !== 'null' ? imageUrl : DEFAULT_PROFILE_PIC;
+            // 🚨 FIX: Use the client-side constant for default
+            const finalUrl = imageUrl && imageUrl.trim() !== '' && imageUrl !== 'null' ? imageUrl : DEFAULT_PROFILE_PIC; 
             imgElement.src = finalUrl;
+            // Also update the onerror to point to the correct path
+            imgElement.onerror = `this.onerror=null;this.src='${DEFAULT_PROFILE_PIC}';`;
         }
 
         function populateForm(data) {
@@ -1255,7 +1314,7 @@
             document.getElementById('phone-number').value = data.phoneNumber || '';
             
             // 🚨 FIX: Set the profile picture URL and the hidden field for persistence
-            document.getElementById('current-pic-url').value = data.profilePictureUrl || '';
+            document.getElementById('current-pic-url').value = data.profilePictureUrl || DEFAULT_PROFILE_PIC;
             renderProfilePicture(data.profilePictureUrl);
             
             populateStatusOnly(data);
@@ -1546,7 +1605,7 @@
                 
             } else {
                 // Show failure message in the STK modal
-                showModalMessage('mpesa-deposit-message', `Transaction ${result.status.toUpperCase()}: ${result.message}`, 'error');
+                showMessage('mpesa-deposit-message', `Transaction ${result.status.toUpperCase()}: ${result.message}`, 'error');
                 document.getElementById('mpesa-stk-modal').style.display = 'flex';
             }
         }
@@ -1556,7 +1615,7 @@
             closeModal('deposit-processing-modal');
             
             // Notify the user that tracking was cancelled
-            showModalMessage('mpesa-deposit-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
+            showMessage('mpesa-deposit-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
             document.getElementById('mpesa-stk-modal').style.display = 'flex';
         }
 
@@ -1576,16 +1635,16 @@
             if (method === 'M-Pesa STK') {
                 fetchAndRenderWallet(); // To get the latest account number
                 document.getElementById('mpesa-stk-modal').style.display = 'flex';
-                document.getElementById('mpesa-deposit-message').style.display = 'none';
+                showMessage('mpesa-deposit-message', '', 'info');
                 
             } else if (method === 'M-Pesa Manual') {
                 fetchAndRenderWallet(); 
                 document.getElementById('mpesa-manual-modal').style.display = 'flex';
-                document.getElementById('mpesa-manual-message').style.display = 'none';
+                showMessage('mpesa-manual-message', '', 'info');
                 
             } else if (method === 'Card') {
                 document.getElementById('card-deposit-modal').style.display = 'flex';
-                document.getElementById('card-deposit-message').style.display = 'none';
+                showMessage('card-deposit-message', '', 'info');
             }
         }
         
@@ -1624,11 +1683,11 @@
                 } else {
                     // Failure (API side error): Stay on deposit modal, show error
                     const result = await response.json();
-                    showModalMessage('mpesa-deposit-message', result.message || 'Deposit failed. Check details.', 'error');
+                    showMessage('mpesa-deposit-message', result.message || 'Deposit failed. Check details.', 'error');
                 }
             } catch (error) {
                 console.error('M-Pesa deposit error:', error);
-                showModalMessage('mpesa-deposit-message', 'Network error during STK Push request.', 'error');
+                showMessage('mpesa-deposit-message', 'Network error during STK Push request.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalBtnHtml;
@@ -1668,11 +1727,11 @@
                 } else {
                     // Failure: Stay on manual modal, show error
                     const result = await response.json();
-                    showModalMessage('mpesa-manual-message', result.message || 'Verification failed.', 'error');
+                    showMessage('mpesa-manual-message', result.message || 'Verification failed.', 'error');
                 }
             } catch (error) {
                 console.error('Manual verification error:', error);
-                showModalMessage('mpesa-manual-message', 'Network error during payment verification.', 'error');
+                showMessage('mpesa-manual-message', 'Network error during payment verification.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalBtnHtml;
@@ -1705,7 +1764,7 @@
                 if (response.ok) {
                     const result = await response.json();
                     
-                    showModalMessage('card-deposit-message', 'Card payment successful! Funds are now available.', 'success');
+                    showMessage('card-deposit-message', 'Card payment successful! Funds are now available.', 'success');
                     
                     // Show success modal instead of just hiding
                     closeModal('card-deposit-modal');
@@ -1716,11 +1775,11 @@
                     this.reset();
                 } else {
                     const result = await response.json();
-                    showModalMessage('card-deposit-message', result.message || 'Card payment failed. Please check details.', 'error');
+                    showMessage('card-deposit-message', result.message || 'Card payment failed. Please check details.', 'error');
                 }
             } catch (error) {
                 console.error('Card deposit error:', error);
-                showModalMessage('card-deposit-message', 'Network error during card payment.', 'error');
+                showMessage('card-deposit-message', 'Network error during card payment.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = originalBtnHtml;
@@ -1758,7 +1817,7 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    showMessage(result.message || 'Profile updated!', 'success');
+                    showProfileMessage(result.message || 'Profile updated!', 'success');
                     
                     if (result.profilePictureUrl) {
                         // Update UI with new or existing URL
@@ -1769,24 +1828,66 @@
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
-                    showMessage(result.message || 'Update failed.', 'error');
+                    showProfileMessage(result.message || 'Update failed.', 'error');
                 }
             } catch (error) {
                 console.error('Update network error:', error);
-                showMessage('Network error during update.', 'error');
+                showProfileMessage('Network error during update.', 'error');
             } finally {
                 updateBtn.disabled = false;
                 updateBtn.innerHTML = '<i class="fas fa-save"></i> Save Changes';
             }
         });
         
-        function showMessage(message, type) {
-            const messageEl = document.getElementById('profile-message');
-            messageEl.textContent = message;
-            messageEl.className = `msg-${type}`;
-            messageEl.style.display = 'block';
-            setTimeout(() => { messageEl.style.display = 'none'; }, 5000);
-        }
+        // --- Change Password Handler (NEW) ---
+        document.getElementById('change-password-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            if (!isUserAuthenticated) return;
+
+            const oldPassword = document.getElementById('old-password').value;
+            const newPassword = document.getElementById('new-password').value;
+            const confirmNewPassword = document.getElementById('confirm-new-password').value;
+            const btn = document.getElementById('change-password-btn');
+
+            showMessage('password-message', '', 'info'); // Clear previous message
+            
+            if (newPassword !== confirmNewPassword) {
+                showMessage('password-message', 'New password and confirmation do not match.', 'error');
+                return;
+            }
+            if (newPassword.length < 8) {
+                 showMessage('password-message', 'New password must be at least 8 characters long.', 'error');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+
+            try {
+                const response = await fetch(CHANGE_PASSWORD_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ oldPassword, newPassword })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage('password-message', result.message || 'Password updated successfully!', 'success');
+                    this.reset(); // Clear form fields
+                } else if (response.status === 401) {
+                    showMessage('password-message', result.message || 'Invalid current password.', 'error');
+                } else {
+                    showMessage('password-message', result.message || 'Password update failed.', 'error');
+                }
+            } catch (error) {
+                console.error('Change password network error:', error);
+                showMessage('password-message', 'Network error during password change.', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-lock"></i> Update Password';
+            }
+        });
 
         // -----------------------------------------------------
         // 🚨 NEW: 2FA CONTROL LOGIC
@@ -1795,11 +1896,11 @@
          // Handle "Begin Setup" button click
         document.getElementById('2fa-setup-btn').addEventListener('click', async () => {
             // Reset the message area
-            showMessage('', 'info');
+            showMessage('profile-message', '', 'info');
             
             if (!currentUserData.name) {
                 // 🚨 FIX: Use the 'name' (username) as the identity in the QR code
-                showMessage('Please ensure your account has a username/name set before setting up 2FA.', 'error');
+                showMessage('profile-message', 'Please ensure your account has a username/name set before setting up 2FA.', 'error');
                 return;
             }
 
@@ -1838,7 +1939,7 @@
 
             } catch (error) {
                 console.error('2FA setup error:', error);
-                showMessage('Error during 2FA setup initiation. Check browser console.', 'error');
+                showMessage('profile-message', 'Error during 2FA setup initiation. Check browser console.', 'error');
                 // Hide on error
                 document.getElementById('setup-qr-area').style.display = 'none';
             } finally {
@@ -1855,7 +1956,7 @@
             const isCurrentlyEnabled = currentUserData.is2faEnabled;
             
             if (!code || code.length !== 6 || isNaN(code)) {
-                showMessage('Please enter the 6-digit numerical code.', 'error');
+                showMessage('profile-message', 'Please enter the 6-digit numerical code.', 'error');
                 return;
             }
 
@@ -1865,7 +1966,7 @@
                 // ENABLE attempt
                 const secret = current2faSecret || document.getElementById('2fa-current-secret').value;
                 if (!secret) {
-                    showMessage('Setup process not complete. Click "Begin Setup" first.', 'error');
+                    showMessage('profile-message', 'Setup process not complete. Click "Begin Setup" first.', 'error');
                     return;
                 }
                 url = ENABLE_2FA_URL;
@@ -1891,15 +1992,15 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    showMessage(result.message, 'success');
+                    showMessage('profile-message', result.message, 'success');
                     // Re-fetch user data to update the global state and UI
                     await fetchProfileData();
                 } else {
-                    showMessage(result.message || 'Verification failed. Try again.', 'error');
+                    showMessage('profile-message', result.message || 'Verification failed. Try again.', 'error');
                 }
             } catch (error) {
                 console.error('2FA enable/disable error:', error);
-                showMessage('Network error during security update.', 'error');
+                showMessage('profile-message', 'Network error during security update.', 'error');
             } finally {
                 submitBtn.disabled = false;
                 if (!isCurrentlyEnabled) {

@@ -187,7 +187,7 @@ async function createUser({ id, username, email, passwordHash }) {
 }
 
 /**
- * Updates a user's password hash by their email address.
+ * Updates a user's password hash by their email address (for password reset flow).
  * @param {string} email - The user's email.
  * @param {string} hashedPassword - The new hashed password.
  * @returns {Promise<boolean>} - True if successful, false otherwise.
@@ -201,6 +201,25 @@ async function updatePassword(email, hashedPassword) {
         return result.affectedRows > 0;
     } catch (error) {
         console.error('Database error updating password:', error);
+        throw error;
+    }
+}
+
+/**
+ * 🚨 NEW: Updates a user's password hash by their user ID (National ID) (for profile settings).
+ * @param {string} userId - The user's National ID.
+ * @param {string} hashedPassword - The new hashed password.
+ * @returns {Promise<boolean>} - True if successful, false otherwise.
+ */
+async function updateUserPasswordById(userId, hashedPassword) {
+    try {
+        const [result] = await pool.execute(
+            'UPDATE users SET password_hash = ? WHERE id = ?',
+            [hashedPassword, userId]
+        );
+        return result.affectedRows > 0;
+    } catch (error) {
+        console.error('Database error updating password by ID:', error);
         throw error;
     }
 }
@@ -969,7 +988,8 @@ module.exports = {
     saveContactMessage,
     getAllContactMessages,
     updateProduct,
-    updatePassword,
+    updatePassword, // for forgot password via email
+    updateUserPasswordById, // 🚨 NEW: for change password in profile
     findUserByEmail, 
     findUserOrders, 
     updateUserProfile, 

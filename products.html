@@ -51,8 +51,8 @@
         #close-modal:focus,
         .add-to-cart-btn:focus,
         .quantity-controls input:focus,
-        .size-controls select:focus, /* NEW: Size Selector Focus */
-        .size-controls input[type="number"]:focus, /* 🚨 NEW: Numeric Size Input Focus */
+        .size-controls select:focus, 
+        .size-controls input[type="number"]:focus, /* 🚨 Numeric Size Input Focus */
         #search-input:focus {
             outline: 2px solid var(--color-pink-accent); 
             outline-offset: 3px;
@@ -332,7 +332,12 @@
             font-weight: 500;
         }
         
-        .quantity-controls input, .size-controls select, .size-controls input[type="number"] { /* 🚨 ADDED numeric input to this style rule */
+        .size-controls input[type="number"],
+        .size-controls select {
+            margin-bottom: 10px; /* Add space between size inputs */
+        }
+
+        .quantity-controls input, .size-controls select, .size-controls input[type="number"] { /* ADDED numeric input to this style rule */
             width: 100%; 
             padding: 8px; 
             border: 1px solid var(--color-border-medium); 
@@ -629,7 +634,7 @@
                     body: JSON.stringify({
                         productId: product.id,
                         quantity: quantityToAdd,
-                        size: size // 🚨 NEW: Send size in body
+                        size: size // Send size in body
                     })
                 });
 
@@ -671,16 +676,7 @@
                 }
                 
                 allProducts = rawProducts.map(product => {
-                    // Determine if size selector is needed and what type (select or numeric)
-                    let sizeType = null;
-                    const categoryLower = product.category ? product.category.toLowerCase() : '';
-                    
-                    if (categoryLower === 'shoes') { // 🚨 Logic to set numeric size for Shoes
-                        sizeType = 'numeric';
-                    } else if (categoryLower !== 'electronic' && categoryLower !== 'tools' && categoryLower !== 'uncategorized' && categoryLower !== '') {
-                        sizeType = 'select'; // Default S/M/L select for clothing, accessories, etc.
-                    }
-
+                    // 🚨 REMOVED: size_type calculation logic
                     return {
                         id: product.id,
                         name: product.name,
@@ -689,7 +685,6 @@
                         description: product.description,
                         imageUrl: product.image_url || 'https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys',
                         stock: product.stock_quantity !== undefined ? parseInt(product.stock_quantity) : (product.stock !== undefined ? parseInt(product.stock) : 10),
-                        size_type: sizeType // 🚨 NEW: Size type property
                     }
                 });
 
@@ -767,7 +762,7 @@
             }
         }
 
-        // --- 5. Show Product Details in Modal (remains unchanged) ---
+        // --- 5. Show Product Details in Modal ---
         function showProductDetails(product) {
             const productModal = document.getElementById('product-modal');
             const modalBody = document.getElementById('modal-body');
@@ -782,40 +777,33 @@
                 `<span class="stock-in" style="color: var(--color-success);">In Stock (${stock} left)</span>` : 
                 `<span class="stock-out" style="color: var(--color-danger);">Out of Stock</span>`;
             
-            // 🚨 NEW: Logic to check if size selector should be shown
-            const needsSize = product.size_type !== null;
+            // 🚨 MODIFIED: Now includes BOTH numeric input and select dropdown
+            const sizeControlHTML = `
+                <div class="size-controls">
+                    <!-- Numeric Input -->
+                    <label for="size-numeric-${product.id}">Numeric Size (e.g., Shoe Size):</label>
+                    <input 
+                        type="number" 
+                        id="size-numeric-${product.id}" 
+                        placeholder="Enter Shoe/Numeric Size" 
+                        min="1" 
+                        step="0.5" 
+                    >
+                    
+                    <p style="margin: 10px 0 5px; font-weight: 500; color: var(--color-pink-dark);">OR</p>
 
-            let sizeControlHTML = '';
+                    <!-- Select Dropdown -->
+                    <label for="size-select-${product.id}">Apparel Size:</label>
+                    <select id="size-select-${product.id}">
+                        <option value="">Select Clothing Size</option>
+                        <option value="S">Small (S)</option>
+                        <option value="M">Medium (M)</option>
+                        <option value="L">Large (L)</option>
+                        <option value="XL">Extra Large (XL)</option>
+                    </select>
+                </div>
+            `;
             
-            if (product.size_type === 'select') {
-                sizeControlHTML = `
-                    <div class="size-controls">
-                        <label for="size-select-${product.id}">Size:</label>
-                        <select id="size-select-${product.id}" required>
-                            <option value="">Select Size</option>
-                            <option value="S">Small (S)</option>
-                            <option value="M">Medium (M)</option>
-                            <option value="L">Large (L)</option>
-                            <option value="XL">Extra Large (XL)</option>
-                        </select>
-                    </div>
-                `;
-            } else if (product.size_type === 'numeric') { // 🚨 RENDER NUMERIC INPUT
-                sizeControlHTML = `
-                    <div class="size-controls">
-                        <label for="size-numeric-${product.id}">Size (Number):</label>
-                        <input 
-                            type="number" 
-                            id="size-numeric-${product.id}" 
-                            placeholder="e.g. 42" 
-                            min="1" 
-                            step="1" 
-                            required
-                        >
-                    </div>
-                `;
-            }
-
             modalBody.innerHTML = `
                 <div class="modal-image-col">
                     <img src="${product.imageUrl}" alt="${product.name}" class="product-image-modal" onerror="this.onerror=null;this.src='https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys'">
@@ -834,8 +822,10 @@
                     
                     ${stock > 0 ? `
                         <div class="controls-group">
+                            <!-- 🚨 COMBINED SIZE CONTROLS -->
                             ${sizeControlHTML}
                             
+                            <!-- Existing Quantity Controls -->
                             <div class="quantity-controls">
                                 <label for="quantity-${product.id}">Quantity:</label>
                                 <input 
@@ -866,25 +856,30 @@
             if (stock > 0) {
                 document.getElementById(`add-to-cart-${product.id}`).addEventListener('click', () => {
                     const quantity = document.getElementById(`quantity-${product.id}`).value;
-                    let size = '';
                     
-                    if (product.size_type === 'select') {
-                        const sizeSelector = document.getElementById(`size-select-${product.id}`);
-                        size = sizeSelector ? sizeSelector.value : '';
-                        if (!size) {
-                             showCartAlert('Please select a size.', true);
-                             return;
-                        }
-                    } else if (product.size_type === 'numeric') { // 🚨 GET VALUE FROM NUMERIC INPUT
-                        const sizeInput = document.getElementById(`size-numeric-${product.id}`);
-                        size = sizeInput ? sizeInput.value.trim() : '';
-                        if (!size || isNaN(size) || parseInt(size) <= 0) {
-                            showCartAlert('Please enter a valid size.', true);
-                            return;
-                        }
+                    // 🚨 NEW VALIDATION LOGIC: Check for one valid size selection
+                    const sizeNumeric = document.getElementById(`size-numeric-${product.id}`).value.trim();
+                    const sizeSelect = document.getElementById(`size-select-${product.id}`).value.trim();
+
+                    let size = '';
+                    // Check if numeric input is used and valid
+                    let numericValid = sizeNumeric && !isNaN(parseFloat(sizeNumeric)) && parseFloat(sizeNumeric) > 0;
+                    // Check if select dropdown has a selected value (not the default empty option)
+                    let selectValid = sizeSelect !== '';
+
+                    if (numericValid && selectValid) {
+                        showCartAlert('Please select only ONE size option (either numeric OR apparel).', true);
+                        return;
+                    } else if (numericValid) {
+                        size = sizeNumeric;
+                    } else if (selectValid) {
+                        size = sizeSelect;
+                    } else {
+                        showCartAlert('Please enter a size (numeric) OR select an apparel size.', true);
+                        return;
                     }
                     
-                    // Pass the size to addToCart
+                    // Pass the determined size to addToCart
                     addToCart(product, quantity, size);
                 });
             }
@@ -917,7 +912,7 @@
             }
         });
         
-        // --- 7. Search Logic (NEW) ---
+        // --- 7. Search Logic (remains unchanged) ---
         const searchInput = document.getElementById('search-input');
         const searchIcon = document.getElementById('search-icon');
         
