@@ -259,7 +259,8 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
             cursor: pointer;
             border: 1px solid var(--color-border-light);
-            height: 250px; 
+            /* 🚨 UPDATED HEIGHT for Full View Image */
+            height: 280px; 
         }
         .product-card:hover { 
             transform: translateY(-3px); 
@@ -267,31 +268,24 @@
         }
         .product-image { 
             width: 100%; 
-            height: 120px; 
+            /* 🚨 UPDATED HEIGHT for Full View Image */
+            height: 220px; 
             object-fit: cover; 
             display: block; 
         }
         .product-details { padding: 8px; } 
         .product-name { 
-            font-size: 0.9rem; 
+            font-size: 0.95rem; 
             font-weight: 600; 
             color: var(--color-text-dark);
             margin-bottom: 3px; 
             line-height: 1.2; 
             height: 2.4em; 
             overflow: hidden;
+            /* Center align name since it's the only text */
+            text-align: center;
         } 
-        .product-price { 
-            color: var(--color-pink-accent); 
-            font-size: 1.1rem; 
-            font-weight: 700; 
-            margin-top: 5px;
-            display: block;
-        }
-        .product-details small {
-            color: var(--color-text-subtle);
-            font-size: 0.75rem; 
-        }
+        /* Price and category hidden in grid view via JS now */
 
         /* --- Modal Styling --- */
         .modal { 
@@ -507,8 +501,9 @@
                 grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
                 gap: 20px; 
             }
-            .product-card { height: 320px; }
-            .product-image { height: 180px; }
+            /* 🚨 UPDATED DESKTOP HEIGHTS */
+            .product-card { height: 360px; }
+            .product-image { height: 300px; }
             
             /* DESKTOP MODAL LAYOUT */
             #modal-content { 
@@ -568,7 +563,7 @@
         </nav>
     </header>
 
-    <!-- 🚨 NEW: Scrollable Category Bar -->
+    <!-- Scrollable Category Bar -->
     <div id="category-bar" class="category-scroll-container gated-content disabled">
         <button class="cat-btn active" data-category="all">All</button>
         <button class="cat-btn" data-category="cap">Caps</button>
@@ -779,7 +774,7 @@
             }
         }
 
-        // --- 🚨 NEW: Filter Logic for Category Buttons ---
+        // --- Filter Logic for Category Buttons ---
         function setupCategoryButtons() {
             const buttons = document.querySelectorAll('.cat-btn');
             buttons.forEach(btn => {
@@ -813,7 +808,7 @@
                 if (categoryFilter !== 'all') {
                     const prodCat = (product.category || '').toLowerCase();
                     
-                    // 🚨 BI-DIRECTIONAL CHECK: 
+                    // BI-DIRECTIONAL CHECK: 
                     // 1. Does product category contain filter? (e.g. "Phone Accessories" contains "Accessories")
                     // 2. Does filter contain product category? (e.g. "Dresses" contains "Dress")
                     matchesCategory = prodCat.includes(categoryFilter) || categoryFilter.includes(prodCat);
@@ -866,19 +861,16 @@
                 grid.classList.add('product-grid');
                 
                 groupedProducts[category].forEach(product => {
-                    const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES', }).format(product.price);
-                    
                     const card = document.createElement('div');
                     card.classList.add('product-card');
                     card.dataset.productId = product.id; 
                     card.setAttribute('tabindex', '0');
                     
+                    // 🚨 CHANGED: Showing only Image and Name (Price/Category Removed from Grid)
                     card.innerHTML = `
                         <img src="${product.imageUrl}" alt="${product.name}" class="product-image" onerror="this.onerror=null;this.src='https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys'">
                         <div class="product-details">
                             <p class="product-name">${product.name}</p>
-                            <p class="product-price">${formattedPrice}</p>
-                            <small>${product.category}</small>
                         </div>
                     `;
                     
@@ -924,9 +916,7 @@
                         <option value="M">Medium (M)</option>
                         <option value="L">Large (L)</option>
                         <option value="XL">Extra Large (XL)</option>
-                        <option value="2XL">(2XL)</option>
-                        <option value="3XL">(3XL)</option>
-                        </select>
+                    </select>
                 </div>
             `;
             
@@ -1011,11 +1001,11 @@
         searchIcon.addEventListener('click', () => {
             if (searchInput.classList.contains('active')) {
                 if (searchInput.value.trim() !== '') {
-                    filterAndRenderProducts(); // 🚨 CHANGED to use unified filter
+                    filterAndRenderProducts(); 
                 } else {
                     searchInput.classList.remove('active');
                     searchInput.blur();
-                    filterAndRenderProducts(); // 🚨 CHANGED
+                    filterAndRenderProducts(); 
                 }
             } else {
                 searchInput.classList.add('active');
@@ -1023,17 +1013,17 @@
             }
         });
 
-        searchInput.addEventListener('input', filterAndRenderProducts); // 🚨 CHANGED
+        searchInput.addEventListener('input', filterAndRenderProducts); 
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                filterAndRenderProducts(); // 🚨 CHANGED
+                filterAndRenderProducts(); 
             }
         });
         
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthenticationStatus(); 
-            setupCategoryButtons(); // 🚨 NEW
+            setupCategoryButtons(); 
             fetchProducts();
             updateCartCount();
             window.redirectToAuthPage = redirectToAuthPage;
