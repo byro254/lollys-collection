@@ -2886,4 +2886,4 @@ server.listen(port, async () => {
         // Log the failure to connect without crashing
         console.error("Warning: Database connection failed:", error);
     }
-});hehehe
+});
