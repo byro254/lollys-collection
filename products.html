@@ -52,15 +52,16 @@
         .add-to-cart-btn:focus,
         .quantity-controls input:focus,
         .size-controls select:focus, 
-        .size-controls input[type="number"]:focus, /* 🚨 Numeric Size Input Focus */
-        #search-input:focus {
+        .size-controls input[type="number"]:focus,
+        #search-input:focus,
+        .cat-btn:focus {
             outline: 2px solid var(--color-pink-accent); 
             outline-offset: 3px;
         }
 
         /* --- Header & Navigation (UPDATED) --- */
         .header { 
-            background-color:lightpink; 
+            background-color: lightpink; 
             padding: 20px 5%; 
             box-shadow: 0 2px 10px var(--color-shadow); 
             display: flex; 
@@ -70,6 +71,7 @@
             position: sticky; 
             top: 0; 
             z-index: 50; 
+            height: 60px; /* Fixed height for calculation */
         }
         .logo { 
             font-family: var(--font-heading); 
@@ -113,7 +115,7 @@
             position: relative;
         }
         
-        /* --- NEW Search Bar Styles --- */
+        /* --- Search Bar Styles --- */
         .search-container {
             position: relative;
             display: flex;
@@ -143,9 +145,65 @@
             font-size: 1.5rem; 
             color: var(--color-pink-dark);
         }
+
+        /* --- 🚨 NEW: Horizontal Scrollable Category Header --- */
+        .category-scroll-container {
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            padding: 15px 5%;
+            background-color: var(--color-bg-light);
+            border-bottom: 1px solid var(--color-border-medium);
+            position: sticky; 
+            /* Sticks right below the main header (60px header + 20px padding approx 80px, tweaked to 90px) */
+            top: 100px; 
+            z-index: 40;
+            
+            /* Hide scrollbar for cleaner look but keep functionality */
+            -ms-overflow-style: none;  /* IE and Edge */
+            scrollbar-width: none;  /* Firefox */
+        }
+        
+        /* Header is sticky, so we need to adjust the top property based on header height */
+        @media (max-width: 768px) {
+            .category-scroll-container {
+                top: 100px; /* Adjust for mobile header height + padding */
+            }
+        }
+        
+        .category-scroll-container::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+
+        .cat-btn {
+            flex: 0 0 auto; /* Prevents buttons from shrinking */
+            padding: 8px 20px;
+            border-radius: 25px;
+            border: 1px solid var(--color-pink-accent);
+            background-color: transparent;
+            color: var(--color-pink-dark);
+            font-family: var(--font-body);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: capitalize;
+            white-space: nowrap;
+        }
+
+        .cat-btn:hover {
+            background-color: rgba(233, 30, 99, 0.1);
+        }
+
+        .cat-btn.active {
+            background-color: var(--color-pink-accent);
+            color: white;
+            box-shadow: 0 4px 6px rgba(233, 30, 99, 0.3);
+        }
+
         /* --- Product Section Layout --- */
         .page-section { 
-            padding: 40px 5%; 
+            padding: 20px 5% 40px; /* Reduced top padding as category bar is there */
             min-height: 70vh; 
             max-width: 1200px;
             margin: 0 auto;
@@ -160,7 +218,7 @@
             text-align: center;
         }
         
-        /* --- NEW Category Section Header --- */
+        /* --- Category Section Header --- */
         .category-header {
             font-family: var(--font-heading);
             font-size: 2rem;
@@ -170,13 +228,12 @@
             border-bottom: 2px solid var(--color-pink-accent);
             padding-bottom: 5px;
             text-align: left;
-            grid-column: 1 / -1; /* Spans the full width of the grid container */
+            grid-column: 1 / -1; 
         }
         
         /* --- Product Grid --- */
         .product-grid { 
             display: grid; 
-            /* 🚨 FIX: Make cards very small */
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
             gap: 15px; 
             padding: 1rem 0; 
@@ -190,7 +247,6 @@
             transition: transform 0.3s ease, box-shadow 0.3s ease; 
             cursor: pointer;
             border: 1px solid var(--color-border-light);
-            /* Ensure cards are compact */
             height: 250px; 
         }
         .product-card:hover { 
@@ -199,34 +255,33 @@
         }
         .product-image { 
             width: 100%; 
-            /* 🚨 FIX: Smaller image height */
             height: 120px; 
             object-fit: cover; 
             display: block; 
         }
         .product-details { padding: 8px; } 
         .product-name { 
-            font-size: 0.9rem; /* Smaller font */
+            font-size: 0.9rem; 
             font-weight: 600; 
             color: var(--color-text-dark);
             margin-bottom: 3px; 
             line-height: 1.2; 
-            height: 2.4em; /* Allows two lines */
+            height: 2.4em; 
             overflow: hidden;
         } 
         .product-price { 
             color: var(--color-pink-accent); 
-            font-size: 1.1rem; /* Slightly smaller price */
+            font-size: 1.1rem; 
             font-weight: 700; 
             margin-top: 5px;
             display: block;
         }
         .product-details small {
             color: var(--color-text-subtle);
-            font-size: 0.75rem; /* Smaller category text */
+            font-size: 0.75rem; 
         }
 
-        /* --- Modal Styling (REDUCED SIZE/PADDING) --- */
+        /* --- Modal Styling --- */
         .modal { 
             position: fixed; 
             top: 0; 
@@ -270,23 +325,23 @@
             font-size: 1.8rem !important; 
         }
 
-        /* 🚨 START RESPONSIVE MODAL BODY CSS */
+        /* Modal Body CSS */
         #modal-body { 
             display: flex; 
-            flex-direction: column; /* Default: Stack vertically on mobile */
+            flex-direction: column; 
             gap: 15px; 
             text-align: left; 
         }
         
         .modal-image-col {
             flex-shrink: 0;
-            width: 100%; /* Image takes full width on mobile */
+            width: 100%; 
         }
         
         .product-image-modal {
             width: 100%;
             height: auto;
-            max-height: 300px; /* Limit height on mobile */
+            max-height: 300px; 
             object-fit: cover;
             border-radius: 8px;
         }
@@ -315,7 +370,7 @@
             font-weight: 600;
         }
 
-        /* 🚨 NEW: Size and Quantity Controls Grouping */
+        /* Size and Quantity Controls Grouping */
         .controls-group {
             display: flex;
             gap: 15px;
@@ -334,10 +389,10 @@
         
         .size-controls input[type="number"],
         .size-controls select {
-            margin-bottom: 10px; /* Add space between size inputs */
+            margin-bottom: 10px; 
         }
 
-        .quantity-controls input, .size-controls select, .size-controls input[type="number"] { /* ADDED numeric input to this style rule */
+        .quantity-controls input, .size-controls select, .size-controls input[type="number"] { 
             width: 100%; 
             padding: 8px; 
             border: 1px solid var(--color-border-medium); 
@@ -345,7 +400,6 @@
             box-sizing: border-box;
             font-size: 1rem;
         }
-        /* END NEW CONTROLS STYLES */
 
         .add-to-cart-btn {
             background-color: var(--color-pink-dark); 
@@ -357,13 +411,12 @@
             border: none;
             cursor: pointer;
             transition: background-color 0.3s;
-            width: 100%; /* Full width on mobile */
+            width: 100%; 
             display: block;
         }
         .add-to-cart-btn:hover {
             background-color: var(--color-pink-accent);
         }
-        /* 🚨 END RESPONSIVE MODAL BODY CSS */
 
         /* Access Required Modal Specific Styles */
         #access-required-modal .modal-content {
@@ -376,7 +429,7 @@
             margin-top: 10px;
         }
         #access-required-modal .modal-content p {
-            color: var(--color-text-dark); /* Changed color for visibility */
+            color: var(--color-text-dark); 
             margin-bottom: 15px;
         }
         #access-required-modal .modal-content button {
@@ -409,46 +462,45 @@
             .main-nav { gap: 1.5rem; } 
             .main-nav a { font-size: 1.7rem; } 
             
+            /* Adjust category top to match new header height if needed, 
+               but sticky usually calculates from viewport top */
+            
             #search-input.active {
                 width: 250px; 
             }
             
-            .page-section { padding: 60px 8%; }
+            .page-section { padding: 40px 8%; }
 
             .product-grid { 
-                /* 🚨 FIX: Max size grid for desktop */
                 grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); 
                 gap: 20px; 
             }
-            /* 🚨 FIX: Taller card and image for desktop visibility */
             .product-card { height: 320px; }
             .product-image { height: 180px; }
             
-            /* 🚨 DESKTOP MODAL LAYOUT */
+            /* DESKTOP MODAL LAYOUT */
             #modal-content { 
-                padding: 40px; /* Increase padding on desktop */
+                padding: 40px; 
             }
             #modal-body { 
-                flex-direction: row; /* Side-by-side layout on desktop */
+                flex-direction: row; 
                 gap: 25px; 
             }
             .modal-image-col { 
-                flex: 1; /* Equal flex space on desktop */
+                flex: 1; 
                 min-width: 250px; 
-                width: 40%; /* Custom width */
+                width: 40%; 
             }
             .modal-details-col { 
                 flex: 2; 
-                width: 60%; /* Custom width */
+                width: 60%; 
             } 
             .product-image-modal {
-                max-height: 500px; /* Larger image height on desktop */
+                max-height: 500px; 
             }
             .add-to-cart-btn {
-                width: auto; /* Auto width on desktop */
+                width: auto; 
             }
-
-
             .product-details { padding: 15px; } 
             .product-name { font-size: 1.15rem; height: 3em; } 
             .product-price { font-size: 1.4rem; } 
@@ -478,24 +530,38 @@
     <header class="header gated-content disabled"> 
         <a href="/" class="logo">Lolly's collection</a>
         <nav class="main-nav">
-           
-            
             <a href="/" aria-label="Home"><i class="fa-solid fa-house"></i></a>
             <a href="/products" aria-label="Products"><i class="fa-solid fa-tags"></i></a>
             <a href="/cart" aria-label="Cart"><i class="fa-solid fa-shopping-cart"></i><span id="cart-count">0</span></a>
-            
         </nav>
     </header>
+
+    <!-- 🚨 NEW: Scrollable Category Bar -->
+    <div id="category-bar" class="category-scroll-container gated-content disabled">
+        <button class="cat-btn active" data-category="all">All</button>
+        <button class="cat-btn" data-category="cap">Caps</button>
+        <button class="cat-btn" data-category="topwares">Topwares</button>
+        <button class="cat-btn" data-category="bottomwares">Bottomwares</button>
+        <button class="cat-btn" data-category="footwares">Footwares</button>
+        <button class="cat-btn" data-category="dresses">Dresses</button>
+        <button class="cat-btn" data-category="apparel">Apparel</button>
+        <button class="cat-btn" data-category="electronics">Electronics</button>
+        <button class="cat-btn" data-category="home decor">Home Decor</button>
+        <button class="cat-btn" data-category="phone accessories">Phone Accessories</button>
+    </div>
 
     <section id="products-section" class="page-section gated-content disabled"> 
         <div class="main-content-layout">
             
             <div class="main-content-area">
-                <h1 id="current-title">Choose your favorite</h1>
-                <div class="search-container">
-                <input type="text" id="search-input" placeholder="Search products..." title="Search for products">
-                <i class="fa-solid fa-search" id="search-icon" aria-label="Search for products"></i>
-            </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h1 id="current-title" style="margin: 0;">Choose your favorite</h1>
+                    <div class="search-container">
+                        <input type="text" id="search-input" placeholder="Search products..." title="Search for products">
+                        <i class="fa-solid fa-search" id="search-icon" aria-label="Search for products"></i>
+                    </div>
+                </div>
+
                 <div id="product-category-list">
                     <p style="text-align: center; grid-column: 1 / -1; color: var(--color-text-subtle);">Loading products...</p>
                 </div>
@@ -505,12 +571,8 @@
     
     <div id="product-modal" class="modal">
         <div id="modal-content">
-            
             <button id="close-modal" aria-label="Close Product Details">&times;</button>
-            
-            <div id="modal-body">
-            </div>
-            
+            <div id="modal-body"></div>
         </div>
     </div>
     
@@ -533,18 +595,16 @@
         let allProducts = []; 
         let isUserAuthenticated = false; 
         let lastFocusedElement = null;
+        let activeCategory = 'all'; // Track active category
         
         // --- Utility Functions ---
-        
         function redirectToAuthPage() {
             window.location.href = '/auth'; 
         }
 
-        /**
-         * Checks auth status and immediately gates the page if unauthenticated.
-         */
         async function checkAuthenticationStatus() {
             const header = document.querySelector('.header');
+            const catBar = document.getElementById('category-bar'); // NEW
             const productSection = document.getElementById('products-section');
             const accessModal = document.getElementById('access-required-modal');
 
@@ -553,21 +613,17 @@
                 
                 if (response.ok) {
                     isUserAuthenticated = true;
-                    // Ensure content is enabled
                     header.classList.remove('disabled');
+                    catBar.classList.remove('disabled'); // NEW
                     productSection.classList.remove('disabled');
                     accessModal.classList.remove('is-open'); 
                     document.body.style.overflow = 'auto'; 
                     return true;
                 } else {
-                    // Unauthenticated (401)
                     isUserAuthenticated = false;
-                    
-                    // Disable and blur content
                     header.classList.add('disabled');
+                    catBar.classList.add('disabled'); // NEW
                     productSection.classList.add('disabled');
-                    
-                    // Show modal
                     accessModal.classList.add('is-open');
                     document.body.style.overflow = 'hidden';
                     return false;
@@ -575,9 +631,8 @@
             } catch (error) {
                 console.error('Error checking auth status:', error);
                 isUserAuthenticated = false;
-                
-                // Treat network failure as unauthenticated access for security
                 header.classList.add('disabled');
+                catBar.classList.add('disabled');
                 productSection.classList.add('disabled');
                 accessModal.classList.add('is-open');
                 document.body.style.overflow = 'hidden';
@@ -613,9 +668,6 @@
             }, 3000);
         }
 
-
-        // --- 2. Add to Cart Logic (POST to API) ---
-        // 🚨 MODIFIED: Added size parameter
         async function addToCart(product, quantity, size = null) {
             if (!isUserAuthenticated) {
                 showCartAlert('Login required to add to cart.', true);
@@ -634,7 +686,7 @@
                     body: JSON.stringify({
                         productId: product.id,
                         quantity: quantityToAdd,
-                        size: size // Send size in body
+                        size: size
                     })
                 });
 
@@ -660,7 +712,6 @@
             }
         }
 
-        // --- 3. Fetch Products (GET from API) & Store Globally ---
         async function fetchProducts() {
             const productListContainer = document.getElementById('product-category-list');
             productListContainer.innerHTML = ''; 
@@ -676,19 +727,18 @@
                 }
                 
                 allProducts = rawProducts.map(product => {
-                    // 🚨 REMOVED: size_type calculation logic
                     return {
                         id: product.id,
                         name: product.name,
                         price: parseFloat(product.price), 
-                        category: product.category, // Ensure category is available
+                        category: product.category, 
                         description: product.description,
                         imageUrl: product.image_url || 'https://placehold.co/400x300/C2185B/FFFFFF?text=Lollys',
                         stock: product.stock_quantity !== undefined ? parseInt(product.stock_quantity) : (product.stock !== undefined ? parseInt(product.stock) : 10),
                     }
                 });
 
-                // Render all products initially, grouped by category
+                // Initial Render (All products)
                 renderProducts(allProducts);
 
             } catch (error) {
@@ -697,20 +747,66 @@
             }
         }
 
-        /**
-         * Groups products by category and renders them in separate sections.
-         * @param {Array} productsToRender The list of products to display.
-         */
+        // --- 🚨 NEW: Filter Logic for Category Buttons ---
+        function setupCategoryButtons() {
+            const buttons = document.querySelectorAll('.cat-btn');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    // 1. Remove active class from all
+                    buttons.forEach(b => b.classList.remove('active'));
+                    // 2. Add active to clicked
+                    e.target.classList.add('active');
+                    
+                    const category = e.target.dataset.category;
+                    activeCategory = category;
+                    
+                    filterAndRenderProducts();
+                });
+            });
+        }
+
+        // Helper to filter based on current Search AND active Category
+        function filterAndRenderProducts() {
+            const searchQuery = document.getElementById('search-input').value.trim().toLowerCase();
+            const categoryFilter = activeCategory.toLowerCase();
+
+            const filtered = allProducts.filter(product => {
+                const matchesSearch = product.name.toLowerCase().includes(searchQuery) ||
+                                      product.description.toLowerCase().includes(searchQuery) ||
+                                      product.category.toLowerCase().includes(searchQuery);
+                
+                let matchesCategory = true;
+                if (categoryFilter !== 'all') {
+                    // Flexible matching: check if product category contains the button text
+                    // e.g. "Phone Accessories" matches "Accessories" or exact string
+                    matchesCategory = (product.category || '').toLowerCase().includes(categoryFilter);
+                }
+                
+                return matchesSearch && matchesCategory;
+            });
+            
+            // Update Title
+            const titleEl = document.getElementById('current-title');
+            if (categoryFilter !== 'all') {
+                titleEl.textContent = document.querySelector(`.cat-btn[data-category="${activeCategory}"]`).innerText;
+            } else if (searchQuery !== '') {
+                titleEl.textContent = `Search: "${searchQuery}"`;
+            } else {
+                titleEl.textContent = 'Choose your favorite';
+            }
+
+            renderProducts(filtered);
+        }
+
         function renderProducts(productsToRender) {
             const container = document.getElementById('product-category-list');
             container.innerHTML = '';
             
             if (productsToRender.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: var(--color-text-subtle);">No products match your current search.</p>';
+                container.innerHTML = '<p style="text-align: center; color: var(--color-text-subtle);">No products match your current selection.</p>';
                 return;
             }
             
-            // 1. Group products by category
             const groupedProducts = productsToRender.reduce((acc, product) => {
                 const category = product.category || 'Uncategorized';
                 if (!acc[category]) {
@@ -720,7 +816,6 @@
                 return acc;
             }, {});
 
-            // 2. Render sections for each category
             for (const category in groupedProducts) {
                 const section = document.createElement('div');
                 section.innerHTML = `<h2 class="category-header">${category}</h2>`;
@@ -762,7 +857,6 @@
             }
         }
 
-        // --- 5. Show Product Details in Modal ---
         function showProductDetails(product) {
             const productModal = document.getElementById('product-modal');
             const modalBody = document.getElementById('modal-body');
@@ -770,29 +864,17 @@
             lastFocusedElement = document.activeElement; 
             
             const formattedPrice = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'KES' }).format(product.price);
-            
             const stock = parseInt(product.stock, 10);
             
             const stockStatus = stock > 0 ? 
                 `<span class="stock-in" style="color: var(--color-success);">In Stock (${stock} left)</span>` : 
                 `<span class="stock-out" style="color: var(--color-danger);">Out of Stock</span>`;
             
-            // 🚨 MODIFIED: Now includes BOTH numeric input and select dropdown
             const sizeControlHTML = `
                 <div class="size-controls">
-                    <!-- Numeric Input -->
                     <label for="size-numeric-${product.id}">Numeric Size (e.g., Shoe Size):</label>
-                    <input 
-                        type="number" 
-                        id="size-numeric-${product.id}" 
-                        placeholder="Enter Shoe/Numeric Size" 
-                        min="1" 
-                        step="0.5" 
-                    >
-                    
+                    <input type="number" id="size-numeric-${product.id}" placeholder="Enter Shoe/Numeric Size" min="1" step="0.5">
                     <p style="margin: 10px 0 5px; font-weight: 500; color: var(--color-pink-dark);">OR</p>
-
-                    <!-- Select Dropdown -->
                     <label for="size-select-${product.id}">Apparel Size:</label>
                     <select id="size-select-${product.id}">
                         <option value="">Select Clothing Size</option>
@@ -812,43 +894,21 @@
                 <div class="modal-details-col">
                     <h3>${product.name}</h3>
                     <span class="product-price-large">${formattedPrice}</span>
-                    
                     <h4>Description</h4>
                     <p class="product-description">${product.description || 'A stunning piece from Lolly\'s Collection.'}</p>
-                    
                     <hr>
-
                     <p class="product-availability"><strong>Availability:</strong> ${stockStatus}</p>
-                    
                     ${stock > 0 ? `
                         <div class="controls-group">
-                            <!-- 🚨 COMBINED SIZE CONTROLS -->
                             ${sizeControlHTML}
-                            
-                            <!-- Existing Quantity Controls -->
                             <div class="quantity-controls">
                                 <label for="quantity-${product.id}">Quantity:</label>
-                                <input 
-                                    type="number" 
-                                    id="quantity-${product.id}" 
-                                    value="1" 
-                                    min="1" 
-                                    max="${stock}"
-                                    onchange="this.value = Math.min(Math.max(1, parseInt(this.value || 1)), ${stock})"
-                                >
+                                <input type="number" id="quantity-${product.id}" value="1" min="1" max="${stock}" onchange="this.value = Math.min(Math.max(1, parseInt(this.value || 1)), ${stock})">
                             </div>
                         </div>
-
-                        <button 
-                            class="add-to-cart-btn"
-                            id="add-to-cart-${product.id}"
-                        >
-                            Add to Cart
-                        </button>
+                        <button class="add-to-cart-btn" id="add-to-cart-${product.id}">Add to Cart</button>
                     ` : `
-                        <button class="add-to-cart-btn" disabled>
-                            Out of Stock
-                        </button>
+                        <button class="add-to-cart-btn" disabled>Out of Stock</button>
                     `}
                 </div>
             `;
@@ -856,15 +916,11 @@
             if (stock > 0) {
                 document.getElementById(`add-to-cart-${product.id}`).addEventListener('click', () => {
                     const quantity = document.getElementById(`quantity-${product.id}`).value;
-                    
-                    // 🚨 NEW VALIDATION LOGIC: Check for one valid size selection
                     const sizeNumeric = document.getElementById(`size-numeric-${product.id}`).value.trim();
                     const sizeSelect = document.getElementById(`size-select-${product.id}`).value.trim();
 
                     let size = '';
-                    // Check if numeric input is used and valid
                     let numericValid = sizeNumeric && !isNaN(parseFloat(sizeNumeric)) && parseFloat(sizeNumeric) > 0;
-                    // Check if select dropdown has a selected value (not the default empty option)
                     let selectValid = sizeSelect !== '';
 
                     if (numericValid && selectValid) {
@@ -879,7 +935,6 @@
                         return;
                     }
                     
-                    // Pass the determined size to addToCart
                     addToCart(product, quantity, size);
                 });
             }
@@ -888,12 +943,10 @@
             document.getElementById('close-modal').focus();
         }
 
-        // --- 6. Modal Close Handlers (remains unchanged) ---
         function closeModal() {
             const productModal = document.getElementById('product-modal');
             productModal.classList.remove('is-open');
             document.getElementById('modal-body').innerHTML = ''; 
-            
             if (lastFocusedElement) {
                 lastFocusedElement.focus();
                 lastFocusedElement = null; 
@@ -902,71 +955,41 @@
         
         document.getElementById('close-modal').addEventListener('click', closeModal);
         document.getElementById('product-modal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('product-modal')) {
-                closeModal();
-            }
+            if (e.target === document.getElementById('product-modal')) { closeModal(); }
         });
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && document.getElementById('product-modal').classList.contains('is-open')) {
-                closeModal();
-            }
+            if (e.key === 'Escape' && document.getElementById('product-modal').classList.contains('is-open')) { closeModal(); }
         });
         
-        // --- 7. Search Logic (remains unchanged) ---
         const searchInput = document.getElementById('search-input');
         const searchIcon = document.getElementById('search-icon');
         
         searchIcon.addEventListener('click', () => {
-            // Toggle visibility of the search input
             if (searchInput.classList.contains('active')) {
                 if (searchInput.value.trim() !== '') {
-                    // If active and has text, perform search
-                    performSearch();
+                    filterAndRenderProducts(); // 🚨 CHANGED to use unified filter
                 } else {
-                    // If active and empty, hide it
                     searchInput.classList.remove('active');
                     searchInput.blur();
-                    performSearch(); // Show all products
+                    filterAndRenderProducts(); // 🚨 CHANGED
                 }
             } else {
-                // If inactive, show it and focus
                 searchInput.classList.add('active');
                 searchInput.focus();
             }
         });
 
-        searchInput.addEventListener('input', performSearch);
+        searchInput.addEventListener('input', filterAndRenderProducts); // 🚨 CHANGED
         searchInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                performSearch();
+                filterAndRenderProducts(); // 🚨 CHANGED
             }
         });
         
-        function performSearch() {
-            const query = searchInput.value.trim().toLowerCase();
-            
-            if (query === '') {
-                // If search is empty, show all products grouped by category
-                renderProducts(allProducts);
-                document.getElementById('current-title').textContent = 'Choose your favorite';
-                return;
-            }
-
-            const filteredProducts = allProducts.filter(product => 
-                product.name.toLowerCase().includes(query) ||
-                product.description.toLowerCase().includes(query) ||
-                product.category.toLowerCase().includes(query)
-            );
-
-            // Render search results (still grouped by category if possible)
-            renderProducts(filteredProducts);
-            document.getElementById('current-title').textContent = `Search Results for "${searchInput.value}"`;
-        }
-        
-        // --- 8. Initialization ---
         document.addEventListener('DOMContentLoaded', async () => {
             await checkAuthenticationStatus(); 
+            setupCategoryButtons(); // 🚨 NEW
             fetchProducts();
             updateCartCount();
             window.redirectToAuthPage = redirectToAuthPage;
