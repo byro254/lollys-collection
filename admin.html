@@ -1220,9 +1220,6 @@ let agentName = 'Agent'; // Default agent name
  * Redirects the user to the dedicated authentication page.
  */
 function redirectToAuthPage() {
-    // In a real application, this would redirect to your login page
-    // For this environment, we'll simulate the redirect
-    console.log('Redirecting to /auth.html for login.');
      window.location.href = '/auth.html'; 
 }
 
@@ -1231,7 +1228,7 @@ function redirectToAuthPage() {
  */
 async function checkAdminAuthentication() {
     try {
-        // Assume /api/auth/check also returns user details if authenticated
+       
         const response = await fetch(`${API_BASE_URL}/auth/check`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
@@ -1288,24 +1285,24 @@ function displayAuthGate() {
 // --- Auto Refresh Functions ---
 
 async function autoRefreshDashboard() {
-    // Check auth status before running refresh
+  
     if (!(await checkAdminAuthentication())) return; 
-    // console.log('Auto-refreshing Dashboard...');
+  
     await fetchDashboardStats();
     await fetchAndRenderSalesChart();
 }
 
 async function autoRefreshOrders() {
-    // Check auth status before running refresh
+   
     if (!(await checkAdminAuthentication())) return; 
-    // console.log('Auto-refreshing Orders...');
+  
     await fetchAndRenderOrders();
 }
 
 // 🚨 NEW: Auto Refresh Finance Data
 async function autoRefreshFinance() {
     if (!(await checkAdminAuthentication())) return;
-    // console.log('Auto-refreshing Finance...');
+  
     await fetchFinancialData();
 }
 
@@ -1386,11 +1383,7 @@ async function fetchDashboardStats() {
         if (salesData.length === 0) {
             return [
                 { month: 'Jan', sales: 1200 },
-                { month: 'Feb', sales: 1900 },
-                { month: 'Mar', sales: 1500 },
-                { month: 'Apr', sales: 2500 },
-                { month: 'May', sales: 2100 },
-                { month: 'Jun', sales: 2800 },
+               
             ];
         }
 
@@ -1529,9 +1522,8 @@ async function showSection(targetId) {
 // --- DOM Content Loaded Listener ---
 
 document.addEventListener('DOMContentLoaded', () => {
-    // START OF NEW LOGIC: Check authentication immediately on load
+  
     checkAdminAuthentication();
-    // END OF NEW LOGIC
     const navLinks = document.querySelectorAll('.nav-link');
     const initialHash = window.location.hash ? window.location.hash.substring(1) : 'dashboard'; 
     
@@ -1649,7 +1641,7 @@ const handoffModal = document.getElementById('handoff-modal');
 
 // --- CUSTOMER MANAGEMENT (MODIFIED) ---
 async function fetchAndRenderCustomers() {
-    // Check auth status before running
+   
     if (!(await checkAdminAuthentication())) return; 
     
     const tbody = document.getElementById('customers-tbody');
@@ -3076,9 +3068,9 @@ function closeChatModal() {
             ];
 
             // 🚨 CALLING NEW ENDPOINT (Assuming this returns users with recent activity)
-            // const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
-            // const users = await response.json();
-            const users = mockChatUsers; // Use mock data until API is implemented
+             const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
+            const users = await response.json();
+          
             
 
             loading.style.display = 'none';
