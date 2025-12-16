@@ -38,6 +38,59 @@
             min-height: 100vh;
         }
         
+        /* --- 🚨 NEW: Loading Screen Styles --- */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--color-bg-light); /* White background */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100000; /* Highest priority */
+            opacity: 1;
+            transition: opacity 0.5s ease-out, visibility 0.5s;
+            visibility: visible;
+        }
+        
+        #loading-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loader-logo {
+            font-family: var(--font-heading); 
+            font-size: 3rem; 
+            font-weight: 700; 
+            color: var(--color-pink-dark); 
+            margin-bottom: 20px;
+        }
+
+        .spinner {
+            border: 5px solid var(--color-border-medium);
+            border-top: 5px solid var(--color-pink-accent);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-message {
+            font-size: 1.1rem;
+            color: var(--color-text-subtle);
+        }
+        /* --- END Loading Screen Styles --- */
+
+
         /* --- Header Styles (COMPACT & ICON-BASED) --- */
         .header { 
             background-color: lightpink; 
@@ -221,25 +274,60 @@
         }
         .cta-button:hover { background-color: var(--color-pink-accent); transform: translateY(-3px); box-shadow: 0 6px 15px rgba(194, 24, 91, 0.3); }
 
-        /* --- 🚨 CAROUSEL STYLES --- */
+        /* --- 🚨 CAROUSEL STYLES (UPDATED FOR DROP/FADE) --- */
         .hero-image-container { 
             flex: 1; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
             max-width: 50%; 
-            position: relative; /* Container for absolute buttons */
-            height: 500px; /* Fixed height for consistent carousel size */
+            position: relative; 
+            height: 500px; 
         }
         
-        .hero-image-container .carousel-img { 
+        /* Wrapper now stacks images using absolute positioning */
+        #carousel-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .carousel-slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            /* Initial state: Hidden below the container */
+            opacity: 0;
+            transform: translateY(20px);
+            
+            /* Transition for the drop and fade effect */
+            transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+            
+            /* Hide non-active slides */
+            visibility: hidden;
+        }
+        
+        /* Active state: Fully visible, reset translation */
+        .carousel-slide.active {
+            opacity: 1;
+            transform: translateY(0);
+            visibility: visible;
+            z-index: 1; /* Bring active slide to the front */
+        }
+        
+        .carousel-img { 
             max-width: 100%; 
-            height: 100%; /* Fill container height */
+            height: 100%; 
             border-radius: 12px; 
             box-shadow: 0 8px 25px rgba(0,0,0,0.15); 
             object-fit: cover; 
             max-height: 500px; 
-            transition: opacity 0.5s ease-in-out; /* Fade transition */
         }
         
         .carousel-btn {
@@ -476,6 +564,14 @@
 </head>
 <body>
     
+    <!-- 🚨 NEW: Loading Screen -->
+    <div id="loading-screen">
+        <div class="loader-logo">Lolly's Collection</div>
+        <div class="spinner"></div>
+        <div class="loading-message">Connecting to the Style Network...</div>
+    </div>
+    <!-- 🚨 END Loading Screen -->
+
     <header class="header">
         <a href="/" class="logo">Lolly's Collection</a>
         
@@ -563,13 +659,11 @@
                 <button id="cta-products-button" class="cta-button">🛍️ Find Your Next Signature Look</button>
             </div>
             
-            <!-- 🚨 UPDATED: Hero Image Carousel Container -->
+            <!-- 🚨 UPDATED: Hero Image Carousel Container for DROP/FADE -->
             <div class="hero-image-container">
-               <!-- Initial image is a generic placeholder until dynamic content loads -->
-               <img id="carousel-image" 
-                    src="https://placehold.co/800x500/E91E63/FFFFFF?text=Loading+Products" 
-                    alt="Dynamic showcase of Lolly's Collection" 
-                    class="carousel-img">
+               <div id="carousel-wrapper">
+                    <!-- Slides will be dynamically added here by JavaScript -->
+               </div>
                
                <button id="prev-btn" class="carousel-btn" aria-label="Previous Image">
                    <i class="fas fa-chevron-left"></i>
@@ -591,10 +685,12 @@
         const USER_PROFILE_API_URL = '/api/user/profile';
         const PRODUCTS_API_URL = '/api/products'; // API endpoint for products
         
-        // 🚨 ADJUSTED INTERVAL: 5 minutes (300,000ms)
+        // 🚨 ADJUSTED INTERVAL: 5 seconds (5000ms) for auto-slide
+        const CAROUSEL_ANIMATION_DURATION = 600; // 0.6s defined in CSS
+        const CAROUSEL_INTERVAL = 5000; // 5 seconds
         const REFRESH_INTERVAL_MS = 300000;
         
-        // --- 🚨 CAROUSEL DATA AND LOGIC ---
+        // --- 🚨 CAROUSEL DATA AND LOGIC (UPDATED FOR DROP/FADE) ---
         // Default static image and placeholder paths
         const staticImages = [
             '/images/products/WhatsApp Image 2025-12-15 at 8.08.51 AM.jpeg', // Original user image
@@ -603,14 +699,52 @@
         ];
         let heroImages = [...staticImages]; // Initial array
         let currentSlide = 0;
-        const carouselImage = document.getElementById('carousel-image');
+        const carouselWrapper = document.getElementById('carousel-wrapper');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
-        const carouselInterval = 5000; // 5 seconds
         let autoSlideTimer;
+        
+        // 🚨 NEW: Function to hide the loading screen
+        function hideLoadingScreen() {
+             const loadingScreen = document.getElementById('loading-screen');
+             loadingScreen.classList.add('hidden');
+             // Set a timeout to remove the element from the DOM after transition for performance
+             setTimeout(() => {
+                 loadingScreen.style.display = 'none';
+             }, 600);
+        }
+        
+        /**
+         * Helper function to generate and insert the slide HTML based on the current heroImages array.
+         * @param {boolean} isInitialLoad If true, only renders, does not attempt to start carousel logic.
+         */
+        function renderCarouselSlides(isInitialLoad = false) {
+             carouselWrapper.innerHTML = '';
+             heroImages.forEach((url, index) => {
+                 const slideDiv = document.createElement('div');
+                 slideDiv.classList.add('carousel-slide');
+                 slideDiv.classList.add(`slide-${index}`); 
+                 slideDiv.innerHTML = `
+                     <img src="${url}" 
+                          alt="Dynamic showcase image ${index + 1} of Lolly's Collection" 
+                          class="carousel-img"
+                          onerror="this.src='https://placehold.co/800x500/757575/FFFFFF?text=Image+Failed'">
+                 `;
+                 carouselWrapper.appendChild(slideDiv);
+             });
+             
+             if (!isInitialLoad) {
+                 // Start carousel logic only after initial load of elements
+                 showSlide(0, false);
+                 resetAutoSlide();
+             }
+        }
 
         // Function to fetch product images and populate the carousel
         async function fetchProductImages() {
+            // First, render static images immediately to prevent an empty slot
+            renderCarouselSlides(true); 
+            
             try {
                 const response = await fetch(PRODUCTS_API_URL);
                 if (!response.ok) {
@@ -626,51 +760,60 @@
 
                 // Combine dynamic images with static fallbacks
                 if (dynamicImages.length > 0) {
-                    // Use a mix of dynamic and static images
                     heroImages = [...dynamicImages, ...staticImages.slice(1)];
                 }
-
-                // Ensure heroImages has at least one valid image path
-                if (heroImages.length === 0) {
-                    heroImages = ['https://placehold.co/800x500/757575/FFFFFF?text=No+Product+Images'];
-                }
-
-                // Start or restart the carousel with new images
-                showSlide(0);
-                resetAutoSlide();
+                
+                // Re-render with dynamic content
+                renderCarouselSlides(false);
 
             } catch (error) {
                 console.error('Error fetching product images for carousel:', error);
-                // If API fails, keep static fallbacks and start the carousel
-                showSlide(0);
-                resetAutoSlide();
+                // If API fails, heroImages remains the static array (set at the top)
+                renderCarouselSlides(false);
             }
         }
 
+        /**
+         * Transitions the carousel to the specified slide index using a drop/fade effect.
+         * @param {number} index The target slide index.
+         * @param {boolean} [animate=true] Whether to apply the slide transition effect.
+         */
+        function showSlide(index, animate = true) {
+            if (heroImages.length === 0) return;
 
-        function showSlide(index) {
             // Calculate actual index to loop around
-            currentSlide = (index + heroImages.length) % heroImages.length;
+            const newIndex = (index + heroImages.length) % heroImages.length;
             
-            // Fade out current image
-            carouselImage.style.opacity = 0;
+            // Get all slide elements
+            const slides = carouselWrapper.querySelectorAll('.carousel-slide');
             
-            // Wait for fade-out, then change source and fade in
-            setTimeout(() => {
-                const imageUrl = heroImages[currentSlide];
-                
-                // Use a robust fallback for the dynamic image sources
-                carouselImage.onerror = () => {
-                    // Fallback to a generic placeholder if the specific image URL fails
-                    carouselImage.src = 'https://placehold.co/800x500/757575/FFFFFF?text=Image+Failed';
-                    carouselImage.onerror = null; // Prevent infinite error loop
-                };
+            // Remove 'active' class from current slide
+            if (slides[currentSlide]) {
+                slides[currentSlide].classList.remove('active');
+            }
+            
+            // Update current slide index
+            currentSlide = newIndex;
+            const nextSlideElement = slides[currentSlide];
 
-                carouselImage.src = imageUrl;
-                carouselImage.alt = `Dynamic showcase image ${currentSlide + 1} of Lolly's Collection`;
-                carouselImage.style.opacity = 1; // Fade in
-            }, 500); // Wait 500ms for the fade-out transition
-            
+            if (nextSlideElement) {
+                // Apply 'drop' transition: start slightly above and fade in
+                if (!animate) {
+                    // Instant jump for initial load
+                    nextSlideElement.style.transition = 'none';
+                    nextSlideElement.style.opacity = 1;
+                    nextSlideElement.style.transform = 'translateY(0)';
+                    nextSlideElement.style.visibility = 'visible';
+                    // Re-enable transition for next slide
+                    setTimeout(() => {
+                        nextSlideElement.style.transition = 'opacity 0.6s ease-out, transform 0.6s ease-out';
+                    }, 50);
+                }
+                
+                // Add 'active' class to trigger CSS transition (drop/fade)
+                nextSlideElement.classList.add('active');
+            }
+
             resetAutoSlide();
         }
 
@@ -684,12 +827,20 @@
         
         function resetAutoSlide() {
             clearInterval(autoSlideTimer);
-            autoSlideTimer = setInterval(nextSlide, carouselInterval);
+            // Set the interval to wait until the current slide finishes AND the interval time passes
+            autoSlideTimer = setInterval(nextSlide, CAROUSEL_INTERVAL);
         }
 
         // Event listeners for manual control
-        nextBtn.addEventListener('click', nextSlide);
-        prevBtn.addEventListener('click', prevSlide);
+        // Stop the auto slide timer when manually interacting, but reset it afterwards.
+        nextBtn.addEventListener('click', () => {
+            clearInterval(autoSlideTimer); // Stop auto slide
+            nextSlide();
+        });
+        prevBtn.addEventListener('click', () => {
+            clearInterval(autoSlideTimer); // Stop auto slide
+            prevSlide();
+        });
         
         // --- Mobile Menu Toggle ---
         const hamburgerIcon = document.getElementById('hamburger-icon');
@@ -793,6 +944,17 @@
             logoutUser(true, "Logging out...");
         }
 
+        let authCheckDone = false;
+        let imagesFetchedDone = false;
+
+        // Check if both auth and images are done, then hide loader
+        function checkAppReady() {
+            if (authCheckDone && imagesFetchedDone) {
+                hideLoadingScreen();
+            }
+        }
+
+
         /**
          * 3. Status check on page load (Assumes /api/auth/status exists on server)
          */
@@ -813,6 +975,9 @@
                 console.error('Failed to check auth status due to network error:', error);
             } finally {
                 updateUI();
+                authCheckDone = true; // Mark auth check as complete
+                checkAppReady();
+                
                 // If authenticated, also fetch cart count (assuming Cart API is available)
                 if (isAuthenticated) {
                     // Start the real-time status checker
@@ -913,10 +1078,11 @@
 
 
         // Initial call to check status and set up the interface
-        document.addEventListener('DOMContentLoaded', () => {
-             checkAuthStatus();
-             // 🚨 NEW: Fetch and populate carousel images after initial auth check
-             fetchProductImages(); 
+        document.addEventListener('DOMContentLoaded', async () => {
+             await checkAuthStatus(); // Await ensures authCheckDone is set before proceeding
+             await fetchProductImages(); 
+             imagesFetchedDone = true; // Mark image fetch as complete
+             checkAppReady();
         });
 
         // 🚨 PWA Registration Logic
