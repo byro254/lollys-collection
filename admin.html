@@ -3060,13 +3060,7 @@ function closeChatModal() {
         loading.style.display = 'block';
         
        try {
-    // Mock users for chat sessions (needs implementation in server.js/API)
-    const mockChatUsers = [
-        { id: '2', full_name: 'Bob Smith', email: 'bob@example.com' },
-        { id: '3', full_name: 'Charlie Brown', email: 'charlie@example.com' },
-        { id: 'anon-x', full_name: 'Anonymous Guest', email: 'guest@anon.com' },
-    ];
-
+   
     // 🚨 CALLING NEW ENDPOINT (Assuming this returns users with recent activity)
     const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
 
@@ -3085,24 +3079,32 @@ function closeChatModal() {
         return;
     }
 
-    users.forEach(user => {
-        const listItem = document.createElement('li');
-        listItem.className = 'chat-session-item';
-        listItem.dataset.customerId = user.id;
-        
-        const isUnread = unreadSessions.has(user.id);
-        const badge = isUnread ? `<span class="status-badge pending" style="font-size: 0.8rem;">NEW</span>` : '';
+   users.forEach(user => {
+    const listItem = document.createElement('li');
+    listItem.className = 'chat-session-item';
+    listItem.dataset.customerId = user.customer_id;
 
-        listItem.innerHTML = `
-            <div>
-                <strong>${user.full_name} ${badge}</strong>
-                <p style="margin: 0; font-size: 0.8rem;">${user.email}</p>
-            </div>
-            <span><i class="fas fa-arrow-right"></i> Chat</span>
-        `;
-        listItem.onclick = () => openChatModal(user.id, user.full_name);
-        list.appendChild(listItem);
-    });
+    const isUnread = unreadSessions.has(user.customer_id);
+    const badge = isUnread
+        ? `<span class="status-badge pending" style="font-size: 0.8rem;">NEW</span>`
+        : '';
+
+    listItem.innerHTML = `
+        <div>
+            <strong>${user.customer_email} ${badge}</strong>
+            <p style="margin: 0; font-size: 0.8rem;">
+                Last message: ${new Date(user.last_message_time).toLocaleString()}
+            </p>
+        </div>
+        <span><i class="fas fa-arrow-right"></i> Chat</span>
+    `;
+
+    listItem.onclick = () =>
+        openChatModal(user.customer_id, user.customer_email);
+
+    list.appendChild(listItem);
+});
+
 
 } catch (error) {
     console.error('Error fetching chat users:', error);
