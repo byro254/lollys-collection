@@ -2909,6 +2909,29 @@ app.get('/api/chat/history/:customerId', async (req, res) => {
     return res.status(403).json({ message: 'Access denied to this chat history.' });
 });
 
+/**
+ * ADMIN: Get recent chat sessions (customers who have chatted)
+ **/
+app.get('/api/admin/chat/recent-sessions', isAdmin, async (req, res) => {
+    try {
+        const [rows] = await pool.query(`
+            SELECT 
+                cm.customer_id,
+                u.name AS customer_name,
+                u.email AS customer_email,
+                MAX(cm.created_at) AS last_message_time
+            FROM chat_messages cm
+            JOIN users u ON u.id = cm.customer_id
+            GROUP BY cm.customer_id, u.name, u.email
+            ORDER BY last_message_time DESC
+        `);
+
+        res.json(rows);
+    } catch (error) {
+        console.error('Error fetching recent chat sessions:', error);
+        res.status(500).json({ message: 'Failed to fetch chat sessions.' });
+    }
+});
 
 // =========================================================
 //                   START SERVER (MODIFIED)
