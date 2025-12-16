@@ -35,9 +35,9 @@
             background-color: var(--color-bg-page); 
             color: var(--color-text-dark); 
             line-height: 1.6; 
-            min-height: 100vh;
+            min-height: 1000vh;
             /* Hide overflow initially to prevent content flashing before drop animation */
-            overflow-x: hidden;
+            overflow-x: hidden; 
         }
         
         /* ---------------------------------------------------- */
@@ -59,7 +59,7 @@
         }
 
         .spinner {
-            font-size: 3rem;
+            font-size: 6rem;
             color: var(--color-pink-dark);
             animation: spin 1.5s linear infinite;
         }
@@ -655,7 +655,7 @@ body::-webkit-scrollbar {
     <div id="app-container" class="content-hidden">
         
         <header class="header">
-            <a href="/" class="logo">Lolly's Collection</a>
+            <a href="/" class="logo" style="font-size: 23px;">Lolly's Collection</a>
             
             <!-- This group holds all controls -->
             <div class="header-controls">
@@ -739,9 +739,9 @@ body::-webkit-scrollbar {
         <main id="main-content">
             <section id="home" class="hero">
                 <div class="hero-content">
-                    <h1 style="font-size: 30px;">
+                    <h1>
                         The Power of a Fresh Start.
-                        <span style="font-size: 20px;">A New Outfit is a New Beginning.</span>
+                        <span >A New Outfit is a New Beginning.</span>
                     </h1>
                     <p>
                         It’s more than just clothes, shoes, and bags—it’s armor for your confidence. We believe every day deserves a new sense of purpose. Find the perfect piece, from a statement dress to a sharp pair of shoes, or the essential accessory that ties your entire look together. Your next favorite moment starts here.
@@ -788,10 +788,7 @@ body::-webkit-scrollbar {
         const staticImages = [
             
             'https://placehold.co/800x500/F06292/FFFFFF?text=Welcome+to+Lollys+Collection ',
-            'https://placehold.co/800x500/C2185B/FFFFFF?text=Shop+with+us',
-             'https://placehold.co/800x500/C2185B/FFFFFF?text=Trusted+By+over+100k+users ',
-            'https://placehold.co/800x500/C2185B/FFFFFF?text=Must+Haves',
-    
+           
       
       
         ];   
