@@ -348,6 +348,41 @@
             color: var(--color-success);
         }
 
+        /* --- Payment History Table --- */
+        .order-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .order-table th, .order-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--color-border-medium);
+            text-align: left;
+        }
+        .order-table th {
+            background-color: var(--color-bg-page);
+            font-weight: 600;
+            color: var(--color-text-subtle);
+        }
+        .order-table tbody tr:hover {
+            background-color: #fcfcfc;
+            cursor: pointer;
+        }
+        
+        /* Status Badge (Copied from profile.html for consistency) */
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .status-badge.Pending { background-color: var(--color-warning); color: var(--color-text-dark); }
+        .status-badge.Completed { background-color: var(--color-success); color: white; }
+        .status-badge.Failed, .status-badge.Cancelled { background-color: var(--color-danger); color: white; }
+        .status-badge.Deposit { background-color: var(--color-success); color: white; }
+        .status-badge.Deduction { background-color: var(--color-danger); color: white; }
+
+
         /* --- MODAL STYLES --- */
         .modal { 
             position: fixed; 
@@ -467,6 +502,30 @@
             </button>
         </div>
     </div>
+    
+    <!-- 🚨 M-Pesa Processing/Spinner Modal (Used by STK Push) -->
+    <div id="deposit-processing-modal" class="modal">
+        <div class="modal-content">
+            <div class="spinner-container">
+                <i class="fas fa-mobile-alt" style="font-size: 3rem; color: var(--color-pink-accent); margin-bottom: 15px;"></i>
+                <div class="spinner-text">
+                    Waiting for M-Pesa PIN...
+                </div>
+                <div class="spinner-subtext">
+                    Transaction ID: <strong id="processing-checkout-id">N/A</strong>
+                </div>
+                <p style="margin-top: 15px; color: var(--color-text-dark);">
+                    **Please check your phone and enter your M-Pesa PIN to complete the payment.**
+                </p>
+                <p id="polling-status-message" style="color: var(--color-text-subtle); font-size: 0.85rem; margin-top: 5px;">
+                    Polling the server for transaction status...
+                </p>
+                <button class="update-button" style="margin-top: 20px; background-color: var(--color-danger);" onclick="cancelMpesaTransaction()">
+                    Cancel Transaction
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- END MODALS -->
 
     <!-- 🚨 HEADER -->
@@ -503,6 +562,8 @@
                 <li><a href="#cart-payment" class="nav-link active" data-target="cart-payment"><i class="fas fa-shopping-cart"></i> Cart & Payment</a></li>
                 <li><a href="#delivery-info" class="nav-link" data-target="delivery-info"><i class="fas fa-map-marked-alt"></i> Delivery Info</a></li>
                 <li><a href="#delivery-track" class="nav-link" data-target="delivery-track"><i class="fas fa-truck-fast"></i> Delivery Track</a></li>
+                <!-- 🚨 NEW: Payment History -->
+                <li><a href="#payment-history" class="nav-link" data-target="payment-history"><i class="fas fa-history"></i> Payment History</a></li>
             </ul>
         </nav>
     </aside>
@@ -512,7 +573,7 @@
         <main class="main-content gated-content disabled" id="main-content">
             
             <!-- ============================================== -->
-            <!-- 1. CART & PAYMENT SECTION (Existing Cart Content) -->
+            <!-- 1. CART & PAYMENT SECTION -->
             <!-- ============================================== -->
             <section id="cart-payment" class="page-section active">
                 <h2 class="section-header"><i class="fas fa-shopping-cart"></i> Cart & Payment</h2>
@@ -529,7 +590,6 @@
                         <div class="card checkout-form-section">
                             <h3>Delivery & Contact Info</h3>
                             <form id="checkout-form">
-                                <!-- 🚨 FIX: Auto-filled and Read-Only fields -->
                                 <div class="form-group">
                                     <label for="delivery-name">Customer Name:</label>
                                     <input type="text" id="delivery-name" placeholder="Your Full Name" required readonly>
@@ -543,7 +603,6 @@
                                     <input type="text" id="delivery-phone" placeholder="Phone Number (e.g., 07XXXXXXXX)" required readonly pattern="[0-9]{9,12}">
                                 </div>
                                 
-                                <!-- Editable Delivery Location -->
                                 <div class="form-group">
                                     <label for="delivery-location">Delivery Location (City/Estate):</label>
                                     <input type="text" id="delivery-location" placeholder="e.g., Nairobi CBD, Kilimani" required>
@@ -555,7 +614,7 @@
                                     <option value="whatsapp">Admin WhatsApp </option>
                                 </select>
                                 
-                                <!-- 🚨 NEW: Payment Method Selection -->
+                                <!-- 🚨 Payment Method Selection -->
                                 <div class="form-group" style="margin-top: 20px;">
                                     <label for="payment-method"><i class="fas fa-wallet"></i> Choose Payment Method:</label>
                                     <select id="payment-method" class="form-select" required>
@@ -578,20 +637,17 @@
                     <div class="cart-summary-column">
                         <div class="card cart-summary-section">
                             <h3>Order Summary</h3>
-                            <!-- 🚨 REMOVED: Wallet Balance Display -->
                             
                             <div class="summary-line"><span>Subtotal:</span> <span id="subtotal-amount">KES 0.00</span></div>
                             <div class="summary-line"><span>Shipping (Fixed):</span> <span id="shipping-fee"> KES 300.00</span></div>
                             <div class="summary-total"><span>Grand Total:</span> <span id="total-amount">KES 0.00</span></div>
-                            
-                            <!-- 🚨 REMOVED: Balance Warning -->
                         </div>
                     </div>
                 </div>
             </section>
 
             <!-- ============================================== -->
-            <!-- 2. DELIVERY INFO SECTION (NEW) -->
+            <!-- 2. DELIVERY INFO SECTION -->
             <!-- ============================================== -->
             <section id="delivery-info" class="page-section">
                 <h2 class="section-header"><i class="fas fa-map-marked-alt"></i> Delivery Information</h2>
@@ -625,7 +681,7 @@
             </section>
             
             <!-- ============================================== -->
-            <!-- 3. DELIVERY TRACK SECTION (NEW) -->
+            <!-- 3. DELIVERY TRACK SECTION -->
             <!-- ============================================== -->
             <section id="delivery-track" class="page-section">
                 <h2 class="section-header"><i class="fas fa-truck-fast"></i> Delivery Track</h2>
@@ -650,6 +706,31 @@
                     </div>
                 </div>
             </section>
+            
+            <!-- ============================================== -->
+            <!-- 4. PAYMENT HISTORY SECTION (NEWLY ADDED) -->
+            <!-- ============================================== -->
+            <section id="payment-history" class="page-section">
+                <h2 class="section-header"><i class="fas fa-history"></i> Payment History</h2>
+                <div class="card">
+                    <p style="color: var(--color-text-subtle);">A record of all your successful payments processed.</p>
+                    <div id="payment-history-container">
+                        <table class="order-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Type</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payment-history-tbody">
+                                <tr><td colspan="4" style="text-align: center;">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
         </main>
     </div>
@@ -664,24 +745,28 @@
          */
         const CART_API_URL = '/api/cart';
         const ORDER_API_URL = '/api/order';
-        const PAYSTACK_VERIFY_API = '/api/payment/paystack/verify'; // 🚨 NEW
-        const MPESA_DEPOSIT_API = '/api/wallet/deposit/mpesa'; // Reusing existing M-Pesa endpoint
-        const MPESA_STATUS_API = '/api/wallet/deposit/status'; // Reusing existing status endpoint
+        const PAYSTACK_VERIFY_API = '/api/payment/paystack/verify'; 
+        const MPESA_DEPOSIT_API = '/api/wallet/deposit/mpesa'; 
+        const MPESA_STATUS_API = '/api/wallet/deposit/status'; 
         const USER_PROFILE_API_URL = '/api/user/profile'; 
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const LOGOUT_API_URL = '/api/logout';
         const DELIVERY_INFO_API_URL = '/api/profile/delivery'; 
         const DELIVERY_TRACK_API_URL = '/api/user/delivery-status'; 
+        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; // 🚨 NEW
+
         
         const SHIPPING_COST = 300.00; 
         const ADMIN_WHATSAPP = '254742041208'; 
         const REFRESH_INTERVAL_MS = 1800000; // 30 minutes
         const MPESA_POLL_INTERVAL_MS = 3000; // Poll M-Pesa status every 3 seconds
+        const MAX_POLLING_ATTEMPTS = 20;
 
         // Global variable to hold the current cart items and total (balance removed)
         window.currentCart = { items: [], total: SHIPPING_COST }; 
         
         let isUserAuthenticated = false; 
+        let pollingIntervalId = null;
 
         // --- DOM Elements ---
         const sidebar = document.getElementById('sidebar');
@@ -711,7 +796,6 @@
                     container.classList.remove('disabled');
                     sidebarEl.classList.remove('disabled');
                     
-                    // 🚨 MODAL FIX: Hide access modal if authenticated
                     accessModal.classList.remove('is-open'); 
                     accessModal.style.display = 'none';
                     document.body.style.overflow = 'auto'; 
@@ -722,9 +806,8 @@
                     container.classList.add('disabled');
                     sidebarEl.classList.add('disabled');
                     
-                    // 🚨 MODAL FIX: Show access modal if unauthenticated
                     accessModal.classList.add('is-open');
-                    accessModal.style.display = 'flex'; // Ensure display is flex for visibility
+                    accessModal.style.display = 'flex'; 
                     document.body.style.overflow = 'hidden';
                     return false;
                 }
@@ -735,9 +818,8 @@
                 container.classList.add('disabled');
                 sidebarEl.classList.add('disabled');
                 
-                // 🚨 MODAL FIX: Show access modal on network error
                 accessModal.classList.add('is-open');
-                accessModal.style.display = 'flex'; // Ensure display is flex for visibility
+                accessModal.style.display = 'flex'; 
                 document.body.style.overflow = 'hidden';
                 return false;
             }
@@ -748,24 +830,18 @@
             
             const modal = document.getElementById('deactivated-alert-modal');
             
-            // 1. Display the modal and freeze the screen
             document.getElementById('deactivated-message-content').innerHTML = message;
             
-            // Ensure the main page is disabled/blurred
             document.querySelector('.site-header').classList.add('disabled');
             document.querySelector('.main-content').classList.add('disabled');
             document.getElementById('sidebar').classList.add('disabled');
             
-            // 🚨 MODAL FIX: Show deactivation modal
             modal.classList.add('is-open');
-            modal.style.display = 'flex'; // Ensure display is flex for visibility
+            modal.style.display = 'flex'; 
             document.body.style.overflow = 'hidden';
 
-            // 2. Set up the handler for the OK button
             document.getElementById('alert-ok-button').onclick = () => {
-                // Attempt to destroy session on server (fire and forget)
                 fetch(LOGOUT_API_URL, { method: 'POST' }).finally(() => {
-                    // Force redirection after the user acknowledges the message
                     if (forceRedirect) {
                         window.location.href = '/auth';
                     }
@@ -823,11 +899,12 @@
             // Load data based on section
             if (targetId === 'cart-payment') {
                 renderCart();
-                initFormFields(); // 🚨 REFRESH CONTACT FIELDS
+                initFormFields(); 
             } else if (targetId === 'delivery-info') {
                 fetchDeliveryInfo();
+            } else if (targetId === 'payment-history') { // 🚨 NEW CALL
+                fetchAndRenderPaymentHistory();
             }
-            // Delivery track doesn't need auto-load, user initiates search
 
             history.pushState(null, '', `#${targetId}`);
         }
@@ -849,7 +926,7 @@
             if(cartNavEl) cartNavEl.textContent = cartCount;
         }
 
-        // 🚨 MODIFIED: Removed wallet checks
+        // 🚨 MODIFIED: Simplified to only update the button text/state
         function updatePaymentUI() {
             const total = window.currentCart.total;
             const orderBtn = document.getElementById('place-order-btn');
@@ -866,8 +943,6 @@
             }
         }
         
-        // 🚨 REMOVED: fetchWalletBalance
-        
         async function deleteItem(productId, size = null) {
             if (!isUserAuthenticated) {
                  document.getElementById('access-required-modal').classList.add('is-open');
@@ -876,7 +951,6 @@
 
             console.log(`Deleting item ${productId} with size ${size}...`);
             
-            // Construct the URL with size as a query parameter for unique deletion
             const url = `${CART_API_URL}/${productId}` + (size ? `?size=${encodeURIComponent(size)}` : '');
             
             try {
@@ -920,7 +994,6 @@
 
             } catch (error) {
                 console.error('Error fetching cart:', error);
-                // Fallback UI update
                 itemsContainer.innerHTML = '<p style="text-align: center; color: red;">Failed to load cart. Check backend API status.</p>';
                 subtotalEl.textContent = 'KES 0.00';
                 totalEl.textContent = 'KES ' + SHIPPING_COST.toFixed(2);
@@ -981,7 +1054,6 @@
             updatePaymentUI();
         }
         
-        // 🚨 FIX: Updated initFormFields to fetch user profile and pre-fill read-only fields
         async function initFormFields() {
             if (!isUserAuthenticated) return;
             
@@ -990,7 +1062,6 @@
             const phoneInput = document.getElementById('delivery-phone');
             const locationInput = document.getElementById('delivery-location');
 
-            // Temporarily disable inputs while fetching
             nameInput.disabled = true;
             emailInput.disabled = true;
             phoneInput.disabled = true;
@@ -1001,14 +1072,10 @@
                 if (response.ok) {
                     const userData = await response.json(); 
                     
-                    // Auto-fill Name, Email, Phone (Readonly)
                     nameInput.value = userData.name || ''; 
                     emailInput.value = userData.email || '';
-                    // 🚨 IMPORTANT: Phone is needed for M-Pesa. If missing, prompt user.
                     phoneInput.value = userData.phoneNumber || '';
-                    
-                    // The location field should remain editable for the current order
-                    locationInput.value = ''; 
+                    locationInput.value = userData.streetAddress || ''; // Use user's saved street address as default location
                     
                 }
             } catch (e) {
@@ -1016,8 +1083,8 @@
                 nameInput.value = 'N/A';
                 emailInput.value = 'N/A';
                 phoneInput.value = 'N/A';
+                locationInput.value = '';
             } finally {
-                // Re-enable the one non-readonly field
                 locationInput.disabled = false;
             }
         }
@@ -1055,10 +1122,9 @@
                 shipping: SHIPPING_COST.toFixed(2),
                 total: cartData.total.toFixed(2),
                 notificationMethod: document.getElementById('notification-method').value,
-                paymentMethod: paymentMethod, // Pass the chosen method to the finalizer
+                paymentMethod: paymentMethod, 
             };
             
-            // Final check on required (non-location) fields, which should be autofilled
             if (!orderData.name || !orderData.email || !orderData.phone) {
                  showMessage('order-message', 'Missing required user details (Name, Email, Phone). Please update your Profile first.', 'error');
                  return;
@@ -1080,7 +1146,12 @@
         });
         
         // --- Payment Handlers ---
-
+        
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) modal.style.display = 'none';
+        }
+        
         async function handleMpesaPayment(orderData) {
             const phone = orderData.phone;
             if (phone.length < 9) {
@@ -1100,8 +1171,12 @@
 
             if (response.ok) {
                 showMessage('order-message', 'STK Push sent to your phone! Please enter your M-Pesa PIN.', 'info');
-                // Start polling to check if the transaction completed
-                checkMpesaStatus(result.transactionRef, orderData);
+                
+                // Open processing modal and start polling
+                document.getElementById('processing-checkout-id').textContent = result.transactionRef;
+                document.getElementById('deposit-processing-modal').style.display = 'flex';
+                
+                startPolling(result.transactionRef, orderData);
             } else {
                 throw new Error(result.message);
             }
@@ -1111,25 +1186,15 @@
             const amountInCents = Math.round(parseFloat(orderData.total) * 100);
             
             const handler = PaystackPop.setup({
-                key: 'YOUR_PAYSTACK_PUBLIC_KEY', // 🚨 REPLACE THIS WITH YOUR PUBLIC KEY
+                key: 'YOUR_PAYSTACK_PUBLIC_KEY', // 🚨 Replace with your real public key
                 email: orderData.email,
-                amount: amountInCents,
+                amount: amountInCents, 
                 currency: 'KES',
-                // Metadata is optional but good for audit
-                metadata: {
-                    custom_fields: [{
-                        display_name: "Customer ID",
-                        variable_name: "customer_id",
-                        value: orderData.name + " (" + orderData.phone + ")"
-                    }],
-                    cart_items: orderData.items.map(i => ({ id: i.id, qty: i.quantity }))
-                },
                 callback: function(response) {
-                    // Payment successful on client side. Now verify on server.
                     verifyPaystackPayment(response.reference, orderData);
                 },
                 onClose: function() {
-                    showMessage('order-message', 'Payment window closed. Please try again.', 'error');
+                    showMessage('order-message', 'Payment window closed.', 'error');
                     document.getElementById('place-order-btn').disabled = false;
                 }
             });
@@ -1149,7 +1214,6 @@
                 const result = await response.json();
 
                 if (response.ok && result.verified) {
-                    // Payment verified! Now log the final order and payment on the server.
                     orderData.paymentReference = reference;
                     await finalizeOrder(orderData);
                 } else {
@@ -1160,18 +1224,18 @@
                 document.getElementById('place-order-btn').disabled = false;
             }
         }
-        
-        // Polling function for M-Pesa STK status
-        function checkMpesaStatus(checkoutRequestID, orderData) {
-            let attempts = 0;
-            const maxAttempts = 20; // Check for up to 60 seconds
 
-            const pollInterval = setInterval(async () => {
+        function startPolling(checkoutRequestID, orderData) {
+            let attempts = 0;
+            const maxAttempts = MAX_POLLING_ATTEMPTS;
+
+            pollingIntervalId = setInterval(async () => {
                 attempts++;
                 
                 if (attempts > maxAttempts) {
-                    clearInterval(pollInterval);
-                    showMessage('order-message', 'M-Pesa payment timed out. Check your phone and try again.', 'error');
+                    clearInterval(pollingIntervalId);
+                    closeModal('deposit-processing-modal');
+                    showMessage('order-message', 'M-Pesa payment timed out. Please try again.', 'error');
                     document.getElementById('place-order-btn').disabled = false;
                     return;
                 }
@@ -1186,67 +1250,127 @@
                     const result = await response.json();
 
                     if (result.status === 'Completed') {
-                        clearInterval(pollInterval);
+                        clearInterval(pollingIntervalId);
+                        closeModal('deposit-processing-modal');
                         showMessage('order-message', '<i class="fas fa-spinner fa-spin"></i> Payment received. Finalizing order...', 'success');
                         
-                        // Payment complete! Now log the final order on the server.
-                        orderData.paymentReference = result.mpesaRef; // Use the MpesaReceiptNumber
+                        orderData.paymentReference = result.mpesaRef; 
                         await finalizeOrder(orderData);
                         
                     } else if (result.status === 'Failed' || result.status === 'Cancelled') {
-                        clearInterval(pollInterval);
+                        clearInterval(pollingIntervalId);
+                        closeModal('deposit-processing-modal');
                         throw new Error(result.message || 'Transaction failed or was cancelled.');
                     } else {
                         // Still Pending
-                        showMessage('order-message', `<i class="fas fa-spinner fa-spin"></i> Waiting for M-Pesa PIN approval... (${attempts}/${maxAttempts})`, 'info');
+                        document.getElementById('polling-status-message').textContent = `Waiting for M-Pesa PIN approval... (${attempts}/${maxAttempts})`;
                     }
                 } catch (error) {
-                    clearInterval(pollInterval);
+                    clearInterval(pollingIntervalId);
+                    closeModal('deposit-processing-modal');
                     showMessage('order-message', `M-Pesa Polling Error: ${error.message}`, 'error');
                     document.getElementById('place-order-btn').disabled = false;
                 }
             }, MPESA_POLL_INTERVAL_MS);
         }
+        
+        window.cancelMpesaTransaction = function() {
+            if (pollingIntervalId) clearInterval(pollingIntervalId);
+            closeModal('deposit-processing-modal');
+            
+            showMessage('order-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
+            document.getElementById('place-order-btn').disabled = false;
+        }
 
-        // --- Final Order Submission (Only called after confirmed payment) ---
+        // --- Finalize Order in Database ---
         async function finalizeOrder(orderData) {
+            showMessage('order-message', 'Payment successful! Finalizing order...', 'info');
             try {
-                // Send the order data along with the confirmed payment reference
                 const response = await fetch(ORDER_API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(orderData)
                 });
-                
-                const result = await response.json();
 
+                const result = await response.json();
                 if (response.ok) {
                     renderCart(); 
                     
-                    showMessage('order-message', `Order #${result.orderId} placed! Tracking details now available.`, 'success');
-                    document.getElementById('tracking-order-id').value = result.orderId; // Pre-fill tracking ID
+                    showMessage('order-message', `Success! Order #${result.orderId} placed.`, 'success');
+                    document.getElementById('tracking-order-id').value = result.orderId; 
 
                     if (orderData.notificationMethod === 'whatsapp') {
                         const whatsappMessage = encodeURIComponent(`Order #${result.orderId} confirmed for delivery to ${orderData.location}. Total: KES${orderData.total}. Tracking available via Order ID.`);
                         window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${whatsappMessage}`, '_blank');
                     }
                     
-                    // Clear only the editable location field
+                    // Clear the editable location field
                     document.getElementById('delivery-location').value = ''; 
-                } else {
-                    showMessage('order-message', `Order failed: ${result.message || 'Server error. Please try again.'}`, 'error');
-                }
+                    
+                    // 🚨 CRITICAL CHANGE: Navigate to Payment History on successful order
+                    showSection('payment-history');
 
-            } catch (error) {
-                console.error('Network Error:', error);
-                showMessage('order-message', 'An error occurred connecting to the server.', 'error');
+                } else {
+                    showMessage('order-message', 'Payment received but order logging failed. Contact support.', 'error');
+                }
+            } catch (err) {
+                console.error(err);
             } finally {
                 document.getElementById('place-order-btn').disabled = false;
                 updatePaymentUI();
             }
         }
         
-        // --- DELIVERY INFO LOGIC (NEW) ---
+        // --- PAYMENT HISTORY LOGIC (Copied from profile.html) ---
+
+        /**
+         * Fetches and renders payment history (deposits/deductions) via API.
+         */
+        async function fetchAndRenderPaymentHistory() {
+             if (!isUserAuthenticated) return;
+             const tbody = document.getElementById('payment-history-tbody');
+             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
+             
+             try {
+                const response = await fetch(PAYMENT_HISTORY_API_URL);
+
+                if (response.ok) {
+                    const historyData = await response.json(); // Assuming API returns [{date, type, amount, status}, ...]
+                    
+                    tbody.innerHTML = '';
+                    if (historyData.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-text-subtle);">No history available.</td></tr>';
+                        return;
+                    }
+                 
+                    historyData.forEach(transaction => {
+                        const statusClass = (transaction.status || 'Pending').replace(/[^a-zA-Z0-9]/g, '\\ ');
+                        const amountText = `KES ${parseFloat(transaction.amount || 0).toFixed(2)}`;
+                        const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
+                        
+                        const row = `
+                            <tr>
+                                <td>${new Date(transaction.date).toLocaleDateString()}</td>
+                                <td>${transaction.type || 'Transaction'}</td>
+                                <td style="${amountStyle}">${amountText}</td>
+                                <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
+                            </tr>
+                        `;
+                        tbody.insertAdjacentHTML('beforeend', row);
+                    });
+                } else {
+                    // Handle API non-OK status
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Error (${response.status}) loading history.</td></tr>`;
+                }
+
+             } catch (error) {
+                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Network error loading history.</td></tr>`;
+                 console.error('Error fetching payment history:', error);
+             }
+        }
+
+
+        // --- DELIVERY INFO LOGIC ---
 
         async function fetchDeliveryInfo() {
             if (!isUserAuthenticated) return;
@@ -1303,7 +1427,7 @@
             }
         });
 
-        // --- DELIVERY TRACKING LOGIC (NEW) ---
+        // --- DELIVERY TRACKING LOGIC ---
 
         document.getElementById('delivery-track-form').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -1356,7 +1480,7 @@
 
             const currentStatus = data.currentStatus;
             let currentStageIndex = stages.findIndex(s => s.name === currentStatus);
-            if (currentStageIndex === -1) currentStageIndex = 0; // Default to first stage
+            if (currentStageIndex === -1) currentStageIndex = 0; 
 
             statusTextEl.textContent = currentStatus;
             displayEl.style.borderColor = currentStatus === 'Delivered' ? 'var(--color-success)' : 'var(--color-info)';
@@ -1391,11 +1515,9 @@
             const loggedIn = await checkAuthenticationStatus(); 
             
             if (loggedIn) {
-                // Determine initial section from hash or default to cart-payment
                 const initialHash = window.location.hash ? window.location.hash.substring(1) : 'cart-payment';
                 showSection(initialHash);
                 
-                // Start background check loop
                 window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS);
             }
             
@@ -1404,7 +1526,8 @@
             };
 
             window.redirectToAuthPage = redirectToAuthPage;
-            window.deleteItem = deleteItem; // Expose deleteItem globally for item buttons
+            window.deleteItem = deleteItem; 
+            window.closeModal = closeModal; // Expose closeModal for modal handler cleanup
         });
     </script>
 </body>
