@@ -36,8 +36,89 @@
             color: var(--color-text-dark); 
             line-height: 1.6; 
             min-height: 100vh;
+            /* Hide overflow initially to prevent content flashing before drop animation */
+            overflow-x: hidden;
         }
         
+        /* ---------------------------------------------------- */
+        /* --- NEW: Persistent Loading Screen Styles --- */
+        /* ---------------------------------------------------- */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background-color: var(--color-bg-light); /* White or light background */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 99999; /* Below the initial drop overlay, but above everything else */
+            transition: opacity 0.5s ease-out;
+        }
+
+        .spinner {
+            font-size: 3rem;
+            color: var(--color-pink-dark);
+            animation: spin 1.5s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loading-screen p {
+            margin-top: 15px;
+            font-size: 1.1rem;
+            color: var(--color-text-subtle);
+        }
+        
+        /* Initial state for the main application container */
+        .content-hidden {
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s;
+        }
+
+        .content-visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        /* ---------------------------------------------------- */
+        /* --- DROP TRANSITION ANIMATION --- */
+        /* ---------------------------------------------------- */
+        #drop-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background-color: var(--color-pink-dark); /* Solid color for the drop */
+            z-index: 100000; /* Highest priority */
+            animation: drop-out 1.5s cubic-bezier(0.86, 0, 0.07, 1) forwards;
+            animation-delay: 0.5s; /* Wait briefly before starting */
+            pointer-events: none; /* Allows clicks to pass through after animation */
+        }
+        
+        @keyframes drop-out {
+            0% { 
+                transform: translateY(0); 
+                opacity: 1;
+            }
+            80% { 
+                transform: translateY(100vh); 
+                opacity: 1;
+            }
+            100% { 
+                transform: translateY(100vh); 
+                opacity: 0;
+                display: none; /* Fully hide after animation */
+            }
+        }
+
         /* --- Header Styles (COMPACT & ICON-BASED) --- */
         .header { 
             background-color: lightpink; 
@@ -51,6 +132,33 @@
             top: 0;
         }
 
+        /* ---------------------------------------------------- */
+        /* --- NEWS TICKER/ANIMATION HEADER STYLES --- */
+        /* ---------------------------------------------------- */
+        .animation-header {
+            background-color: var(--color-pink-accent); 
+            color: white;
+            padding: 0.8rem 0;
+            font-size: 1.1rem;
+            font-weight: 500;
+            overflow: hidden;
+            white-space: nowrap;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            
+        }
+
+        .news-ticker-content {
+            display: inline-block;
+            padding-left: 100%; /* Start the text off-screen to the right */
+            animation: ticker-move 30s linear infinite; /* Adjust time for speed */
+        }
+        
+        @keyframes ticker-move {
+            to {
+                transform: translateX(-100%); /* Move from right to left */
+            }
+        }
+        
         /* Group navigation and auth controls */
         .header-controls {
             display: flex;
@@ -90,7 +198,7 @@
             background-color: rgba(233, 30, 99, 0.1);
         }
 
-        /* Cart Badge Styling */
+        /* Cart Badge Styling (Desktop) */
         #cart-count {
             font-size: 0.7rem; 
             font-weight: 700;
@@ -128,11 +236,15 @@
             z-index: 1002; /* Above sidebar */
         }
         
+        /* MODIFIED: Close icon is now positioned absolutely inside the sidebar */
         .sidebar-close-icon {
-            position: absolute;
+            font-size: 1.8rem;
+            color: var(--color-pink-dark); /* Color against white background */
+            padding: 0;
+            position: absolute; /* Position relative to the sidebar container */
             top: 15px;
-            right: 20px;
-            font-size: 1.8rem; /* Make close X bigger */
+            right: 15px;
+            z-index: 1010; /* Ensure it's above the links */
         }
         
         /* 🚨 FIX: Hide the sidebar nav element by default on desktop */
@@ -206,20 +318,8 @@
         .hero h1 { font-family: var(--font-heading); font-size: 4rem; margin-bottom: 0.5rem; font-weight: 700; color: var(--color-pink-dark);}
         .hero h1 span { font-family: var(--font-body); font-style: normal; font-size: 0.5em; display: block; font-weight: 300; color: var(--color-text-subtle); margin-top: 10px; }
         .hero p { font-size: 1.2rem; color: var(--color-text-subtle); margin: 1rem 0 2rem; font-weight: 400; }
-        .cta-button { 
-            background-color: var(--color-pink-dark); 
-            color: white; 
-            padding: 15px 40px; 
-            text-decoration: none; 
-            border-radius: 8px; 
-            font-weight: 600; 
-            font-size: 1.1rem;
-            transition: background-color 0.3s, transform 0.2s, box-shadow 0.3s; 
-            border: none;
-            box-shadow: 0 4px 10px rgba(194, 24, 91, 0.2);
-            display: inline-block;
-        }
-        .cta-button:hover { background-color: var(--color-pink-accent); transform: translateY(-3px); box-shadow: 0 6px 15px rgba(194, 24, 91, 0.3); }
+        /* Removed .cta-button styles as the button is being removed */
+
 
         /* --- 🚨 CAROUSEL STYLES --- */
         .hero-image-container { 
@@ -305,7 +405,7 @@
             box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
             margin-top: auto; /* Push footer to the bottom */
         }
-        
+      
         /* --- MODAL STYLES --- */
         .modal { 
             position: fixed; 
@@ -382,60 +482,110 @@
                 display: none; /* Hide nav links from header */
             }
             
-            /* Style the nav element as a sidebar */
+            /* ================================================= */
+            /* --- REDESIGNED SIDEBAR STYLES --- */
+            /* ================================================= */
+            
+            /* Sidebar Container Enhancements */
             nav.main-nav-sidebar {
-                display: block; /* Re-enable display for sidebar */
+                display: flex; /* Changed from block to flex for internal vertical layout */
+                flex-direction: column;
                 position: fixed;
                 top: 0;
-                left: 0;
+                /* Start the sidebar completely off-screen using its width (280px) */
+                left: -280px; 
                 height: 100vh;
                 width: 280px;
                 background-color: var(--color-bg-light);
-                flex-direction: column;
                 align-items: flex-start;
-                padding: 60px 30px 30px;
-                gap: 1.5rem;
-                box-shadow: 0 0 20px rgba(0,0,0,0.2);
-                /* Hide off-screen by default */
-                transform: translateX(-100%);
-                transition: transform 0.3s ease-in-out;
+                /* ADDED: top padding for the close button, and horizontal padding for the links */
+                padding: 50px 0 0 0;
+                box-shadow: 4px 0 20px rgba(0,0,0,0.3); /* Stronger shadow on the right side */
+                /* Slight top-right corner rounding */
+                border-top-right-radius: 12px;
+                border-bottom-right-radius: 12px;
+                
+                /* Use left property for position, remove translateX(-100%) */
+                transform: translateX(0); 
+                transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1); /* Smoother transition */
                 z-index: 1001; /* Above overlay */
+                /* Ensure it's hidden from view and accessibility tree when closed */
+                visibility: hidden; 
+            }
+            
+            /* REMOVED: .sidebar-header styles as the header is removed */
+
+            /* Logo inside Sidebar Header (kept for safety but should be unused) */
+            .sidebar-header .logo {
+                font-size: 1.8rem;
+                color: white; /* White logo on pink background */
             }
             
             /* Class to show the sidebar */
             nav.main-nav-sidebar.mobile-menu-open {
-                transform: translateX(0);
+                /* Slide into view */
+                left: 0; 
+                visibility: visible;
             }
             
-            /* Show the close button inside the sidebar */
+            /* Show the close button (now positioned absolutely inside the main nav container) */
             .sidebar-close-icon {
                 display: block;
             }
 
             /* Style nav links for vertical sidebar */
             .main-nav-sidebar a {
-                font-size: 1.2rem;
+                font-size: 1rem;
                 color: var(--color-text-dark);
-                width: 100%; /* Make links full-width */
-                display: block; /* Ensure they stack vertically */
-                padding: 10px 15px; /* Added horizontal padding */
-                margin: 0 -15px; /* Offset padding to keep alignment */
-                border-radius: 8px; /* Added border-radius */
-                transition: all 0.2s ease-in-out; /* Smooth transition */
+                width: 83%; 
+                display: flex; /* Use flex to align icon and text */
+                align-items: center;
+                /* Horizontal padding moved to links */
+                padding: 12px 24px; 
+                margin: 4px 0; /* Add vertical separation between links */
+                border-radius: 0; 
+                transition: all 0.2s ease-in-out; 
+                text-decoration: none;
+                font-weight: 500;
+            }
+            
+            /* Icon alignment */
+            .main-nav-sidebar a i {
+                font-size: 1.2rem;
+                margin-right: 15px; /* Space between icon and text */
+                color: var(--color-pink-dark);
             }
             
             /* --- NEW HOVER EFFECT --- */
-            .main-nav-sidebar a:hover {
-                background-color: var(--color-bg-page); /* Light grey background on hover */
-                color: var(--color-pink-accent); /* Pink text on hover */
-                transform: translateX(5px); /* Slight pop-out effect */
+            .main-nav-sidebar a:hover, 
+            .main-nav-sidebar a[href="/"] {
+                background-color: var(--color-bg-page); /* Light grey background on hover/active */
+                color: var(--color-pink-dark); 
+                /* Add a subtle active/hover indicator line */
+                border-left: 4px solid var(--color-pink-accent); 
+                padding-left: 20px; /* Adjust padding to compensate for border */
             }
             
             /* Show text labels in sidebar */
             .main-nav-sidebar .nav-text {
                 display: inline-block;
-                margin-left: 10px;
+                flex-grow: 1; /* Push the badge to the right */
             }
+            
+            /* Mobile Cart Badge Styling */
+            .mobile-cart-badge {
+                font-size: 0.7rem; 
+                font-weight: 700;
+                background-color: var(--color-pink-accent);
+                color: white;
+                border-radius: 10px;
+                padding: 2px 8px;
+                line-height: 1;
+                margin-left: auto; /* Push badge to the far right */
+                display: inline-block !important; /* Always show badge container, content hidden if count=0 */
+                /* Hide the badge visually if count is 0, handled by JS display: none/block */
+            }
+
 
             /* Style auth button for mobile header */
             #auth-controls {
@@ -471,119 +621,158 @@
             .hero-image-container {
                 height: 350px;
             }
+            
+            /* MODIFIED: Re-enable the news ticker animation on smaller screens. */
+            .news-ticker-content {
+                 padding-left: 100%; /* Ensure content starts off-screen */
+                 white-space: nowrap; /* Keep content on a single line */
+            }
         }
-    </style>
+  /* Hide scrollbar for entire page */
+body {
+    overflow: auto; /* Keeps scrolling enabled */
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+/* Chrome, Safari, Opera */
+body::-webkit-scrollbar {
+    display: none;
+}
+   </style>
 </head>
 <body>
     
-    <header class="header">
-        <a href="/" class="logo">Lolly's Collection</a>
+    
+    <!-- NEW: Loading Screen - Visible until services initialize -->
+    <div id="loading-screen">
+        <i class="fas fa-spinner spinner"></i>
+        <p style="color: #C2185B;font-size: 40px;">Lolly's Collection</p>
+    
+    </div>
+    
+    <!-- App Container - Initially hidden and shown only after loading screen is dismissed -->
+    <div id="app-container" class="content-hidden">
         
-        <!-- This group holds all controls -->
-        <div class="header-controls">
+        <header class="header">
+            <a href="/" class="logo">Lolly's Collection</a>
             
-            <!-- This nav is for desktop icons -->
-            <nav class="main-nav" id="main-nav-desktop">
-                <a href="/" aria-label="Home"><i class="fa-solid fa-house"></i></a>
-                <a href="/products" aria-label="Products"><i class="fa-solid fa-tags"></i></a>
-                <a href="/cart" aria-label="Cart">
-                    <i class="fa-solid fa-shopping-cart"></i>
-                    <span id="cart-count" style="display: none;">0</span>
-                </a>
-                <a href="/about" aria-label="About Us"><i class="fa-solid fa-info-circle"></i></a>
-                <a href="/contact" aria-label="Contact Us"><i class="fa-solid fa-envelope"></i></a>
-                <a href="/profile.html" aria-label="Profile"><i class="fa-solid fa-user"></i></a>
-            </nav>
-            
-            <!-- Auth button (used by both) -->
-            <div id="auth-controls"> 
-                <button id="auth-button" class="auth-button">Login/Register</button>
+            <!-- This group holds all controls -->
+            <div class="header-controls">
+                
+                <!-- This nav is for desktop icons -->
+                <nav class="main-nav" id="main-nav-desktop">
+                    <a href="/" aria-label="Home"><i class="fa-solid fa-house"></i></a>
+                    <a href="/products" aria-label="Products"><i class="fa-solid fa-tags"></i></a>
+                    <a href="/cart" aria-label="Cart">
+                        <i class="fa-solid fa-shopping-cart"></i>
+                        <span id="cart-count" style="display: none;">0</span>
+                    </a>
+                    <a href="/about" aria-label="About Us"><i class="fa-solid fa-info-circle"></i></a>
+                    <a href="/contact" aria-label="Contact Us"><i class="fa-solid fa-envelope"></i></a>
+                    <a href="/profile.html" aria-label="Profile"><i class="fa-solid fa-user"></i></a>
+                </nav>
+                
+                <!-- Auth button (used by both) -->
+                <div id="auth-controls"> 
+                    <button id="auth-button" class="auth-button">Login/Register</button>
+                </div>
+                
+                <!-- Hamburger (mobile only) -->
+                <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
+                    <i class="fas fa-bars"></i>
+                </button>
             </div>
+        </header>
+        
+        <!-- News Ticker / Animation Header -->
+        <div class="animation-header" id="animation-header">
+            <div class="news-ticker-content">
+                ✨ Shop our flash sale now and get 70% off all accessories! Free shipping on orders over KES 5000. ✨ New arrivals are here! Check out the latest collections. 🛍️
+            </div>
+        </div>
+        <!-- END News Ticker -->
+        
+        <!-- This nav is *only* the mobile sidebar -->
+        <nav class="main-nav-sidebar" id="main-nav-sidebar">
+            <!-- Close Icon (Mobile Only) - Now positioned absolutely inside the nav -->
+            <button class="sidebar-close-icon" id="sidebar-close-icon" aria-label="Close menu">
+                <i class="fas fa-times"></i>
+            </button>
             
-            <!-- Hamburger (mobile only) -->
-            <button class="hamburger-icon" id="hamburger-icon" aria-label="Open menu">
-                <i class="fas fa-bars"></i>
-            </button>
-        </div>
+            <!-- Navigation links (used by sidebar) -->
+            <a href="/" aria-label="Home"><i class="fa-solid fa-house"></i> <span class="nav-text">Home</span></a>
+            <a href="/products" aria-label="Products"><i class="fa-solid fa-tags"></i> <span class="nav-text">Products</span></a>
+            <a href="/cart" aria-label="Cart">
+                <i class="fa-solid fa-shopping-cart"></i>
+                <!-- Added class for styling the count as a badge -->
+                <span id="cart-count-mobile" class="mobile-cart-badge" style="display: none;">0</span>
+                <span class="nav-text">Cart</span>
+            </a>
+            <a href="/about" aria-label="About Us"><i class="fa-solid fa-info-circle"></i> <span class="nav-text">About Us</span></a>
+            <a href="/contact" aria-label="Contact Us"><i class="fa-solid fa-envelope"></i> <span class="nav-text">Contact Us</span></a>
+            <a href="/profile.html" aria-label="Profile"><i class="fa-solid fa-user"></i> <span class="nav-text">Profile</span></a>
+        </nav>
+
+        <!-- Overlay for sidebar -->
+        <div class="overlay" id="overlay"></div>
         
-    </header>
-    
-    <!-- This nav is *only* the mobile sidebar -->
-    <nav class="main-nav-sidebar" id="main-nav-sidebar">
-        <!-- Close Icon (Mobile Only) -->
-        <button class="sidebar-close-icon" id="sidebar-close-icon" aria-label="Close menu">
-            <i class="fas fa-times"></i>
-        </button>
-        
-        <!-- Navigation links (used by sidebar) -->
-        <a href="/" aria-label="Home"><i class="fa-solid fa-house"></i> <span class="nav-text">Home</span></a>
-        <a href="/products" aria-label="Products"><i class="fa-solid fa-tags"></i> <span class="nav-text">Products</span></a>
-        <a href="/cart" aria-label="Cart">
-            <i class="fa-solid fa-shopping-cart"></i>
-            <span id="cart-count-mobile" style="display: none;">0</span> <!-- Separate count for mobile display -->
-            <span class="nav-text">Cart</span>
-        </a>
-        <a href="/about" aria-label="About Us"><i class="fa-solid fa-info-circle"></i> <span class="nav-text">About Us</span></a>
-        <a href="/contact" aria-label="Contact Us"><i class="fa-solid fa-envelope"></i> <span class="nav-text">Contact Us</span></a>
-        <a href="/profile.html" aria-label="Profile"><i class="fa-solid fa-user"></i> <span class="nav-text">Profile</span></a>
-    </nav>
-
-    <!-- Overlay for sidebar -->
-    <div class="overlay" id="overlay"></div>
-    
-    <!-- CRITICAL DEACTIVATION ALERT MODAL -->
-    <div id="deactivated-alert-modal" class="modal">
-        <div class="modal-content">
-            <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; color: var(--color-danger); margin-bottom: 15px;"></i>
-            <h3>Account Access Revoked</h3>
-            <p id="deactivated-message-content" style="margin-bottom: 20px;">
-                Your current session must now end.
-            </p>
-            <button id="alert-ok-button" class="alert-button" style="width: auto; padding: 10px 30px;">
-                OK
-            </button>
-        </div>
-    </div>
-    <!-- END CRITICAL DEACTIVATION ALERT MODAL -->
-
-    <div id="auth-notification" class="notification-banner">
-        🔒 Please login or register to view and purchase products.
-    </div>
-
-    <main id="main-content">
-        <section id="home" class="hero">
-            <div class="hero-content">
-                <h1>
-                    The Power of a Fresh Start.
-                    <span>A New Outfit is a New Beginning.</span>
-                </h1>
-                <p>
-                    It’s more than just clothes, shoes, and bags—it’s armor for your confidence. We believe every day deserves a new sense of purpose. Find the perfect piece, from a statement dress to a sharp pair of shoes, or the essential accessory that ties your entire look together. Your next favorite moment starts here.
+        <!-- CRITICAL DEACTIVATION ALERT MODAL -->
+        <div id="deactivated-alert-modal" class="modal">
+            <div class="modal-content">
+                <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; color: var(--color-danger); margin-bottom: 15px;"></i>
+                <h3>Account Access Revoked</h3>
+                <p id="deactivated-message-content" style="margin-bottom: 20px;">
+                    Your current session must now end.
                 </p>
-                <button id="cta-products-button" class="cta-button">🛍️ Find Your Next Signature Look</button>
+                <button id="alert-ok-button" class="alert-button" style="width: auto; padding: 10px 30px;">
+                    OK
+                </button>
             </div>
-            
-            <!-- 🚨 UPDATED: Hero Image Carousel Container -->
-            <div class="hero-image-container">
-               <!-- Initial image is a generic placeholder until dynamic content loads -->
-               <img id="carousel-image" 
-                    src="https://placehold.co/800x500/E91E63/FFFFFF?text=Loading+Products" 
-                    alt="Dynamic showcase of Lolly's Collection" 
-                    class="carousel-img">
-               
-               <button id="prev-btn" class="carousel-btn" aria-label="Previous Image">
-                   <i class="fas fa-chevron-left"></i>
-               </button>
-               <button id="next-btn" class="carousel-btn" aria-label="Next Image">
-                   <i class="fas fa-chevron-right"></i>
-               </button>
-            </div>
-        </section>
-    </main>
-    
-    <footer class="site-footer">
-        &copy; <span id="current-year"></span> Lolly's Collection. All rights reserved. || Developed by Byron Oyoo.
-    </footer>
+        </div>
+        <!-- END CRITICAL DEACTIVATION ALERT MODAL -->
+
+        <div id="auth-notification" class="notification-banner">
+            🔒 Please login or register to view and purchase products.
+        </div>
+
+        <main id="main-content">
+            <section id="home" class="hero">
+                <div class="hero-content">
+                    <h1 style="font-size: 30px;">
+                        The Power of a Fresh Start.
+                        <span style="font-size: 20px;">A New Outfit is a New Beginning.</span>
+                    </h1>
+                    <p>
+                        It’s more than just clothes, shoes, and bags—it’s armor for your confidence. We believe every day deserves a new sense of purpose. Find the perfect piece, from a statement dress to a sharp pair of shoes, or the essential accessory that ties your entire look together. Your next favorite moment starts here.
+                    </p>
+                    <p style="font-weight: 600; color: var(--color-pink-dark); margin-top: 30px;">
+                        Explore our collections using the navigation links above.
+                    </p>
+                </div>
+                
+                <!-- 🚨 UPDATED: Hero Image Carousel Container -->
+                <div class="hero-image-container">
+                   <!-- Initial image is a generic placeholder until dynamic content loads -->
+                   <img id="carousel-image" 
+                        src="https://placehold.co/800x500/E91E63/FFFFFF?text=Loading+Products" 
+                        alt="Dynamic showcase of Lolly's Collection" 
+                        class="carousel-img">
+                   
+                   <button id="prev-btn" class="carousel-btn" aria-label="Previous Image">
+                       <i class="fas fa-chevron-left"></i>
+                   </button>
+                   <button id="next-btn" class="carousel-btn" aria-label="Next Image">
+                       <i class="fas fa-chevron-right"></i>
+                   </button>
+                </div>
+            </section>
+        </main>
+        
+        <footer class="site-footer">
+            &copy; <span id="current-year"></span> Lolly's Collection. All rights reserved. || Developed by Byron Oyoo.
+        </footer>
+    </div>
     
     <script>
         const AUTH_STATUS_API_URL = '/api/auth/status';
@@ -694,7 +883,7 @@
 
         // Event listeners for manual control
         nextBtn.addEventListener('click', nextSlide);
-        prevBtn.addEventListener('click', prevSlide);
+        prevBtn.addEventListener('click', prevBtn);
         
         // --- Mobile Menu Toggle ---
         const hamburgerIcon = document.getElementById('hamburger-icon');
@@ -727,7 +916,6 @@
         // Target all protected links in both navs
         const protectedLinks = document.querySelectorAll('a[href="/products"], a[href="/cart"], a[href="/about"], a[href="/contact"], a[href="/profile.html"]');
         
-        const ctaButton = document.getElementById('cta-products-button');
         document.getElementById('current-year').textContent = new Date().getFullYear();
 
         let isAuthenticated = false;
@@ -865,15 +1053,7 @@
 
 
         // --- 4. Handle CTA Click ---
-        if (ctaButton) {
-            ctaButton.addEventListener('click', () => {
-                if (isAuthenticated) {
-                    window.location.href = '/products';
-                } else {
-                    showNotification("🔒 Please login or register to view and purchase products.");
-                }
-            });
-        }
+        // REMOVED CTA BUTTON LOGIC
         
         // --- 5. Cart Count Handler ---
         async function fetchCartCount() {
@@ -916,26 +1096,73 @@
             }, 4000); 
         }
 
+        /**
+         * 🚨 NEW: Core Initialization function to manage the loading state.
+         */
+        async function initializeApp() {
+            const minLoadTime = 1500; // Minimum 1.5 seconds loading screen display
+            const startTime = Date.now();
+            
+            const loadingScreen = document.getElementById('loading-screen');
+            const appContainer = document.getElementById('app-container');
+            
+            try {
+                // Parallelize all necessary initial async services
+                await Promise.all([
+                    checkAuthStatus(),        // Check authentication status
+                    fetchProductImages(),     // Fetch product images for carousel
+                    // Add other required initial fetches here
+                ]);
+                
+            } catch (error) {
+                console.error("Application initialization failed:", error);
+                // In a real app, you might update the loading screen with an error message here.
+            } finally {
+                const elapsedTime = Date.now() - startTime;
+                
+                // Calculate remaining time to meet the minimum load screen duration
+                const remainingTime = Math.max(0, minLoadTime - elapsedTime);
+
+                // Wait for the remaining minimum time
+                setTimeout(() => {
+                    // 1. Hide loading screen (with fade-out effect)
+                    loadingScreen.style.opacity = 0;
+                    
+                    // 2. Show main content (with fade-in effect via class change)
+                    appContainer.classList.remove('content-hidden');
+                    appContainer.classList.add('content-visible');
+
+                    // 3. Complete visual transition
+                    setTimeout(() => {
+                        loadingScreen.style.display = 'none';
+                        // Reset body overflow-x after all major transitions/loading are complete
+                        document.body.style.overflowX = 'auto';
+                    }, 500); // Wait for the opacity transition to finish
+
+                }, remainingTime);
+            }
+        }
+
 
         // Initial call to check status and set up the interface
         document.addEventListener('DOMContentLoaded', () => {
-             checkAuthStatus();
-             // 🚨 NEW: Fetch and populate carousel images after initial auth check
-             fetchProductImages(); 
+             // Start the whole application initialization process
+             initializeApp();
         });
 
         // 🚨 PWA Registration Logic
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js')
-            .then(registration => {
-                console.log('ServiceWorker registration successful with scope: ', registration.scope);
-            })
-            .catch(err => {
-                console.error('ServiceWorker registration failed: ', err);
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    })
+                    .catch(err => {
+                        console.error('ServiceWorker registration failed: ', err);
+                    });
             });
-    });
-}
+        }
+        
         // Failsafe: Clear interval if user navigates away
         window.onbeforeunload = function() {
             if (window.statusIntervalId) clearInterval(window.statusIntervalId);
