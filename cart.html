@@ -415,6 +415,28 @@
             box-shadow: 0 5px 25px rgba(0,0,0,0.5);
             text-align: center;
         }
+        
+        /* Custom spinner for payment */
+        .spinner-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .spinner-container .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-top: 5px solid var(--color-pink-accent);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
 
         /* --- Media Queries for Desktop --- */
         @media (min-width: 900px) {
@@ -508,17 +530,15 @@
         <div class="modal-content">
             <div class="spinner-container">
                 <i class="fas fa-mobile-alt" style="font-size: 3rem; color: var(--color-pink-accent); margin-bottom: 15px;"></i>
+                <div class="spinner"></div>
                 <div class="spinner-text">
-                    Waiting for M-Pesa PIN...
+                    <strong id="processing-status-title">Waiting for M-Pesa PIN...</strong>
                 </div>
                 <div class="spinner-subtext">
                     Transaction ID: <strong id="processing-checkout-id">N/A</strong>
                 </div>
-                <p style="margin-top: 15px; color: var(--color-text-dark);">
-                    **Please check your phone and enter your M-Pesa PIN to complete the payment.**
-                </p>
-                <p id="polling-status-message" style="color: var(--color-text-subtle); font-size: 0.85rem; margin-top: 5px;">
-                    Polling the server for transaction status...
+                <p id="polling-status-message" style="margin-top: 15px; color: var(--color-text-dark);">
+                    Please check your phone and enter your M-Pesa PIN to complete the payment.
                 </p>
                 <button class="update-button" style="margin-top: 20px; background-color: var(--color-danger);" onclick="cancelMpesaTransaction()">
                     Cancel Transaction
@@ -722,10 +742,11 @@
                                     <th>Type</th>
                                     <th>Amount</th>
                                     <th>Status</th>
+                                    <th>Receipt/Ref</th> <!-- 🚨 UPDATED COLUMN -->
                                 </tr>
                             </thead>
                             <tbody id="payment-history-tbody">
-                                <tr><td colspan="4" style="text-align: center;">Loading history...</td></tr>
+                                <tr><td colspan="5" style="text-align: center;">Loading history...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -753,7 +774,7 @@
         const LOGOUT_API_URL = '/api/logout';
         const DELIVERY_INFO_API_URL = '/api/profile/delivery'; 
         const DELIVERY_TRACK_API_URL = '/api/user/delivery-status'; 
-        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; // 🚨 NEW
+        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; 
 
         
         const SHIPPING_COST = 300.00; 
@@ -1228,15 +1249,21 @@
         function startPolling(checkoutRequestID, orderData) {
             let attempts = 0;
             const maxAttempts = MAX_POLLING_ATTEMPTS;
+            
+            document.getElementById('processing-status-title').textContent = 'Waiting for M-Pesa PIN...';
+            document.getElementById('polling-status-message').textContent = 'Please check your phone and enter your M-Pesa PIN to complete the payment.';
+
 
             pollingIntervalId = setInterval(async () => {
                 attempts++;
                 
                 if (attempts > maxAttempts) {
                     clearInterval(pollingIntervalId);
-                    closeModal('deposit-processing-modal');
-                    showMessage('order-message', 'M-Pesa payment timed out. Please try again.', 'error');
-                    document.getElementById('place-order-btn').disabled = false;
+                    handlePaymentFinalizationUI({ 
+                        status: 'Failed', 
+                        message: 'M-Pesa payment timed out.', 
+                        mpesaRef: 'TIMED OUT' 
+                    }, orderData);
                     return;
                 }
 
@@ -1251,40 +1278,65 @@
 
                     if (result.status === 'Completed') {
                         clearInterval(pollingIntervalId);
-                        closeModal('deposit-processing-modal');
-                        showMessage('order-message', '<i class="fas fa-spinner fa-spin"></i> Payment received. Finalizing order...', 'success');
-                        
-                        orderData.paymentReference = result.mpesaRef; 
-                        await finalizeOrder(orderData);
+                        handlePaymentFinalizationUI(result, orderData);
                         
                     } else if (result.status === 'Failed' || result.status === 'Cancelled') {
                         clearInterval(pollingIntervalId);
-                        closeModal('deposit-processing-modal');
-                        throw new Error(result.message || 'Transaction failed or was cancelled.');
+                        // Update result message to be more explicit for failure mode
+                        const failureMsg = result.message || 'Transaction failed, check your phone and enter PIN.';
+                        handlePaymentFinalizationUI({ 
+                            status: 'Failed', 
+                            message: failureMsg, 
+                            mpesaRef: result.mpesaRef || checkoutRequestID 
+                        }, orderData);
                     } else {
                         // Still Pending
-                        document.getElementById('polling-status-message').textContent = `Waiting for M-Pesa PIN approval... (${attempts}/${maxAttempts})`;
+                        document.getElementById('polling-status-message').textContent = `Waiting for M-Pesa PIN approval... (Attempt ${attempts}/${maxAttempts})`;
                     }
                 } catch (error) {
                     clearInterval(pollingIntervalId);
-                    closeModal('deposit-processing-modal');
-                    showMessage('order-message', `M-Pesa Polling Error: ${error.message}`, 'error');
-                    document.getElementById('place-order-btn').disabled = false;
+                    // This error is a network error on the polling request itself
+                    handlePaymentFinalizationUI({ 
+                        status: 'Failed', 
+                        message: `M-Pesa Polling Network Error.`, 
+                        mpesaRef: 'NETWORK-FAIL' 
+                    }, orderData);
                 }
             }, MPESA_POLL_INTERVAL_MS);
+        }
+        
+        // 🚨 NEW: Function to handle UI updates based on final payment status
+        function handlePaymentFinalizationUI(result, orderData) {
+            closeModal('deposit-processing-modal');
+            document.getElementById('place-order-btn').disabled = false;
+            updatePaymentUI();
+
+            if (result.status === 'Completed') {
+                const message = `We have received your payment (${result.mpesaRef || orderData.paymentReference}) and we are working on your order.`;
+                showMessage('order-message', `<i class="fas fa-check-circle"></i> ${message}`, 'success');
+                
+                // Finalize order, which clears cart and navigates
+                orderData.paymentReference = result.mpesaRef || orderData.paymentReference;
+                finalizeOrder(orderData); 
+                
+            } else {
+                // Handle failure/cancellation
+                const failureMessage = result.message || "Transaction failed, check your phone and enter PIN.";
+                showMessage('order-message', `<i class="fas fa-times-circle"></i> ${failureMessage}`, 'error');
+            }
         }
         
         window.cancelMpesaTransaction = function() {
             if (pollingIntervalId) clearInterval(pollingIntervalId);
             closeModal('deposit-processing-modal');
             
-            showMessage('order-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
+            showMessage('order-message', 'M-Pesa transaction tracking cancelled by user. Please re-initiate payment.', 'error');
             document.getElementById('place-order-btn').disabled = false;
         }
 
         // --- Finalize Order in Database ---
         async function finalizeOrder(orderData) {
-            showMessage('order-message', 'Payment successful! Finalizing order...', 'info');
+            showMessage('order-message', 'Payment successful! Finalizing order and clearing cart...', 'info');
             try {
                 const response = await fetch(ORDER_API_URL, {
                     method: 'POST',
@@ -1294,8 +1346,10 @@
 
                 const result = await response.json();
                 if (response.ok) {
+                    // 1. Clear cart UI and state
                     renderCart(); 
                     
+                    // 2. Show final order confirmation message
                     showMessage('order-message', `Success! Order #${result.orderId} placed.`, 'success');
                     document.getElementById('tracking-order-id').value = result.orderId; 
 
@@ -1304,10 +1358,9 @@
                         window.open(`https://wa.me/${ADMIN_WHATSAPP}?text=${whatsappMessage}`, '_blank');
                     }
                     
-                    // Clear the editable location field
                     document.getElementById('delivery-location').value = ''; 
                     
-                    // 🚨 CRITICAL CHANGE: Navigate to Payment History on successful order
+                    // 3. Navigate to Payment History
                     showSection('payment-history');
 
                 } else {
@@ -1329,17 +1382,17 @@
         async function fetchAndRenderPaymentHistory() {
              if (!isUserAuthenticated) return;
              const tbody = document.getElementById('payment-history-tbody');
-             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
+             tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">Fetching history...</td></tr>';
              
              try {
                 const response = await fetch(PAYMENT_HISTORY_API_URL);
 
                 if (response.ok) {
-                    const historyData = await response.json(); // Assuming API returns [{date, type, amount, status}, ...]
+                    const historyData = await response.json(); // Assuming API returns [{date, type, amount, status, external_ref}, ...]
                     
                     tbody.innerHTML = '';
                     if (historyData.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-text-subtle);">No history available.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--color-text-subtle);">No history available.</td></tr>';
                         return;
                     }
                  
@@ -1354,17 +1407,18 @@
                                 <td>${transaction.type || 'Transaction'}</td>
                                 <td style="${amountStyle}">${amountText}</td>
                                 <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
+                                <td>${transaction.external_ref || 'N/A'}</td> <!-- 🚨 NEW: Payment Receipt/Ref -->
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);
                     });
                 } else {
                     // Handle API non-OK status
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Error (${response.status}) loading history.</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Error (${response.status}) loading history.</td></tr>`;
                 }
 
              } catch (error) {
-                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Network error loading history.</td></tr>`;
+                 tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Network error loading history.</td></tr>`;
                  console.error('Error fetching payment history:', error);
              }
         }
@@ -1528,6 +1582,7 @@
             window.redirectToAuthPage = redirectToAuthPage;
             window.deleteItem = deleteItem; 
             window.closeModal = closeModal; // Expose closeModal for modal handler cleanup
+            window.handlePaymentFinalizationUI = handlePaymentFinalizationUI; // Expose for testing
         });
     </script>
 </body>
