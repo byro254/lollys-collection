@@ -3059,52 +3059,56 @@ function closeChatModal() {
         list.innerHTML = '';
         loading.style.display = 'block';
         
-        try {
-            // Mock users for chat sessions (needs implementation in server.js/API)
-            const mockChatUsers = [
-                { id: '2', full_name: 'Bob Smith', email: 'bob@example.com' },
-                { id: '3', full_name: 'Charlie Brown', email: 'charlie@example.com' },
-                { id: 'anon-x', full_name: 'Anonymous Guest', email: 'guest@anon.com' },
-            ];
+       try {
+    // Mock users for chat sessions (needs implementation in server.js/API)
+    const mockChatUsers = [
+        { id: '2', full_name: 'Bob Smith', email: 'bob@example.com' },
+        { id: '3', full_name: 'Charlie Brown', email: 'charlie@example.com' },
+        { id: 'anon-x', full_name: 'Anonymous Guest', email: 'guest@anon.com' },
+    ];
 
-            // 🚨 CALLING NEW ENDPOINT (Assuming this returns users with recent activity)
-             const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
-            const users = await response.json();
-          
-            
+    // 🚨 CALLING NEW ENDPOINT (Assuming this returns users with recent activity)
+    const response = await fetch(`${API_BASE_URL}/admin/chat/recent-sessions`);
 
-            loading.style.display = 'none';
+    // --- FIX START: Check for 404/500 errors before parsing JSON ---
+    if (!response.ok) {
+        throw new Error(`Server Error: ${response.status}`);
+    }
+    // --- FIX END ---
 
-            if (!Array.isArray(users) || users.length === 0) {
-                list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
-                return;
-            }
+    const users = await response.json();
 
-            users.forEach(user => {
-                const listItem = document.createElement('li');
-                listItem.className = 'chat-session-item';
-                listItem.dataset.customerId = user.id;
-                
-                const isUnread = unreadSessions.has(user.id);
-                const badge = isUnread ? `<span class="status-badge pending" style="font-size: 0.8rem;">NEW</span>` : '';
+    loading.style.display = 'none';
 
-                listItem.innerHTML = `
-                    <div>
-                        <strong>${user.full_name} ${badge}</strong>
-                        <p style="margin: 0; font-size: 0.8rem;">${user.email}</p>
-                    </div>
-                    <span><i class="fas fa-arrow-right"></i> Chat</span>
-                `;
-                listItem.onclick = () => openChatModal(user.id, user.full_name);
-                list.appendChild(listItem);
-            });
-
-        } catch (error) {
-            console.error('Error fetching chat users:', error);
-            loading.textContent = '❌ Failed to load chat users.';
-        }
+    if (!Array.isArray(users) || users.length === 0) {
+        list.innerHTML = '<li style="text-align: center; color: var(--color-text-subtle);">No active chat requests.</li>';
+        return;
     }
 
+    users.forEach(user => {
+        const listItem = document.createElement('li');
+        listItem.className = 'chat-session-item';
+        listItem.dataset.customerId = user.id;
+        
+        const isUnread = unreadSessions.has(user.id);
+        const badge = isUnread ? `<span class="status-badge pending" style="font-size: 0.8rem;">NEW</span>` : '';
+
+        listItem.innerHTML = `
+            <div>
+                <strong>${user.full_name} ${badge}</strong>
+                <p style="margin: 0; font-size: 0.8rem;">${user.email}</p>
+            </div>
+            <span><i class="fas fa-arrow-right"></i> Chat</span>
+        `;
+        listItem.onclick = () => openChatModal(user.id, user.full_name);
+        list.appendChild(listItem);
+    });
+
+} catch (error) {
+    console.error('Error fetching chat users:', error);
+    loading.textContent = '❌ Failed to load chat users.';
+}
+ }
 /**
  * Handles sending a message via the WebSocket connection.
  */
