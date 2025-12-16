@@ -22,7 +22,7 @@
             --color-danger: #dc3545;
             --color-success: #28a745;
             --color-warning: #ffc107;
-            --color-mpesa-green: #37A237; /* M-Pesa Green */
+            --color-mpesa-green: #37A237; 
 
             --font-heading: 'Playfair Display', serif;
             --font-body: 'Poppins', sans-serif;
@@ -262,103 +262,6 @@
             transform: translateY(-5px);
         }
         
-        /* --- Wallet and Payment Styles --- */
-        .wallet-balance {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background-color: var(--color-pink-accent);
-            color: white;
-            padding: 25px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
-            position: relative; 
-            overflow: hidden;
-        }
-        /* Subtle design flare */
-        .wallet-balance::before {
-            content: '';
-            position: absolute;
-            top: -50px;
-            left: -50px;
-            width: 100px;
-            height: 100px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-        }
-        .balance-info {
-            text-align: right;
-        }
-        .balance-amount {
-            font-size: 2.5rem;
-            font-weight: 700;
-        }
-        .deposit-button {
-            background-color: var(--color-pink-dark);
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.3s, transform 0.1s;
-        }
-        .deposit-button:hover {
-            background-color: var(--color-pink-accent);
-            transform: translateY(-1px);
-        }
-        
-        .payment-method-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .method-card {
-            text-align: center;
-            padding: 25px 10px; 
-            border: 1px solid var(--color-border-medium); 
-            border-radius: 10px; 
-            cursor: pointer;
-            transition: border-color 0.3s, background-color 0.3s, transform 0.2s;
-        }
-        .method-card:hover {
-            border-color: var(--color-pink-accent);
-            background-color: #fff8f9; 
-            transform: translateY(-3px); 
-        }
-        .method-card i {
-            font-size: 3rem; 
-            margin-bottom: 10px;
-            color: var(--color-pink-dark); 
-        }
-
-        /* 🚨 NEW: M-Pesa Info Card */
-        .mpesa-info-card {
-            background-color: var(--color-mpesa-green); 
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-            text-align: left;
-        }
-        .mpesa-info-card strong {
-            display: block;
-            font-size: 1.1rem;
-            margin-bottom: 5px;
-        }
-        .mpesa-info-card span {
-            font-size: 1.6rem;
-            font-weight: 700;
-            letter-spacing: 1px;
-            background: rgba(0, 0, 0, 0.1);
-            padding: 2px 8px;
-            border-radius: 4px;
-            display: inline-block;
-        }
-        
         /* --- Order History Table --- */
         .order-table {
             width: 100%;
@@ -389,10 +292,8 @@
         }
         .status-badge.Pending { background-color: var(--color-warning); color: var(--color-text-dark); }
         .status-badge.Completed { background-color: var(--color-success); color: white; }
-        .status-badge.Shipped { background-color: var(--color-warning); color: var(--color-text-dark); }
-        .status-badge.Failed { background-color: var(--color-danger); color: white; }
+        .status-badge.Processing { background-color: #17a2b8; color: white; }
         .status-badge.Cancelled { background-color: var(--color-danger); color: white; }
-        .status-badge.Processing, .status-badge.Pending\\:\\ STK\\ Request\\ Sent { background-color: #17a2b8; color: white; } /* Blue/Teal for in-progress */
         
         
         /* --- Profile Picture & Form Styles --- */
@@ -410,7 +311,6 @@
             object-fit: cover;
             border-radius: 50%;
             border: 4px solid var(--color-pink-accent);
-            /* 🚨 FIX: Using placeholder URL in HTML will fail here, relies on JS */
             image-rendering: -webkit-optimize-contrast; 
             image-rendering: crisp-edges; 
         }
@@ -466,7 +366,7 @@
             border-radius: 8px;
         }
         #2fa-qr-code {
-            width: 180px; /* Increased size for easy scanning */
+            width: 180px; 
             height: 180px; 
             margin: 15px 0;
             border: 5px solid var(--color-bg-light);
@@ -545,85 +445,10 @@
             color: var(--color-text-subtle);
             cursor: pointer;
         }
-        .modal-info {
-            background-color: var(--color-bg-page);
-            padding: 15px;
-            border-radius: 8px;
-            text-align: left;
-            margin-bottom: 20px;
-        }
-        .modal-info strong {
-            display: block;
-            color: var(--color-pink-accent);
-        }
-        .modal-info p {
-            margin: 5px 0 0;
-            font-size: 0.9rem;
-        }
-        .modal-form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-        }
-        .modal-form-grid .form-group:last-child {
-            grid-column: span 2;
-        }
         
         @keyframes fadeIn {
             from { opacity: 0; }
             to { opacity: 1; }
-        }
-
-        /* 🚨 NEW: Spinner/Processing Modal Styles */
-        .spinner-container {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .spinner {
-            border: 5px solid rgba(255, 255, 255, 0.3);
-            border-top: 5px solid var(--color-pink-accent);
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin-bottom: 20px;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .spinner-text {
-            color: var(--color-text-dark);
-            font-size: 1.1rem;
-            font-weight: 500;
-        }
-        .spinner-subtext {
-            color: var(--color-text-subtle);
-            font-size: 0.9rem;
-            margin-top: 10px;
-        }
-
-        /* 🚨 NEW: Success Modal Styling */
-        #deposit-success-modal .modal-content-small {
-            border: 4px solid var(--color-success);
-            background: linear-gradient(145deg, #ffffff, #e8f5e9);
-        }
-        #deposit-success-modal h3 {
-            color: var(--color-success);
-        }
-        .success-details {
-            text-align: left;
-            background-color: #f0fdf4;
-            padding: 15px;
-            border-radius: 8px;
-            border-left: 4px solid var(--color-success);
-        }
-        .success-details strong {
-            color: var(--color-text-dark);
-            display: block;
-            margin-top: 5px;
         }
         
         /* Message Styling for forms */
@@ -672,145 +497,7 @@
         </div>
     </div>
     
-    <!-- 🚨 M-PESA STK PUSH DEPOSIT MODAL (omitted for brevity) -->
-    <div id="mpesa-stk-modal" class="modal">
-        <div class="modal-content-small">
-            <span class="close-btn" onclick="closeModal('mpesa-stk-modal')">&times;</span>
-            <h3 id="mpesa-modal-title">Deposit via M-Pesa STK Push</h3>
-            <form id="mpesa-stk-form">
-                <div class="modal-info">
-                    <strong>Paybill Number:</strong>
-                    <p id="paybill-number">174379 (Sandbox)</p>
-                    <strong>Account Number (Your ID):</strong>
-                    <p id="account-number-display-mpesa"></p>
-                </div>
-
-                <div class="form-group">
-                    <label for="mpesa-phone">M-Pesa Phone Number (2547...):</label>
-                    <input type="tel" id="mpesa-phone" placeholder="e.g., 2547XXXXXXXX" required pattern="2547[0-9]{8}">
-                </div>
-
-                <div class="form-group">
-                    <label for="mpesa-amount">Amount (KES):</label>
-                    <input type="number" id="mpesa-amount" min="10" placeholder="Min. 10 KES" required>
-                </div>
-
-                <button type="submit" class="deposit-button" id="mpesa-deposit-btn" style="width: 100%;">
-                    Request STK Push
-                </button>
-                <div id="mpesa-deposit-message" style="margin-top: 10px; display: none;"></div>
-            </form>
-        </div>
-    </div>
-    
-    <!-- 🚨 NEW MODAL: M-Pesa Manual Deposit (SIM TOOLKIT) (omitted for brevity) -->
-    <div id="mpesa-manual-modal" class="modal">
-        <div class="modal-content-small">
-            <span class="close-btn" onclick="closeModal('mpesa-manual-modal')">&times;</span>
-            <h3 id="mpesa-manual-title">Lipa Na M-Pesa: Manual Payment</h3>
-            <form id="mpesa-manual-form">
-                
-                <div class="mpesa-info-card">
-                    <p style="font-size: 0.9rem; margin-bottom: 10px;">Transfer funds using M-Pesa's Paybill option (SIM Toolkit or App), then validate below.</p>
-                    <strong>Paybill: <span>714888</span></strong>
-                    <strong>Account: <span>386704</span></strong>
-                </div>
-
-                <div class="form-group">
-                    <label for="manual-code">M-Pesa Transaction Code (e.g., TKULKBKLZD):</label>
-                    <input type="text" id="manual-code" placeholder="10-digit alphanumeric code" required pattern="^[A-Z0-9]{10}$" maxlength="10" style="text-transform: uppercase;">
-                </div>
-
-                <div class="form-group">
-                    <label for="manual-amount">Amount Paid (KES):</label>
-                    <input type="number" id="manual-amount" min="10" placeholder="Must match actual amount paid" required>
-                </div>
-
-                <button type="submit" class="deposit-button" id="mpesa-manual-btn" style="width: 100%;">
-                    Verify Payment & Credit Account
-                </button>
-                <div id="mpesa-manual-message" class="message" style="margin-top: 10px; display: none;"></div>
-            </form>
-        </div>
-    </div>
-
-    <!-- 🚨 M-Pesa Processing/Spinner Modal (Used by STK Push) (omitted for brevity) -->
-    <div id="deposit-processing-modal" class="modal">
-        <div class="modal-content-small">
-            <div class="spinner-container">
-                <i class="fas fa-mobile-alt" style="font-size: 3rem; color: var(--color-pink-accent); margin-bottom: 15px;"></i>
-                <div class="spinner-text">
-                    Waiting for M-Pesa PIN...
-                </div>
-                <div class="spinner-subtext">
-                    Transaction ID: <strong id="processing-checkout-id">N/A</strong>
-                </div>
-                <p style="margin-top: 15px; color: var(--color-text-dark);">
-                    **Please check your phone and enter your M-Pesa PIN to complete the deposit.**
-                </p>
-                <p id="polling-status-message" style="color: var(--color-text-subtle); font-size: 0.85rem; margin-top: 5px;">
-                    Polling the server for transaction status...
-                </p>
-                <button class="update-button" style="margin-top: 20px; background-color: var(--color-danger);" onclick="cancelMpesaTransaction()">
-                    Cancel Transaction
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 🚨 M-Pesa Success Modal (omitted for brevity) -->
-    <div id="deposit-success-modal" class="modal">
-        <div class="modal-content-small">
-            <h3 style="display: flex; align-items: center; justify-content: center;">
-                <i class="fas fa-check-circle" style="margin-right: 10px;"></i> Deposit Successful!
-            </h3>
-            <p style="margin-bottom: 20px;">
-                Congratulations! We have received your deposit. Check your updated wallet balance.
-            </p>
-            <div class="success-details">
-                Amount Deposited: <strong id="success-amount">KES 0.00</strong>
-                M-Pesa Reference: <strong id="success-mpesa-ref">N/A</strong>
-            </div>
-            
-            <button class="deposit-button" style="width: 100%; margin-top: 20px;" onclick="closeSuccessModal()">
-                Continue to Wallet
-            </button>
-        </div>
-    </div>
-
-    <!-- 🚨 DEBIT/CREDIT CARD MODAL (Simulated, retained for generic payments) (omitted for brevity) -->
-    <div id="card-deposit-modal" class="modal">
-        <div class="modal-content-small">
-            <span class="close-btn" onclick="closeModal('card-deposit-modal')">&times;</span>
-            <h3 id="card-modal-title">Deposit via Debit / Credit Card</h3>
-            <form id="card-deposit-form">
-                <div class="form-group">
-                    <label for="card-number">Card Number:</label>
-                    <input type="text" id="card-number" placeholder="XXXX XXXX XXXX XXXX" required pattern="[0-9]{13,16}">
-                </div>
-                
-                <div class="modal-form-grid">
-                    <div class="form-group">
-                        <label for="expiry">Expiry (MM/YY):</label>
-                        <input type="text" id="expiry" placeholder="MM/YY" required pattern="(0[1-9]|1[0-2])\/\d{2}">
-                    </div>
-                    <div class="form-group">
-                        <label for="cvv">CVV:</label>
-                        <input type="text" id="cvv" placeholder="XXX" required pattern="[0-9]{3,4}">
-                    </div>
-                </div>
-                 <div class="form-group">
-                    <label for="card-amount">Amount (KES):</label>
-                    <input type="number" id="card-amount" min="10" placeholder="Min. 10 KES" required>
-                </div>
-                
-                <button type="submit" class="deposit-button" id="card-deposit-btn" style="width: 100%;">
-                    Pay Now
-                </button>
-                <div id="card-deposit-message" style="margin-top: 10px; display: none;"></div>
-            </form>
-        </div>
-    </div>
+    <!-- 🚨 MODALS FOR DEPOSITS REMOVED -->
     <!-- END MODALS -->
 
     <!-- 🚨 HEADER (GATED) -->
@@ -843,9 +530,7 @@
             <ul>
                 <li><a href="#details" class="nav-link active" data-target="details"><i class="fas fa-user-circle"></i> Account Details</a></li>
                 <li><a href="#orders" class="nav-link" data-target="orders"><i class="fas fa-list-alt"></i> My Orders</a></li>
-                <li><a href="#wallet" class="nav-link" data-target="wallet"><i class="fas fa-wallet"></i> Wallet & Payments</a></li>
-                <li><a href="#history" class="nav-link" data-target="history"><i class="fas fa-history"></i> Payment History</a></li>
-                <!-- 🚨 NEW: Settings Section -->
+                <!-- 🚨 WALLET & HISTORY LINKS REMOVED -->
                 <li><a href="#settings" class="nav-link" data-target="settings"><i class="fas fa-cog"></i> Settings</a></li>
             </ul>
         </nav>
@@ -860,7 +545,6 @@
                 <div class="card">
                     <form id="profile-form" enctype="multipart/form-data">
                         <!-- ... Profile Picture ... -->
-                        <!-- 🚨 FIX: currentProfilePictureUrl is now used only for database retrieval context -->
                         <input type="hidden" id="current-pic-url" name="currentProfilePictureUrl">
                         <div id="profile-picture-container">
                             <img id="current-profile-picture" 
@@ -877,19 +561,16 @@
                         <!-- ... Name and Email (Read Only - AUTOFILL) ... -->
                         <div class="form-group">
                             <label for="full-name">Full Name (Username):</label>
-                            <!-- AUTOFILL: Readonly set to prevent editing name/username -->
                             <input type="text" id="full-name" name="name" readonly required>
                         </div>
                         <div class="form-group">
                             <label for="email">Email Address:</label>
-                            <!-- AUTOFILL: Readonly set to prevent editing email -->
                             <input type="email" id="email" name="email" readonly required>
                         </div>
                         
                         <!-- ... Phone Number (Editable - NOT AUTOFILL) ... -->
                         <div class="form-group">
                             <label for="phone-number">Phone Number:</label>
-                            <!-- NOT AUTOFILL: Editable for user to set/change -->
                             <input type="text" id="phone-number" name="phoneNumber" placeholder="e.g., 07XXXXXXXX">
                         </div>
 
@@ -932,67 +613,9 @@
                 </div>
             </section>
 
-            <section id="wallet" class="profile-section">
-                <h2 class="section-header"><i class="fas fa-wallet"></i> Wallet & Payments</h2>
-                <div class="card">
-                    <div class="wallet-balance">
-                        <span>Current Account Balance (KES)</span>
-                        <div class="balance-info">
-                            <span class="balance-amount" id="wallet-balance-display">KES 0.00</span>
-                            <button class="deposit-button" onclick="openDepositModal('Wallet Deposit')">Deposit Funds</button>
-                        </div>
-                    </div>
-                    
-                    <h3>Payment Methods</h3>
-                    <p style="color: var(--color-text-subtle);">Select a method or verify a payment to deposit funds into your wallet.</p>
-                    
-                    <div class="payment-method-grid">
-                        
-                        <!-- 🚨 M-PESA STK PUSH -->
-                        <div class="method-card" onclick="openDepositModal('M-Pesa STK')">
-                            <i class="fas fa-mobile-alt"></i>
-                            <p>M-Pesa Express</p>
-                        </div>
+            <!-- 🚨 WALLET SECTION REMOVED -->
+            <!-- 🚨 PAYMENT HISTORY SECTION REMOVED -->
 
-                        <!-- 🚨 M-PESA MANUAL (SIM TOOLKIT) -->
-                        <div class="method-card" onclick="openDepositModal('M-Pesa Manual')">
-                            <i class="fas fa-key"></i>
-                            <p>M-Pesa Paybill</p>
-                        </div>
-
-                        <!-- 🚨 DEBIT / CREDIT CARD (Simulated) -->
-                        <div class="method-card" onclick="openDepositModal('Card')">
-                            <i class="fas fa-credit-card"></i>
-                            <p>Debit / Credit Card</p>
-                        </div>
-                        
-                    </div>
-                </div>
-            </section>
-
-            <section id="history" class="profile-section">
-                <h2 class="section-header"><i class="fas fa-history"></i> Payment History</h2>
-                <div class="card">
-                    <p style="color: var(--color-text-subtle);">A record of all deposits and wallet deductions.</p>
-                    <div id="payment-history-container">
-                        <table class="order-table">
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Type</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="payment-history-tbody">
-                                <tr><td colspan="4" style="text-align: center;">No history available.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- 🚨 NEW SETTINGS SECTION -->
             <section id="settings" class="profile-section">
                 <h2 class="section-header"><i class="fas fa-cog"></i> User Settings</h2>
                 
@@ -1037,7 +660,6 @@
                     <div id="2fa-setup-section" style="margin-top: 30px;">
                         <h4 style="font-family: var(--font-body); color: var(--color-pink-dark); margin-bottom: 15px;">Google Authenticator Setup</h4>
                         
-                        <!-- 🚨 MODIFIED: QR Area is now visible/hidden by JS, not inline style -->
                         <div id="setup-qr-area" style="display: none; text-align: center;">
                             <p>1. Scan this QR code or manually enter the secret key into your Google Authenticator app (or similar TOTP app).</p>
                             <img id="2fa-qr-code" src="" alt="2FA QR Code">
@@ -1074,41 +696,34 @@
     </footer>
     
     <script>
-        // API ENDPOINTS (Placeholder URLs)
+        // API ENDPOINTS
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const PROFILE_API_URL = '/api/user/profile';
         const ORDERS_API_URL = '/api/user/orders';
         const LOGOUT_API_URL = '/api/logout';
-        const WALLET_BALANCE_API_URL = '/api/wallet/balance'; 
-        const MPESA_DEPOSIT_API_URL = '/api/wallet/deposit/mpesa'; 
-        const CARD_DEPOSIT_API_URL = '/api/wallet/deposit/card'; 
-        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; 
+        const PAYMENT_HISTORY_API_URL = '/api/user/payment-history'; // Kept
         
-        // 🚨 NEW API ENDPOINTS
+        // 🚨 REMOVED UNUSED WALLET API ENDPOINTS
+        // const WALLET_BALANCE_API_URL = '/api/wallet/balance'; 
+        // const MPESA_DEPOSIT_API_URL = '/api/wallet/deposit/mpesa'; 
+        // const CARD_DEPOSIT_API_URL = '/api/wallet/deposit/card'; 
+        // const MPESA_STATUS_QUERY_API_URL = '/api/wallet/deposit/status'; 
+        // const MPESA_MANUAL_API_URL = '/api/wallet/deposit/mpesa-manual';
+
+
+        // 2FA API ENDPOINTS
         const SETUP_2FA_URL = '/api/user/2fa/setup';
         const ENABLE_2FA_URL = '/api/user/2fa/enable';
         const DISABLE_2FA_URL = '/api/user/2fa/disable';
-        const CHANGE_PASSWORD_URL = '/api/user/change-password'; // 🚨 NEW
+        const CHANGE_PASSWORD_URL = '/api/user/change-password'; 
 
         
-        // 🚨 NEW: M-Pesa Status Query Endpoint
-        const MPESA_STATUS_QUERY_API_URL = '/api/wallet/deposit/status'; 
-        // 🚨 NEW: Manual M-Pesa Verification Endpoint
-        const MPESA_MANUAL_API_URL = '/api/wallet/deposit/mpesa-manual';
-
         const REFRESH_INTERVAL_MS = 1800000; // 30 minutes
-        const POLLING_INTERVAL_MS = 3000; // Check status every 3 seconds
-        const MAX_POLLING_ATTEMPTS = 20; // Max 60 seconds of polling
-        
-        // 🚨 FIX: Corrected default profile picture URL
         const DEFAULT_PROFILE_PIC = '/images/profiles/default_profile.png';
         
         let isUserAuthenticated = false; 
         let currentUserData = {}; 
-        let pollingIntervalId = null;
-        let pollingAttempts = 0;
-        let depositAmount = 0; // To store the amount for the success modal
-        let current2faSecret = null; // 🚨 NEW: Holds the secret during setup
+        let current2faSecret = null; 
 
         // --- DOM Elements ---
         const sidebar = document.getElementById('sidebar');
@@ -1120,19 +735,7 @@
         // --- Utility Functions ---
 
         /**
-         * Closes a modal by its ID.
-         * @param {string} id 
-         */
-        function closeModal(id) {
-            const modal = document.getElementById(id);
-            if (modal) modal.style.display = 'none';
-        }
-
-        /**
          * Displays a temporary message in a specific message area.
-         * @param {string} id The message element ID (e.g., 'profile-message' or 'password-message').
-         * @param {string} message The text content.
-         * @param {string} type 'success' or 'error'.
          */
         function showMessage(id, message, type) {
             const messageEl = document.getElementById(id);
@@ -1157,7 +760,6 @@
 
         /**
          * Shows the specific content section and updates the sidebar link state.
-         * @param {string} targetId 
          */
         function showSection(targetId) {
             document.querySelectorAll('.profile-section').forEach(section => {
@@ -1183,7 +785,7 @@
             history.pushState(null, '', `#${targetId}`);
         }
 
-        // --- GATING / AUTHENTICATION LOGIC (FIXED) ---
+        // --- GATING / AUTHENTICATION LOGIC ---
 
         async function checkAuthenticationStatus() {
             const header = document.querySelector('.site-header');
@@ -1194,7 +796,6 @@
                 
                 if (response.ok) {
                     isUserAuthenticated = true;
-                    // Enable content - FIX: Remove 'disabled' from all gated elements
                     header.classList.remove('disabled');
                     sidebar.classList.remove('disabled');
                     mainContent.classList.remove('disabled');
@@ -1203,7 +804,6 @@
                     document.body.style.overflow = 'auto'; 
                     return true;
                 } else {
-                    // Unauthenticated initially: Gate the page.
                     isUserAuthenticated = false;
                     header.classList.add('disabled');
                     sidebar.classList.add('disabled');
@@ -1227,14 +827,8 @@
             }
         }
 
-        /**
-         * Checks profile status and dynamic data periodically.
-         * 🚨 NEW: Now includes refresh of Orders, Wallet, and History.
-         */
         async function checkProfileStatusAndLogout() {
             if (!isUserAuthenticated) return;
-            
-            // Check status, but don't force data refresh on every single background check
             
             try {
                 const response = await fetch(PROFILE_API_URL);
@@ -1245,10 +839,10 @@
                 }
                 
                 const userData = await response.json();
-                currentUserData = userData; // Update global data
+                currentUserData = userData; 
                 
                 populateStatusOnly(userData); 
-                updateSecurityUI(userData.is2faEnabled); // 🚨 NEW CALL
+                updateSecurityUI(userData.is2faEnabled); 
 
                 const isActive = userData.isActive === 1 || userData.isActive === true;
                 
@@ -1298,7 +892,7 @@
                     const userData = await response.json();
                     currentUserData = userData; 
                     populateForm(userData); 
-                    updateSecurityUI(userData.is2faEnabled); // 🚨 NEW CALL
+                    updateSecurityUI(userData.is2faEnabled); 
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
@@ -1310,25 +904,18 @@
             }
         }
 
-        // 🚨 FIX: Profile picture always uses database URL
         function renderProfilePicture(imageUrl, elementId = 'current-profile-picture') {
             const imgElement = document.getElementById(elementId);
-            // 🚨 FIX: Use the client-side constant for default
             const finalUrl = imageUrl && imageUrl.trim() !== '' && imageUrl !== 'null' ? imageUrl : DEFAULT_PROFILE_PIC; 
             imgElement.src = finalUrl;
-            // Also update the onerror to point to the correct path
             imgElement.onerror = `this.onerror=null;this.src='${DEFAULT_PROFILE_PIC}';`;
         }
 
         function populateForm(data) {
-            // 🚨 CORE FIX: Autofill name and email fields and make them readonly
             document.getElementById('full-name').value = data.name || '';
             document.getElementById('email').value = data.email || '';
-            
-            // 🚨 CORE FIX: Only autofill phone number if the value exists in the database
             document.getElementById('phone-number').value = data.phoneNumber || '';
             
-            // 🚨 FIX: Set the profile picture URL and the hidden field for persistence
             document.getElementById('current-pic-url').value = data.profilePictureUrl || DEFAULT_PROFILE_PIC;
             renderProfilePicture(data.profilePictureUrl);
             
@@ -1339,7 +926,6 @@
             const statusDisplay = document.getElementById('account-status-display');
             const isActive = data.isActive === 1 || data.isActive === true;
             
-            // 🚨 CORE FIX: Dynamically display ACTIVE/DEACTIVATED badge
             statusDisplay.textContent = isActive ? 'ACTIVE' : 'DEACTIVATED';
             statusDisplay.className = `status-display status-${isActive ? 'active' : 'deactivated'}`;
             
@@ -1362,7 +948,6 @@
             }
         }
 
-        // 🚨 NEW: 2FA UI Management Function
         function updateSecurityUI(is2faEnabled) {
             const statusBadge = document.getElementById('2fa-status-badge');
             const securityMessage = document.getElementById('security-message');
@@ -1382,7 +967,7 @@
                 disableBtn.style.display = 'inline-block';
                 enableBtn.style.display = 'none';
                 setupArea.style.display = 'none';
-                current2faSecret = null; // Clear setup secret
+                current2faSecret = null; 
                 document.getElementById('2fa-code').placeholder = 'Enter code to disable';
             } else {
                 statusBadge.textContent = 'DISABLED';
@@ -1392,15 +977,12 @@
                 setupBtn.style.display = 'inline-block';
                 disableBtn.style.display = 'none';
                 enableBtn.style.display = 'none';
-                // 🚨 FIX: Ensure setup area is hidden initially/when disabled
                 setupArea.style.display = 'none'; 
                 current2faSecret = null;
                 document.getElementById('2fa-code').placeholder = '6-digit code from your app';
             }
-            document.getElementById('2fa-code').value = ''; // Clear input on state change
+            document.getElementById('2fa-code').value = ''; 
         }
-
-        // --- Dynamic Data Refreshers (Removed Mock Data) ---
 
         /**
          * Fetches and renders the user's order history via API.
@@ -1414,7 +996,7 @@
                 const response = await fetch(ORDERS_API_URL);
                 
                 if (response.ok) {
-                    const orders = await response.json(); // Assuming API returns [{...}, {...}]
+                    const orders = await response.json(); 
                     tbody.innerHTML = '';
 
                     if (orders.length === 0) {
@@ -1423,7 +1005,6 @@
                     }
 
                     orders.forEach(order => {
-                        // Normalize status for CSS class, replacing spaces/colons
                         const statusClass = (order.status || 'Pending').replace(/[^a-zA-Z0-9]/g, '\\ ');
                         const totalItems = order.items ? order.items.length : 'N/A';
                         
@@ -1439,7 +1020,6 @@
                         tbody.insertAdjacentHTML('beforeend', row);
                     });
                 } else {
-                     // Handle API non-OK status
                      tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Error (${response.status}) fetching orders.</td></tr>`;
                 }
 
@@ -1448,360 +1028,19 @@
                 tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--color-danger);">Network error loading orders.</td></tr>`;
             }
         }
-
-        /**
-         * Fetches and renders the user's wallet balance via API.
-         */
-        async function fetchAndRenderWallet() {
-            if (!isUserAuthenticated) return;
-            const balanceDisplay = document.getElementById('wallet-balance-display');
-            
-            // Get all elements that display the account number
-            const accountNoDisplays = [
-                document.getElementById('account-number-display-mpesa'),
-                // document.getElementById('account-number-display-manual') // Removed as it was a duplicate pattern from prior file version
-            ];
-
-            balanceDisplay.textContent = 'Loading...';
-            accountNoDisplays.forEach(el => { if (el) el.textContent = 'Loading...'; });
-
-            try {
-                const response = await fetch(WALLET_BALANCE_API_URL);
-                
-                if (response.ok) {
-                    const walletData = await response.json(); // Assuming API returns { balance: 1234.50, account_number: 'LC999' }
-                    
-                    balanceDisplay.textContent = `KES ${parseFloat(walletData.balance || 0).toFixed(2)}`;
-                    
-                    accountNoDisplays.forEach(el => {
-                        if (el) el.textContent = walletData.account_number || 'N/A';
-                    });
-                } else {
-                    balanceDisplay.textContent = `KES 0.00`;
-                    accountNoDisplays.forEach(el => { if (el) el.textContent = 'N/A'; });
-                }
-
-            } catch (error) {
-                balanceDisplay.textContent = `KES 0.00`;
-                accountNoDisplays.forEach(el => { if (el) el.textContent = 'N/A'; });
-                console.error('Error fetching wallet:', error);
-            }
-        }
-
-        /**
-         * Fetches and renders payment history (deposits/deductions) via API.
-         */
-        async function fetchAndRenderPaymentHistory() {
-             if (!isUserAuthenticated) return;
-             const tbody = document.getElementById('payment-history-tbody');
-             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Fetching history...</td></tr>';
-             
-             try {
-                const response = await fetch(PAYMENT_HISTORY_API_URL);
-
-                if (response.ok) {
-                    const historyData = await response.json(); // Assuming API returns [{date, type, amount, status}, ...]
-                    
-                    tbody.innerHTML = '';
-                    if (historyData.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--color-text-subtle);">No history available.</td></tr>';
-                        return;
-                    }
-                 
-                    historyData.forEach(transaction => {
-                        const statusClass = (transaction.status || 'Pending').replace(/[^a-zA-Z0-9]/g, '\\ ');
-                        const amountText = `KES ${parseFloat(transaction.amount || 0).toFixed(2)}`;
-                        const amountStyle = transaction.type === 'Deduction' ? 'color: var(--color-danger);' : 'color: var(--color-success);';
-                        
-                        const row = `
-                            <tr>
-                                <td>${new Date(transaction.date).toLocaleDateString()}</td>
-                                <td>${transaction.type || 'Transaction'}</td>
-                                <td style="${amountStyle}">${amountText}</td>
-                                <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
-                            </tr>
-                        `;
-                        tbody.insertAdjacentHTML('beforeend', row);
-                    });
-                } else {
-                    // Handle API non-OK status
-                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Error (${response.status}) loading history.</td></tr>`;
-                }
-
-             } catch (error) {
-                 tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--color-danger);">Network error loading history.</td></tr>`;
-                 console.error('Error fetching payment history:', error);
-             }
-        }
-
-        /**
-         * 🚨 NEW: Combined function to refresh dynamic data parts.
-         * @param {string} targetId Optional section ID to refresh immediately.
-         */
+        
         async function refreshDynamicData(targetId) {
             
-            // Only refresh the active section data on tab switch for efficiency
-            if (targetId === 'wallet' || targetId === 'all') {
-                fetchAndRenderWallet();
-            }
             if (targetId === 'orders' || targetId === 'all') {
                 fetchAndRenderOrders();
             }
-            if (targetId === 'history' || targetId === 'all') {
-                fetchAndRenderPaymentHistory();
-            }
             if (targetId === 'details' || targetId === 'all' || targetId === 'settings') {
-                // Settings tab also relies on this data fetch for 2FA status
                 await fetchProfileData();
             }
+            // 🚨 WALLET/HISTORY REFRESH LOGIC REMOVED
         }
 
-        // --- M-PESA POLLING LOGIC (omitted for brevity) ---
-        function startPolling(checkoutRequestID) {
-            pollingAttempts = 0;
-            const statusMessageEl = document.getElementById('polling-status-message');
-            
-            statusMessageEl.textContent = "Checking transaction status...";
-            
-            pollingIntervalId = setInterval(async () => {
-                pollingAttempts++;
-                statusMessageEl.textContent = `Checking transaction status... Attempt ${pollingAttempts}/${MAX_POLLING_ATTEMPTS}`;
-
-                if (pollingAttempts > MAX_POLLING_ATTEMPTS) {
-                    clearInterval(pollingIntervalId);
-                    
-                    // Show failure and suggest manual check
-                    showPaymentResult({ 
-                        status: 'Failed', 
-                        message: 'Payment timed out. Please check your phone for confirmation or contact support.', 
-                        mpesaRef: 'TIMED OUT' 
-                    });
-                    return;
-                }
-
-                try {
-                    // 🚨 NEW API CALL: Query status
-                    const response = await fetch(MPESA_STATUS_QUERY_API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ checkoutRequestID })
-                    });
-                    
-                    if (!response.ok) throw new Error('Query API failed.');
-                    
-                    const result = await response.json();
-
-                    if (result.status === 'Completed') {
-                        clearInterval(pollingIntervalId);
-                        showPaymentResult(result);
-                    } else if (result.status === 'Failed' || result.status === 'Cancelled') {
-                        clearInterval(pollingIntervalId);
-                        showPaymentResult(result);
-                    }
-                    // If status is 'Pending', continue polling
-                    
-                } catch (error) {
-                    console.error('Polling error:', error);
-                    // Continue polling on error, but maybe log a warning
-                }
-
-            }, POLLING_INTERVAL_MS);
-        }
-
-        function showPaymentResult(result) {
-            closeModal('deposit-processing-modal');
-            refreshDynamicData('wallet'); // Immediately refresh wallet/history
-            
-            if (result.status === 'Completed') {
-                document.getElementById('success-amount').textContent = `KES ${depositAmount.toFixed(2)}`;
-                document.getElementById('success-mpesa-ref').textContent = result.mpesaRef || 'N/A';
-                document.getElementById('deposit-success-modal').style.display = 'flex';
-                
-            } else {
-                // Show failure message in the STK modal
-                showMessage('mpesa-deposit-message', `Transaction ${result.status.toUpperCase()}: ${result.message}`, 'error');
-                document.getElementById('mpesa-stk-modal').style.display = 'flex';
-            }
-        }
-
-        window.cancelMpesaTransaction = function() {
-            if (pollingIntervalId) clearInterval(pollingIntervalId);
-            closeModal('deposit-processing-modal');
-            
-            // Notify the user that tracking was cancelled
-            showMessage('mpesa-deposit-message', 'M-Pesa transaction tracking cancelled by user.', 'error');
-            document.getElementById('mpesa-stk-modal').style.display = 'flex';
-        }
-
-        window.closeSuccessModal = function() {
-            closeModal('deposit-success-modal');
-            showSection('wallet'); // Switch to wallet tab
-        }
-
-        // --- Payment Modals and Handlers (omitted for brevity) ---
-
-        window.openDepositModal = function(method) {
-            // Close all related modals first
-            closeModal('mpesa-stk-modal');
-            closeModal('mpesa-manual-modal');
-            closeModal('card-deposit-modal');
-            
-            if (method === 'M-Pesa STK') {
-                fetchAndRenderWallet(); // To get the latest account number
-                document.getElementById('mpesa-stk-modal').style.display = 'flex';
-                showMessage('mpesa-deposit-message', '', 'info');
-                
-            } else if (method === 'M-Pesa Manual') {
-                fetchAndRenderWallet(); 
-                document.getElementById('mpesa-manual-modal').style.display = 'flex';
-                showMessage('mpesa-manual-message', '', 'info');
-                
-            } else if (method === 'Card') {
-                document.getElementById('card-deposit-modal').style.display = 'flex';
-                showMessage('card-deposit-message', '', 'info');
-            }
-        }
-        
-        // 1. M-PESA STK PUSH HANDLER
-        document.getElementById('mpesa-stk-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const phone = document.getElementById('mpesa-phone').value;
-            const amount = document.getElementById('mpesa-amount').value;
-            depositAmount = parseFloat(amount); // Store amount for success modal
-            
-            const accountNo = document.getElementById('account-number-display-mpesa').textContent;
-            const btn = document.getElementById('mpesa-deposit-btn');
-            const originalBtnHtml = btn.innerHTML;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending STK Push...';
-
-            try {
-                const response = await fetch(MPESA_DEPOSIT_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone, amount, accountNo })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    
-                    // Success: Close deposit modal, open processing modal, and start polling
-                    closeModal('mpesa-stk-modal');
-                    
-                    document.getElementById('processing-checkout-id').textContent = result.transactionRef;
-                    document.getElementById('deposit-processing-modal').style.display = 'flex';
-                    
-                    startPolling(result.transactionRef);
-                    
-                } else {
-                    // Failure (API side error): Stay on deposit modal, show error
-                    const result = await response.json();
-                    showMessage('mpesa-deposit-message', result.message || 'Deposit failed. Check details.', 'error');
-                }
-            } catch (error) {
-                console.error('M-Pesa deposit error:', error);
-                showMessage('mpesa-deposit-message', 'Network error during STK Push request.', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalBtnHtml;
-            }
-        });
-        
-        // 2. 🚨 NEW: M-PESA MANUAL VERIFICATION HANDLER
-        document.getElementById('mpesa-manual-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const transactionCode = document.getElementById('manual-code').value.toUpperCase();
-            const amount = document.getElementById('manual-amount').value;
-            depositAmount = parseFloat(amount);
-            
-            const btn = document.getElementById('mpesa-manual-btn');
-            const originalBtnHtml = btn.innerHTML;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying Code...';
-
-            try {
-                const response = await fetch(MPESA_MANUAL_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ transactionCode, amount })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    
-                    // Success: Close manual modal, show success modal
-                    closeModal('mpesa-manual-modal');
-                    
-                    document.getElementById('success-amount').textContent = `KES ${depositAmount.toFixed(2)}`;
-                    document.getElementById('success-mpesa-ref').textContent = result.mpesaRef || transactionCode;
-                    document.getElementById('deposit-success-modal').style.display = 'flex';
-                    
-                } else {
-                    // Failure: Stay on manual modal, show error
-                    const result = await response.json();
-                    showMessage('mpesa-manual-message', result.message || 'Verification failed.', 'error');
-                }
-            } catch (error) {
-                console.error('Manual verification error:', error);
-                showMessage('mpesa-manual-message', 'Network error during payment verification.', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalBtnHtml;
-                refreshDynamicData('wallet');
-            }
-        });
-
-        // 3. DEBIT/CREDIT CARD HANDLER
-        document.getElementById('card-deposit-form').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const cardNumber = document.getElementById('card-number').value;
-            const expiry = document.getElementById('expiry').value;
-            const cvv = document.getElementById('cvv').value;
-            const amount = document.getElementById('card-amount').value;
-            depositAmount = parseFloat(amount); // Store amount for success modal
-            
-            const btn = document.getElementById('card-deposit-btn');
-            const originalBtnHtml = btn.innerHTML;
-            
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
-            
-            try {
-                const response = await fetch(CARD_DEPOSIT_API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cardNumber: cardNumber.slice(-4), expiry, cvv, amount }) // Send only last 4 digits securely
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    
-                    showMessage('card-deposit-message', 'Card payment successful! Funds are now available.', 'success');
-                    
-                    // Show success modal instead of just hiding
-                    closeModal('card-deposit-modal');
-                    document.getElementById('success-amount').textContent = `KES ${depositAmount.toFixed(2)}`;
-                    document.getElementById('success-mpesa-ref').textContent = result.transactionRef; // Use the simulated ref
-                    document.getElementById('deposit-success-modal').style.display = 'flex';
-
-                    this.reset();
-                } else {
-                    const result = await response.json();
-                    showMessage('card-deposit-message', result.message || 'Card payment failed. Please check details.', 'error');
-                }
-            } catch (error) {
-                console.error('Card deposit error:', error);
-                showMessage('card-deposit-message', 'Network error during card payment.', 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalBtnHtml;
-                refreshDynamicData('wallet');
-            }
-        });
-
-        // --- Profile Update Handler ---
+        // --- Event Handlers (omitted for brevity) ---
 
         document.getElementById('profile-form').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -1814,13 +1053,10 @@
             const formData = new FormData(this);
             const fileInput = document.getElementById('file-input');
             
-            // 🚨 FIX: ONLY send the file if a new one was selected.
             if (fileInput.files.length === 0) {
                 formData.delete('profilePicture');
-                // Ensure the current URL is sent so the server knows what to keep if no file is uploaded.
                 formData.set('currentProfilePictureUrl', document.getElementById('current-pic-url').value);
             }
-            // If a file is present, multer handles it, and the hidden field value is ignored/overwritten on the server.
             
             try {
                 const response = await fetch(PROFILE_API_URL, {
@@ -1834,11 +1070,10 @@
                     showProfileMessage(result.message || 'Profile updated!', 'success');
                     
                     if (result.profilePictureUrl) {
-                        // Update UI with new or existing URL
                         renderProfilePicture(result.profilePictureUrl);
                         document.getElementById('current-pic-url').value = result.profilePictureUrl;
                     }
-                    fileInput.value = ''; // Clear the file input element after successful upload
+                    fileInput.value = ''; 
                 } else if (response.status === 401) {
                     checkAuthenticationStatus();
                 } else {
@@ -1853,7 +1088,6 @@
             }
         });
         
-        // --- Change Password Handler (NEW) ---
         document.getElementById('change-password-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             if (!isUserAuthenticated) return;
@@ -1863,7 +1097,7 @@
             const confirmNewPassword = document.getElementById('confirm-new-password').value;
             const btn = document.getElementById('change-password-btn');
 
-            showMessage('password-message', '', 'info'); // Clear previous message
+            showMessage('password-message', '', 'info'); 
             
             if (newPassword !== confirmNewPassword) {
                 showMessage('password-message', 'New password and confirmation do not match.', 'error');
@@ -1888,7 +1122,7 @@
 
                 if (response.ok) {
                     showMessage('password-message', result.message || 'Password updated successfully!', 'success');
-                    this.reset(); // Clear form fields
+                    this.reset(); 
                 } else if (response.status === 401) {
                     showMessage('password-message', result.message || 'Invalid current password.', 'error');
                 } else {
@@ -1904,16 +1138,13 @@
         });
 
         // -----------------------------------------------------
-        // 🚨 NEW: 2FA CONTROL LOGIC
+        // 2FA CONTROL LOGIC
         // -----------------------------------------------------
 
-         // Handle "Begin Setup" button click
         document.getElementById('2fa-setup-btn').addEventListener('click', async () => {
-            // Reset the message area
             showMessage('profile-message', '', 'info');
             
             if (!currentUserData.name) {
-                // 🚨 FIX: Use the 'name' (username) as the identity in the QR code
                 showMessage('profile-message', 'Please ensure your account has a username/name set before setting up 2FA.', 'error');
                 return;
             }
@@ -1922,7 +1153,6 @@
             setupBtn.disabled = true;
             setupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating QR...';
             
-            // 🚨 FIX: Immediately show the QR area to prevent layout jump after image loads
             document.getElementById('setup-qr-area').style.display = 'flex';
 
             try {
@@ -1932,29 +1162,17 @@
                 const data = await response.json();
                 current2faSecret = data.secret;
                 
-                // 🚨 FIX 2: Log received data for debugging the blank QR code issue
-                console.log("2FA Setup Data Received:", {
-                    secret: data.secret,
-                    qrCodeLength: data.qrCodeUrl ? data.qrCodeUrl.length : 0,
-                    qrCodeUrlStart: data.qrCodeUrl ? data.qrCodeUrl.substring(0, 50) : 'N/A'
-                });
-                
-                // Display QR code and secret
                 document.getElementById('2fa-qr-code').src = data.qrCodeUrl;
                 document.getElementById('2fa-secret-key').textContent = data.secret;
                 document.getElementById('2fa-current-secret').value = data.secret;
                 
-                
-                // Change button context
                 setupBtn.style.display = 'none';
                 document.getElementById('2fa-enable-btn').style.display = 'inline-block';
-                // 🚨 CLEANUP: Improved success message after setup step
                 document.getElementById('security-message').innerHTML = '<span style="color: var(--color-warning);">Setup in Progress:</span> Scan the QR code with your app and enter the 6-digit verification code below to finalize activation.';
 
             } catch (error) {
                 console.error('2FA setup error:', error);
                 showMessage('profile-message', 'Error during 2FA setup initiation. Check browser console.', 'error');
-                // Hide on error
                 document.getElementById('setup-qr-area').style.display = 'none';
             } finally {
                 setupBtn.disabled = false;
@@ -1963,7 +1181,7 @@
                 }
             }
         });
-        // Handle form submission (Enable/Disable)
+
         document.getElementById('2fa-form').addEventListener('submit', async function(e) {
             e.preventDefault();
             const code = document.getElementById('2fa-code').value.trim();
@@ -1977,7 +1195,6 @@
             let url, submitBtn;
             
             if (!isCurrentlyEnabled) {
-                // ENABLE attempt
                 const secret = current2faSecret || document.getElementById('2fa-current-secret').value;
                 if (!secret) {
                     showMessage('profile-message', 'Setup process not complete. Click "Begin Setup" first.', 'error');
@@ -1987,7 +1204,6 @@
                 submitBtn = document.getElementById('2fa-enable-btn');
                 var payload = { secret: secret, token: code };
             } else {
-                // DISABLE attempt
                 url = DISABLE_2FA_URL;
                 submitBtn = document.getElementById('2fa-disable-btn');
                 var payload = { token: code };
@@ -2007,7 +1223,6 @@
                 
                 if (response.ok) {
                     showMessage('profile-message', result.message, 'success');
-                    // Re-fetch user data to update the global state and UI
                     await fetchProfileData();
                 } else {
                     showMessage('profile-message', result.message || 'Verification failed. Try again.', 'error');
@@ -2052,13 +1267,11 @@
                 const initialHash = window.location.hash ? window.location.hash.substring(1) : 'details';
                 showSection(initialHash);
                 
-                // Start combined status/data refresh loop
                 window.statusIntervalId = setInterval(checkProfileStatusAndLogout, REFRESH_INTERVAL_MS); 
             } else {
                 if (window.statusIntervalId) clearInterval(window.statusIntervalId);
             }
             
-            // 🚨 PROFILE PICTURE PREVIEW FIX: Update local image preview when a new file is selected
             document.getElementById('file-input').addEventListener('change', function(e) {
                 if (this.files && this.files[0]) {
                     const reader = new FileReader();
@@ -2067,7 +1280,6 @@
                     }
                     reader.readAsDataURL(this.files[0]);
                 } else {
-                    // If file is cleared, revert to the current database-persisted URL
                     renderProfilePicture(document.getElementById('current-pic-url').value);
                 }
             });
