@@ -221,9 +221,55 @@
         }
         .cta-button:hover { background-color: var(--color-pink-accent); transform: translateY(-3px); box-shadow: 0 6px 15px rgba(194, 24, 91, 0.3); }
 
-        .hero-image-container { flex: 1; display: flex; justify-content: center; align-items: center; max-width: 50%; }
-        /* Using a common placeholder image URL since the original might not load */
-        .hero-image-container img { max-width: 100%; height: auto; border-radius: 12px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); object-fit: cover; max-height: 500px; }
+        /* --- 🚨 CAROUSEL STYLES --- */
+        .hero-image-container { 
+            flex: 1; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            max-width: 50%; 
+            position: relative; /* Container for absolute buttons */
+            height: 500px; /* Fixed height for consistent carousel size */
+        }
+        
+        .hero-image-container .carousel-img { 
+            max-width: 100%; 
+            height: 100%; /* Fill container height */
+            border-radius: 12px; 
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15); 
+            object-fit: cover; 
+            max-height: 500px; 
+            transition: opacity 0.5s ease-in-out; /* Fade transition */
+        }
+        
+        .carousel-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.8);
+            border: none;
+            color: var(--color-pink-dark);
+            font-size: 1.5rem;
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 50%;
+            transition: background 0.3s, color 0.3s;
+            z-index: 10;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .carousel-btn:hover {
+            background: var(--color-pink-accent);
+            color: white;
+        }
+        
+        #prev-btn { left: 10px; }
+        #next-btn { right: 10px; }
         
         /* --- Notification Banner Styles --- */
         .notification-banner {
@@ -420,6 +466,11 @@
             }
             .hero h1 { font-size: 2.5rem; }
             .hero p { margin: 1rem auto 2rem; }
+            
+            /* Adjust mobile carousel height */
+            .hero-image-container {
+                height: 350px;
+            }
         }
     </style>
 </head>
@@ -512,12 +563,19 @@
                 <button id="cta-products-button" class="cta-button">🛍️ Find Your Next Signature Look</button>
             </div>
             
+            <!-- 🚨 UPDATED: Hero Image Carousel Container -->
             <div class="hero-image-container">
-               <!-- Placeholder for image that might not load -->
-               <img src=" /images/products/WhatsApp Image 2025-12-15 at 8.08.51 AM.jpeg" 
-                    alt="Stylish footwear from Lolly's Collection" 
-                    class="product-image"
-                    onerror="this.onerror=null; this.src='/images/products/placeholder.jpg';">
+               <img id="carousel-image" 
+                    src="" 
+                    alt="Dynamic showcase of Lolly's Collection" 
+                    class="carousel-img">
+               
+               <button id="prev-btn" class="carousel-btn" aria-label="Previous Image">
+                   <i class="fas fa-chevron-left"></i>
+               </button>
+               <button id="next-btn" class="carousel-btn" aria-label="Next Image">
+                   <i class="fas fa-chevron-right"></i>
+               </button>
             </div>
         </section>
     </main>
@@ -533,6 +591,68 @@
         // 🚨 ADJUSTED INTERVAL: 5 minutes (300,000ms)
         const REFRESH_INTERVAL_MS = 300000;
         
+        // --- 🚨 CAROUSEL DATA AND LOGIC ---
+        const heroImages = [
+            '/images/products/WhatsApp Image 2025-12-15 at 8.08.51 AM.jpeg', // Original image placeholder
+             '/images/products/IMG-20251113-WA0003.jpeg',
+             '/images/products/IMG-20251113-WA0009.jpeg',
+             '/images/products/IMG-20251113-WA0015.jpeg',
+        ];
+        let currentSlide = 0;
+        const carouselImage = document.getElementById('carousel-image');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const carouselInterval = 5000; // 5 seconds
+        let autoSlideTimer;
+
+        function showSlide(index) {
+            // Calculate actual index to loop around
+            currentSlide = (index + heroImages.length) % heroImages.length;
+            
+            // Fade out current image
+            carouselImage.style.opacity = 0;
+            
+            // Wait for fade-out, then change source and fade in
+            setTimeout(() => {
+                const imageUrl = heroImages[currentSlide];
+                
+                // Use a fallback for the dynamic image sources
+                carouselImage.onerror = () => {
+                    // Fallback to a generic placeholder if the specific image URL fails
+                    carouselImage.src = 'https://placehold.co/800x500/757575/FFFFFF?text=Image+Failed';
+                    carouselImage.onerror = null; // Prevent infinite error loop
+                };
+
+                carouselImage.src = imageUrl;
+                carouselImage.style.opacity = 1; // Fade in
+            }, 500); // Wait 500ms for the fade-out transition
+            
+            resetAutoSlide();
+        }
+
+        function nextSlide() {
+            showSlide(currentSlide + 1);
+        }
+
+        function prevSlide() {
+            showSlide(currentSlide - 1);
+        }
+        
+        function resetAutoSlide() {
+            clearInterval(autoSlideTimer);
+            autoSlideTimer = setInterval(nextSlide, carouselInterval);
+        }
+
+        // Event listeners for manual control
+        nextBtn.addEventListener('click', nextSlide);
+        prevBtn.addEventListener('click', prevSlide);
+        
+        // Initialize carousel on load
+        window.addEventListener('load', () => {
+            showSlide(0);
+            resetAutoSlide();
+        });
+
         // --- Mobile Menu Toggle ---
         const hamburgerIcon = document.getElementById('hamburger-icon');
         const sidebarCloseIcon = document.getElementById('sidebar-close-icon');
