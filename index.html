@@ -565,8 +565,9 @@
             
             <!-- 🚨 UPDATED: Hero Image Carousel Container -->
             <div class="hero-image-container">
+               <!-- Initial image is a generic placeholder until dynamic content loads -->
                <img id="carousel-image" 
-                    src="" 
+                    src="https://placehold.co/800x500/E91E63/FFFFFF?text=Loading+Products" 
                     alt="Dynamic showcase of Lolly's Collection" 
                     class="carousel-img">
                
@@ -588,22 +589,64 @@
         const AUTH_STATUS_API_URL = '/api/auth/status';
         const LOGOUT_API_URL = '/api/logout';
         const USER_PROFILE_API_URL = '/api/user/profile';
+        const PRODUCTS_API_URL = '/api/products'; // API endpoint for products
+        
         // 🚨 ADJUSTED INTERVAL: 5 minutes (300,000ms)
         const REFRESH_INTERVAL_MS = 300000;
         
         // --- 🚨 CAROUSEL DATA AND LOGIC ---
-        const heroImages = [
-            '/images/products/WhatsApp Image 2025-12-15 at 8.08.51 AM.jpeg', // Original image placeholder
-             '/images/products/IMG-20251113-WA0003.jpeg',
-             '/images/products/IMG-20251113-WA0009.jpeg',
-             '/images/products/IMG-20251113-WA0015.jpeg',
+        // Default static image and placeholder paths
+        const staticImages = [
+            '/images/products/WhatsApp Image 2025-12-15 at 8.08.51 AM.jpeg', // Original user image
+            'https://placehold.co/800x500/F06292/FFFFFF?text=Lollys+Style',
+            'https://placehold.co/800x500/C2185B/FFFFFF?text=Must+Haves'
         ];
+        let heroImages = [...staticImages]; // Initial array
         let currentSlide = 0;
         const carouselImage = document.getElementById('carousel-image');
         const prevBtn = document.getElementById('prev-btn');
         const nextBtn = document.getElementById('next-btn');
         const carouselInterval = 5000; // 5 seconds
         let autoSlideTimer;
+
+        // Function to fetch product images and populate the carousel
+        async function fetchProductImages() {
+            try {
+                const response = await fetch(PRODUCTS_API_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const products = await response.json();
+                
+                // Extract image URLs from the first 5 products
+                const dynamicImages = products
+                    .slice(0, 5) // Take up to 5 products
+                    .map(p => p.image_url)
+                    .filter(url => url); // Filter out null/undefined URLs
+
+                // Combine dynamic images with static fallbacks
+                if (dynamicImages.length > 0) {
+                    // Use a mix of dynamic and static images
+                    heroImages = [...dynamicImages, ...staticImages.slice(1)];
+                }
+
+                // Ensure heroImages has at least one valid image path
+                if (heroImages.length === 0) {
+                    heroImages = ['https://placehold.co/800x500/757575/FFFFFF?text=No+Product+Images'];
+                }
+
+                // Start or restart the carousel with new images
+                showSlide(0);
+                resetAutoSlide();
+
+            } catch (error) {
+                console.error('Error fetching product images for carousel:', error);
+                // If API fails, keep static fallbacks and start the carousel
+                showSlide(0);
+                resetAutoSlide();
+            }
+        }
+
 
         function showSlide(index) {
             // Calculate actual index to loop around
@@ -616,7 +659,7 @@
             setTimeout(() => {
                 const imageUrl = heroImages[currentSlide];
                 
-                // Use a fallback for the dynamic image sources
+                // Use a robust fallback for the dynamic image sources
                 carouselImage.onerror = () => {
                     // Fallback to a generic placeholder if the specific image URL fails
                     carouselImage.src = 'https://placehold.co/800x500/757575/FFFFFF?text=Image+Failed';
@@ -624,6 +667,7 @@
                 };
 
                 carouselImage.src = imageUrl;
+                carouselImage.alt = `Dynamic showcase image ${currentSlide + 1} of Lolly's Collection`;
                 carouselImage.style.opacity = 1; // Fade in
             }, 500); // Wait 500ms for the fade-out transition
             
@@ -647,12 +691,6 @@
         nextBtn.addEventListener('click', nextSlide);
         prevBtn.addEventListener('click', prevSlide);
         
-        // Initialize carousel on load
-        window.addEventListener('load', () => {
-            showSlide(0);
-            resetAutoSlide();
-        });
-
         // --- Mobile Menu Toggle ---
         const hamburgerIcon = document.getElementById('hamburger-icon');
         const sidebarCloseIcon = document.getElementById('sidebar-close-icon');
@@ -875,7 +913,12 @@
 
 
         // Initial call to check status and set up the interface
-        checkAuthStatus();
+        document.addEventListener('DOMContentLoaded', () => {
+             checkAuthStatus();
+             // 🚨 NEW: Fetch and populate carousel images after initial auth check
+             fetchProductImages(); 
+        });
+
         // 🚨 PWA Registration Logic
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
