@@ -20,7 +20,6 @@ const { v2: cloudinary } = require('cloudinary');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
 const axios = require('axios');
-const { pool } = db; 
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
