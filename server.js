@@ -2000,7 +2000,7 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     }
 });
 
-// 🚨 MODIFIED: Order submission is now triggered AFTER payment confirmation
+// 🚨 FULLY UPDATED: Order logic with Business Wallet removed & Email notifications active
 app.post('/api/order', isAuthenticated, async (req, res) => {
     
     // -------------------------------
@@ -2008,27 +2008,25 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
     // -------------------------------
     const rawUserId = req.session.userId;
     if (!rawUserId) {
-        return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
+        return res.status(401).json({ message: 'Authentication required.' });
     }
     const userId = String(rawUserId);
 
-    // Extract fields safely
+    // Extract fields from the request body
     const {
         name = "",
         phone = "",
         email = "",
         location = "",
         items = [],
-        notificationMethod = "email",
         total,
-        paymentMethod, // 🚨 NEW
-        paymentReference // 🚨 NEW
+        paymentMethod,    // e.g., 'M-Pesa' or 'Card'
+        paymentReference  // e.g., M-Pesa Receipt Number or Paystack Ref
     } = req.body;
 
     // -------------------------------
     // 2. VALIDATION
     // -------------------------------
-
     if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: 'Cart is empty or invalid.' });
     }
@@ -2038,202 +2036,141 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         return res.status(400).json({ message: 'Invalid or missing total.' });
     }
     
+    // Ensure we have payment proof before creating the order
     if (!paymentMethod || !paymentReference) {
-        return res.status(400).json({ message: 'Payment method and reference are required to finalize the order.' });
+        return res.status(400).json({ message: 'Payment reference missing. Order cannot be finalized.' });
     }
 
-    if (!name.trim())      return res.status(400).json({ message: 'Missing Customer Name.' });
-    if (!phone.trim())     return res.status(400).json({ message: 'Missing Phone Number.' });
-    if (!email.trim())     return res.status(400).json({ message: 'Missing Email Address.' });
-    if (!location.trim())  return res.status(400).json({ message: 'Missing Delivery Location.' });
+    if (!name.trim() || !phone.trim() || !email.trim() || !location.trim()) {
+        return res.status(400).json({ message: 'Please provide all delivery details.' });
+    }
 
-    // -------------------------------
-    // 3. GET DB CONNECTION
-    // -------------------------------
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        // 🚨 REMOVED: Wallet balance check and customer deduction is now handled 
-        // by the pre-order payment verification step (M-Pesa polling or Paystack verify API) 
-        // which logs a DEPOSIT to the user's wallet.
-
         // -------------------------------
-        // 4. INSERT ORDER HEADER
+        // 3. INSERT ORDER HEADER
         // -------------------------------
-        // Status is set directly to 'Processing' since payment is confirmed.
+        // We set status to 'Processing' because payment is already confirmed
         const [orderResult] = await connection.execute(
             `INSERT INTO orders
              (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status, created_at, payment_method, payment_reference)
              VALUES (?, ?, ?, ?, ?, ?, 'Processing', NOW(), ?, ?)`,
-            [
-                userId,
-                name,
-                phone,
-                email,
-                location,
-                orderTotal,
-                paymentMethod, // 🚨 NEW
-                paymentReference // 🚨 NEW
-            ]
+            [userId, name, phone, email, location, orderTotal, paymentMethod, paymentReference]
         );
 
-        if (!orderResult.insertId) {
-            throw new Error("CRITICAL: Failed to insert order header and retrieve ID.");
-        }
         const orderId = orderResult.insertId;
 
         // -------------------------------
-        // 5. INSERT ORDER ITEMS + UPDATE STOCK
+        // 4. INSERT ITEMS & UPDATE STOCK
         // -------------------------------
-        const itemSql = `
-            INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, size)
-            VALUES (?, ?, ?, ?, ?, ?)
-        `;
-
         for (const item of items) {
-            // Get product info from DB (essential for validation and data integrity)
+            // Select product with FOR UPDATE to prevent race conditions during high traffic
             const [productRows] = await connection.execute(
-                'SELECT name, price, stock FROM products WHERE id = ?',
+                'SELECT name, price, stock FROM products WHERE id = ? FOR UPDATE',
                 [item.id]
             );
 
-            if (!productRows.length) throw new Error(`Product ID ${item.id} not found`);
+            if (!productRows.length) throw new Error(`Product ${item.name} no longer exists.`);
             
             const product = productRows[0];
             
             if (product.stock < item.quantity) {
-                throw new Error(`Not enough stock for product ID ${item.id}`);
+                throw new Error(`Insufficient stock for ${product.name}. Available: ${product.stock}`);
             }
 
-            // Deduct stock
+            // Deduct from inventory
             await connection.execute(
                 'UPDATE products SET stock = stock - ? WHERE id = ?',
                 [item.quantity, item.id]
             );
 
-            // Insert order item
-            await connection.execute(itemSql, [
-                orderId,        
-                item.id,        
-                item.name.replace(/\s\(Size:\s[A-Z]+\)$/i, ''), // Clean name if size was appended for display
-                product.price,  
-                item.quantity,
-                item.size || null 
-            ]);
+            // Save to order_items
+            await connection.execute(
+                `INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, size)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [orderId, item.id, item.name, product.price, item.quantity, item.size || null]
+            );
         }
 
         // -------------------------------
-        // 6. BUSINESS WALLET DEDUCTION/TRANSFER (for order fulfillment tracking)
+        // 5. CLEAR USER CART
         // -------------------------------
-        // The funds were already deposited to the business wallet during the payment step.
-        // We log an internal accounting movement from business revenue to a "held for fulfillment" state 
-        // by performing a deduction from the business wallet for the order total.
-
-        const businessDeductionAmount = -orderTotal; // Log as negative
-        const businessExternalRef = `ORDER-FULFILL-${orderId}`;
-        const businessDescription = `Order Fulfillment Deduction for Order #${orderId} (${paymentMethod})`;
-
-        // Get Business Wallet ID
-        const [businessWalletRows] = await connection.execute(
-            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [BUSINESS_WALLET_USER_ID]
-        );
-        
-        if (businessWalletRows.length === 0) {
-             throw new Error("CRITICAL: Business Wallet not found for internal accounting.");
-        }
-        
-        const businessWalletId = businessWalletRows[0].wallet_id;
-        const businessCurrentBalance = businessWalletRows[0].balance;
-        const businessNewBalance = businessCurrentBalance + businessDeductionAmount;
-
-
-        // Log Business Transaction (Deduction) - Using existing connection
-        await connection.execute(
-            `INSERT INTO transactions
-             (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
-             VALUES (?, ?, ?, 'Deduction', 'Order Fulfillment', ?, ?, 'Completed', ?)`,
-            [BUSINESS_WALLET_USER_ID, businessWalletId, Number(orderId), businessDeductionAmount, businessExternalRef, 'Completed', businessDescription] 
-        );
-
-        // Update Business Wallet Balance
-        await connection.execute(
-            `UPDATE wallets SET balance = ? WHERE wallet_id = ?`,
-            [businessNewBalance, businessWalletId]
-        );
+        await connection.execute('DELETE FROM cart WHERE user_id = ?', [userId]);
 
         // -------------------------------
-        // 7. CLEAR CART
-        // -------------------------------
-        await connection.execute(
-            'DELETE FROM cart WHERE user_id = ?',
-            [userId] 
-        );
-
-        // -------------------------------
-        // 8. COMMIT TRANSACTION
+        // 6. COMMIT DATABASE CHANGES
         // -------------------------------
         await connection.commit();
 
         // -------------------------------
-        // 9. SEND EMAILS (Non-critical)
+        // 7. SEND EMAIL NOTIFICATIONS (Non-blocking)
         // -------------------------------
-        const orderDetailsHtml = items.map(item => {
-            const sizeDisplay = item.size ? ` (Size: ${item.size})` : '';
-            return `<li>${item.name}${sizeDisplay} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
-        }).join('');
+        const itemsListHtml = items.map(item => `
+            <li>
+                <strong>${item.name}</strong> ${item.size ? `(Size: ${item.size})` : ''} 
+                x${item.quantity} - KES ${((item.price || 0) * item.quantity).toFixed(2)}
+            </li>
+        `).join('');
 
         const senderEmail = process.env.EMAIL_FROM || 'onboarding@resend.dev';
 
-        await Promise.all([
+        // Wrap in a background task so it doesn't delay the user response
+        Promise.all([
+            // Email to Customer
             resend.emails.send({
                 from: `Lolly's Collection <${senderEmail}>`,
                 to: email,
-                subject: `Order #${orderId} Confirmed`,
+                subject: `Order #${orderId} Confirmed!`,
                 html: `
-                    <h2>Order #${orderId} Confirmed</h2>
-                    <p>Thank you ${name}, your order payment of KES ${orderTotal.toFixed(2)} via ${paymentMethod} was confirmed.</p>
-                    <ul>${orderDetailsHtml}</ul>
+                    <div style="font-family: sans-serif; color: #333;">
+                        <h2 style="color: #C2185B;">Thank you for your order, ${name}!</h2>
+                        <p>Your payment of <strong>KES ${orderTotal.toFixed(2)}</strong> via ${paymentMethod} has been confirmed.</p>
+                        <p><strong>Order ID:</strong> #${orderId}</p>
+                        <p><strong>Delivery To:</strong> ${location}</p>
+                        <h3>Items:</h3>
+                        <ul>${itemsListHtml}</ul>
+                        <p>We are now processing your package for delivery.</p>
+                    </div>
                 `
             }),
+            // Email to Admin
             resend.emails.send({
-                from: `Lolly's Collection Admin <${senderEmail}>`,
+                from: `Lolly's Store Alerts <${senderEmail}>`,
                 to: process.env.ADMIN_EMAIL,
-                subject: `New Paid Order #${orderId} via ${paymentMethod}`,
+                subject: `NEW ORDER: #${orderId} (${paymentMethod})`,
                 html: `
-                    <h2>New Paid Order #${orderId}</h2>
-                    <p><strong>Payment Method:</strong> ${paymentMethod}</p>
-                    <p><strong>Payment Ref:</strong> ${paymentReference}</p>
-                    <p><strong>Name:</strong> ${name}</p>
-                    <p><strong>Phone:</strong> ${phone}</p>
+                    <h2>New Order Received</h2>
+                    <p><strong>Customer:</strong> ${name} (${phone})</p>
                     <p><strong>Total:</strong> KES ${orderTotal.toFixed(2)}</p>
-                    <ul>${orderDetailsHtml}</ul>
+                    <p><strong>Payment Ref:</strong> ${paymentReference}</p>
+                    <p><strong>Location:</strong> ${location}</p>
+                    <h3>Items to Pack:</h3>
+                    <ul>${itemsListHtml}</ul>
                 `
             })
-        ]);
+        ]).catch(err => console.error("Email Error (Order #"+orderId+"): ", err));
 
-        // SUCCESS RESPONSE
+        // -------------------------------
+        // 8. FINAL SUCCESS RESPONSE
+        // -------------------------------
         return res.status(201).json({
-            message: 'Order placed successfully.',
+            message: 'Order placed successfully! Check your email for confirmation.',
             orderId
         });
 
     } catch (error) {
-        console.error("ORDER ERROR:", error);
-        await connection.rollback();
-
-        const userMessage = error.message.includes('stock') || error.message.includes('CRITICAL') || error.message.includes('INSUFFICIENT')
-            ? error.message 
-            : error.sqlMessage || 'Order failed due to a server error. Please try again.';
+        console.error("CRITICAL ORDER ERROR:", error);
+        if (connection) await connection.rollback();
 
         return res.status(500).json({
-            message: userMessage
+            message: error.message || 'An error occurred while finalizing your order.'
         });
 
     } finally {
-        connection.release();
+        if (connection) connection.release();
     }
 });
 // ... (rest of server.js remains the same)

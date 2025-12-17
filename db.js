@@ -736,87 +736,33 @@ async function performWalletTransaction(userId, amount, method, type, externalRe
         connection.release();
     }
 }
-// db.js (Add this function)
-
-/**
- * Completes a pending M-Pesa deposit transaction, updates the original record, 
- * and credits the user's wallet. (Requirement #1: MpesaReceiptNumber becomes external_ref)
- * (Requirement #4: Instant crediting logic is here)
- * * @param {string} externalRef - The M-Pesa CheckoutRequestID (used to find the original PENDING transaction).
- * @param {number} finalAmount - The final amount confirmed by M-Pesa.
- * @param {string} mpesaReceipt - The MpesaReceiptNumber (the required new reference code).
- * @param {string} transactionStatus - 'Completed' or 'Cancelled'.
- * @param {string} description - Final transaction description.
- */
 async function completeMpesaDeposit(externalRef, finalAmount, mpesaReceipt, transactionStatus, description) {
     const connection = await pool.getConnection();
 
     try {
         await connection.beginTransaction();
 
-        // 1. Find the original pending transaction (CRITICAL: Needs FOR UPDATE lock)
-        const [rows] = await connection.execute(
-            `SELECT user_id, wallet_id, amount 
-             FROM transactions 
-             WHERE external_ref = ? AND transaction_status = 'Pending' FOR UPDATE`,
-            [externalRef]
-        );
-
-        if (rows.length === 0) {
-            throw new Error('PENDING_TRANSACTION_NOT_FOUND');
-        }
-
-        const { user_id, wallet_id } = rows[0];
-        const businessId = '0'; // Assumed Business Wallet ID
-
-        // 2. Update the transaction status and use mpesaReceipt as the new external_ref
-        // This fulfills the user's requirement to use the M-Pesa code as the reference.
-        await connection.execute(
+        // 1. Update the original transaction status
+        const [result] = await connection.execute(
             `UPDATE transactions 
              SET transaction_status = ?, amount = ?, external_ref = ?, description = ? 
-             WHERE external_ref = ?`,
-            [transactionStatus, finalAmount, mpesaReceipt, description, externalRef] // Note: externalRef is used in WHERE, mpesaReceipt in SET
+             WHERE external_ref = ? AND transaction_status = 'Pending'`,
+            [transactionStatus, finalAmount, mpesaReceipt, description, externalRef]
         );
-        
-        if (transactionStatus === 'Completed') {
-            // 3. Update the User's Wallet Balance (Instant Credit - Requirement #4)
-            await connection.execute(
-                'UPDATE wallets SET balance = balance + ? WHERE wallet_id = ?',
-                [finalAmount, wallet_id]
-            );
 
-            // 4. Log a corresponding revenue transaction for the Business Wallet (User ID '0')
-            
-            const [businessWallet] = await connection.execute(
-                'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-                [businessId]
-            );
-            
-            if (businessWallet.length > 0) {
-                const businessWalletId = businessWallet[0].wallet_id;
-                await connection.execute(
-                    'UPDATE wallets SET balance = balance + ? WHERE user_id = ?', // Changed to user_id for simplicity
-                    [finalAmount, businessId]
-                );
-                // Log business revenue transaction
-                await connection.execute(
-                    `INSERT INTO transactions (user_id, wallet_id, type, method, amount, external_ref, transaction_status, description)
-                     VALUES (?, ?, 'Deposit', 'M-Pesa Revenue', ?, ?, 'Completed', ?)`,
-                    [businessId, businessWalletId, finalAmount, mpesaReceipt, `Revenue from Customer ID ${user_id}`]
-                );
-            } else {
-                 // CRITICAL: Handle the case where the business wallet is missing
-                console.error(`CRITICAL: Business Wallet ID ${businessId} not found during M-Pesa deposit.`);
-            }
-        } 
-        // If 'Cancelled' or 'Failed', only the transaction record status is updated (step 2), and no credit is applied.
+        if (result.affectedRows === 0) {
+            throw new Error('Transaction not found or already processed.');
+        }
+
+        // 🚨 BUSINESS WALLET UPDATES REMOVED 🚨
+        // We only track the user's payment status now.
 
         await connection.commit();
         return true;
 
     } catch (error) {
         await connection.rollback();
-        console.error(`Database error during M-Pesa callback processing:`, error);
+        console.error(`M-Pesa Callback DB Error:`, error);
         throw error;
     } finally {
         connection.release();
