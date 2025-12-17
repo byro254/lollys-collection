@@ -957,7 +957,7 @@
             
             if (itemsEmpty || !isUserAuthenticated) {
                  orderBtn.disabled = true;
-                 orderBtn.innerHTML = `<i class="fas fa-lock"></i> Login / Cart Empty`;
+                 orderBtn.innerHTML = `<i class="fas fa-lock"></i> Cart Empty`;
                  return;
             } else {
                 orderBtn.disabled = false;
@@ -1207,7 +1207,7 @@
             const amountInCents = Math.round(parseFloat(orderData.total) * 100);
             
             const handler = PaystackPop.setup({
-                key: 'YOUR_PAYSTACK_PUBLIC_KEY', // 🚨 Replace with your real public key
+                key: 'pk_live_8f1b4baa9bb2be96c540cf208204663141b4ae8a', // 🚨 Replace with your real public key
                 email: orderData.email,
                 amount: amountInCents, 
                 currency: 'KES',

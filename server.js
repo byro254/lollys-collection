@@ -1259,88 +1259,51 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
 });
 
 /**
- * POST /api/mpesa/callback
- * M-Pesa's Confirmation and Validation URL endpoint.
- * 🚨 NOTE: This still processes a wallet DEPOSIT, which is then used by the order finalize logic.
+ * 🚨 UPDATED: M-Pesa Callback Handler
+ * Finalizes orders directly instead of crediting wallets.
  */
 app.post('/api/mpesa/callback', async (req, res) => {
-    
-    // 🚨 START LOG MONITORING HERE
-    console.log("--- M-Pesa Callback Received ---");
-    // Use JSON.stringify for clean, readable output in your console
-    console.log(JSON.stringify(req.body, null, 2)); 
-    console.log("---------------------------------");
-    // 🚨 END LOG MONITORING HERE
+    const { Body } = req.body;
+    const resultCode = Body.stkCallback.ResultCode;
+    const checkoutRequestID = Body.stkCallback.CheckoutRequestID;
 
-    // 1. Process the M-Pesa result
-    const body = req.body.Body.stkCallback;
-    const checkoutRequestID = body.CheckoutRequestID;
-    const resultCode = body.ResultCode;
-    const resultDesc = body.ResultDesc;
-
-    // A. Transaction was cancelled or failed by user (ResultCode != 0)
-    if (resultCode !== 0) {
-        console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}. ResultDesc: ${resultDesc}`);
-        
+    if (resultCode === 0) { // Payment successful
         try {
-            await db.completeMpesaDeposit(
-                checkoutRequestID, 
-                0, 
-                `FAILURE-${resultCode}`, 
-                'Failed', 
-                resultDesc || 'Transaction cancelled by user or expired.'
-            );
+            // Find the transaction record by the M-Pesa CheckoutRequestID
+            const transaction = await db.findTransactionByRef(checkoutRequestID);
+            
+            if (transaction && transaction.order_id) {
+                // 🚨 DIRECT ACTION: Finalize the order immediately
+                await db.finalizeOrderAfterPayment(
+                    transaction.order_id, 
+                    'M-Pesa', 
+                    checkoutRequestID
+                );
+                
+                console.log(`Direct Payment Success: Order ${transaction.order_id} is now PAID.`);
+            }
         } catch (error) {
-            console.error('Error logging M-Pesa failure status:', error.message);
+            console.error("Critical error in M-Pesa direct callback:", error);
         }
-        
-        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and recorded as failure." });
     }
-    
-    // B. Transaction was successful (ResultCode == 0)
-    try {
-        const metaData = body.CallbackMetadata.Item;
-        const amountItem = metaData.find(item => item.Name === 'Amount');
-        const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
-
-        const amount = parseFloat(amountItem?.Value);
-        const mpesaReceipt = mpesaReceiptItem?.Value;
-        
-        const finalStatus = 'Completed';
-        const finalDescription = `MPESA successful deposit: ${mpesaReceipt}`;
-        
-        // 🚨 CRITICAL: This DB function handles the instant crediting (Requirement #4)
-        await db.completeMpesaDeposit(
-            checkoutRequestID, 
-            amount, 
-            mpesaReceipt, // New reference code (Requirement #1)
-            finalStatus, 
-            finalDescription
-        );
-
-        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
-
-    } catch (error) {
-        console.error('M-Pesa Callback processing error:', error);
-        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
-    }
+    res.json({ ResultCode: 0, ResultDesc: "Accepted" });
 });
 
 /**
- * 🚨 NEW API: POST /api/payment/paystack/verify
- * Server-side verification of Paystack payment reference.
+ * 🚨 UPDATED: POST /api/payment/paystack/verify
+ * Verifies Paystack payment and DIRECTLY finalizes the order. (No Wallet Deposit)
  */
 app.post('/api/payment/paystack/verify', isAuthenticated, async (req, res) => {
-    const { reference, total } = req.body;
+    // Added orderId to the destructured body
+    const { reference, total, orderId } = req.body;
     const userId = req.session.userId;
     const numericTotal = parseFloat(total);
 
-    if (!reference || isNaN(numericTotal) || numericTotal <= 0) {
-        return res.status(400).json({ message: 'Invalid payment reference or amount.' });
+    if (!reference || isNaN(numericTotal) || !orderId) {
+        return res.status(400).json({ message: 'Invalid payment data or Order ID.' });
     }
     
-    if (!PAYSTACK_SECRET_KEY) {
-        console.error("CRITICAL: PAYSTACK_SECRET_KEY is not set.");
+    if (!process.env.PAYSTACK_SECRET_KEY) {
         return res.status(500).json({ message: 'Server payment configuration error.' });
     }
 
@@ -1349,65 +1312,37 @@ app.post('/api/payment/paystack/verify', isAuthenticated, async (req, res) => {
             `https://api.paystack.co/transaction/verify/${reference}`,
             {
                 method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${PAYSTACK_SECRET_KEY}`
-                }
+                headers: { 'Authorization': `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
             }
         );
 
         const data = await verificationResponse.json();
 
         if (data.status && data.data && data.data.status === 'success') {
-            const paidAmount = data.data.amount / 100; // Convert from kobo/cents to KES/USD
+            const paidAmount = data.data.amount / 100;
 
             if (paidAmount < numericTotal) {
-                console.warn(`Paystack verification: Amount mismatch. Paid: ${paidAmount}, Expected: ${numericTotal}`);
-                // Although paid, the amount is incorrect, so treat as failed order.
-                 await db.performWalletTransaction(userId, paidAmount, 'Paystack Card', 'Deposit', reference, null, 'Failed', 'Payment amount insufficient for order total.');
-                return res.status(400).json({ verified: false, message: 'Payment amount mismatch. Please try again.' });
+                return res.status(400).json({ verified: false, message: 'Insufficient amount paid.' });
             }
 
-            // Log the successful payment as a deposit to the user's wallet
-            // The wallet top-up logic is reused for the external payment.
-            await db.performWalletTransaction(
-                 userId, 
-                 paidAmount, 
-                 'Paystack Card', 
-                 'Deposit', 
-                 reference, 
-                 null, 
-                 'Completed', 
-                 `Successful Paystack payment for KES ${paidAmount.toFixed(2)}`
-            );
+            // 🚨 DIRECT FINALIZATION:
+            // Use the new function to mark the order as paid without wallet logic.
+            await db.finalizeOrderAfterPayment(orderId, 'Paystack', reference);
             
-            // Log the corresponding revenue to the business wallet
-            await db.performWalletTransaction(
-                BUSINESS_WALLET_USER_ID,
-                paidAmount, 
-                'Paystack Revenue', 
-                'Deposit', 
-                reference, 
-                null, 
-                'Completed',
-                `Revenue from Paystack Payment for Customer #${userId}` 
-            );
-
-
-            // Payment is verified and recorded. Signal client to finalize order.
-            return res.json({ verified: true, message: 'Payment verified successfully.' });
+            return res.json({ 
+                verified: true, 
+                message: 'Payment verified and order finalized.' 
+            });
 
         } else {
-            // Transaction failed or reference is invalid
-            console.error('Paystack Verification Failed:', data.message || JSON.stringify(data));
-            return res.status(401).json({ verified: false, message: data.message || 'Payment reference not found or failed verification.' });
+            return res.status(401).json({ verified: false, message: 'Payment verification failed.' });
         }
 
     } catch (error) {
-        console.error('Paystack API Verification Error:', error);
+        console.error('Paystack API Error:', error);
         res.status(500).json({ message: 'Server error during payment verification.' });
     }
 });
-
 
 /**
  * 🚨 NEW API: POST /api/wallet/deposit/mpesa-manual

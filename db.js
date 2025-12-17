@@ -1003,6 +1003,45 @@ async function saveDeliveryInfo(userId, { country, county, street_address, posta
     }
 }
 
+// db.js
+
+/**
+ * 🚨 NEW: Finalizes an order status and logs payment details directly.
+ * Bypasses the wallet system.
+ */
+async function finalizeOrderAfterPayment(orderId, paymentMethod, reference) {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // 1. Update Order Status to 'Paid'
+        const [orderResult] = await connection.execute(
+            'UPDATE orders SET status = "Paid" WHERE id = ?',
+            [orderId]
+        );
+
+        if (orderResult.affectedRows === 0) {
+            throw new Error(`Order ${orderId} not found or already processed.`);
+        }
+
+        
+        await connection.execute(
+            `INSERT INTO wallet_transactions (user_id, amount, type, status, external_ref) 
+             SELECT user_id, total, 'Direct Payment', 'Success', ? 
+             FROM orders WHERE id = ?`,
+            [reference, orderId]
+        );
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        if (connection) await connection.rollback();
+        console.error('Error finalizing order:', error);
+        throw error;
+    } finally {
+        if (connection) connection.release();
+    }
+}
 
 
 // ---------------------------------------------------------------- //
@@ -1048,5 +1087,5 @@ module.exports = {
     update2faStatus, 
     getDeliveryInfo,
     saveDeliveryInfo,
-
+    finalizeOrderAfterPayment,
 };
