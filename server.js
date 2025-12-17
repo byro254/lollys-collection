@@ -1289,17 +1289,27 @@ app.post('/api/mpesa/stkpush', isAuthenticated, async (req, res) => {
 
 /**
  * NEW: M-Pesa Callback Endpoint.
- * This route receives the payment confirmation from Safaricom.
- * The logic here finalizes the order and clears the cart (similar to Paystack verification).
  */
 app.post('/api/mpesa/callback', async (req, res) => {
-    // Safaricom sends data here directly, no session available, use AccountReference to identify user
-    const callbackData = req.body.Body.stkCallback;
+    // 1. Log the full body for debugging (Check your Render logs to see this)
+    console.log('--- Incoming M-Pesa Callback ---');
+    console.log(JSON.stringify(req.body, null, 2));
+
+    // 2. Safely access stkCallback using optional chaining
+    const callbackData = req.body?.Body?.stkCallback;
+
+    // 3. Guard clause: If the expected structure is missing, stop here
+    if (!callbackData) {
+        console.error('M-Pesa Error: Invalid callback structure received.');
+        // Still return 0 to Safaricom to stop them from retrying a broken payload
+        return res.json({ "ResultCode": 0, "ResultDesc": "Invalid payload received" });
+    }
+
     const result_code = callbackData.ResultCode;
     const meta_data = callbackData.CallbackMetadata;
 
     if (result_code === 0 && meta_data) {
-        // Success
+        // Success Logic...
         const items = meta_data.Item;
         const amountItem = items.find(item => item.Name === 'Amount');
         const mpesaReceiptItem = items.find(item => item.Name === 'MpesaReceiptNumber');
@@ -1307,20 +1317,19 @@ app.post('/api/mpesa/callback', async (req, res) => {
 
         const amount = amountItem?.Value;
         const reference = mpesaReceiptItem?.Value;
-        const accountReference = accountRefItem?.Value; // e.g., ORDER-123-timestamp
+        const accountReference = accountRefItem?.Value;
 
-        const userIdMatch = accountReference.match(/ORDER-(\d+)-/);
+        // Use optional chaining here too for the match
+        const userIdMatch = accountReference?.match(/ORDER-(\d+)-/);
         const userId = userIdMatch ? userIdMatch[1] : null;
 
         if (userId) {
             try {
-                // 1. Check if reference already exists to prevent double-entry
                 const [existingOrder] = await pool.query('SELECT id FROM orders WHERE reference = ?', [reference]);
                 if (existingOrder.length > 0) {
                     return res.json({ "ResultCode": 0, "ResultDesc": "Order already processed." });
                 }
 
-                // 2. Move cart items to orders and clear cart
                 const [cartItems] = await pool.query('SELECT * FROM cart_items WHERE user_id = ?', [userId]);
 
                 if (cartItems.length > 0) {
@@ -1330,22 +1339,19 @@ app.post('/api/mpesa/callback', async (req, res) => {
                     const [orderResult] = await pool.query('SELECT LAST_INSERT_ID() as orderId');
                     const orderId = orderResult[0].orderId;
 
-                    const itemQueries = cartItems.map(item => 
-                        pool.query('INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)',
-                            [orderId, item.item_id, item.quantity, item.price])
-                    );
-                    await Promise.all(itemQueries);
+                    for (const item of cartItems) {
+                        await pool.query('INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)',
+                            [orderId, item.item_id, item.quantity, item.price]);
+                    }
 
                     await pool.query('DELETE FROM cart_items WHERE user_id = ?', [userId]);
                     console.log(`M-Pesa Success: Order ${orderId} placed for User ${userId}`);
                 }
                 
-                // Respond to Safaricom confirming receipt
                 res.json({ "ResultCode": 0, "ResultDesc": "C2B Payment accepted successfully." });
 
             } catch (error) {
                 console.error('M-Pesa DB Error:', error);
-                // Still send OK to Safaricom to prevent retries
                 res.json({ "ResultCode": 0, "ResultDesc": "Payment accepted, but internal order update failed." }); 
             }
         } else {
@@ -1355,11 +1361,10 @@ app.post('/api/mpesa/callback', async (req, res) => {
 
     } else {
         // Failure (User cancelled, insufficient funds, etc.)
-        console.log('M-Pesa Payment Failed:', callbackData.ResultDesc);
+        console.log('M-Pesa Payment Failed/Cancelled:', callbackData.ResultDesc);
         res.json({ "ResultCode": 0, "ResultDesc": "Payment request received." });
     }
 });
-
 
 /**
  * GET /api/user/payment-history
