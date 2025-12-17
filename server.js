@@ -7,7 +7,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-
+const { v4: uuidv4 } = require('uuid');
 const { Resend } = require('resend'); 
 const bcrypt = require('bcrypt'); 
 const session = require('express-session'); 
@@ -19,7 +19,8 @@ const speakeasy = require('speakeasy');
 const { v2: cloudinary } = require('cloudinary');
 const http = require('http'); // Native Node.js HTTP module
 const WebSocket = require('ws'); // ws library for WebSockets
-const axios = require('axios');
+
+
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -1118,251 +1119,334 @@ app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
 
 
 
-// =========================================================
-//                   NEW PAYMENT ROUTES
-// =========================================================
+/**
+ * Generates the base64-encoded password for STK Push.
+ */
+function generateMpesaPassword(timestamp) {
+    const shortCode = process.env.MPESA_SHORTCODE;
+    const passkey = process.env.MPESA_PASSKEY;
+    const raw = shortCode + passkey + timestamp;
+    return Buffer.from(raw).toString('base64');
+}
 
 /**
- * NEW: Fetches user details and calculates the total amount securely from the backend.
- * This prevents price manipulation on the client side.
+ * Fetches the M-Pesa OAuth access token.
  */
-app.get('/api/checkout/details', isAuthenticated, async (req, res) => {
-    try {
-        const userId = req.session.userId;
-        // NOTE: findUserById is an assumed function from './db.js' or defined elsewhere
-        const [userRows] = await pool.query('SELECT id, email, is_admin FROM users WHERE id = ?', [userId]);
-        const user = userRows[0];
-        
-        if (!user) {
-            return res.status(404).json({ message: "User not found." });
-        }
-
-        // Fetch the user's current cart items and calculate the total
-        // WARNING: Replace with your actual cart item query if table names differ
-        const [cartItems] = await pool.query(
-            'SELECT item_id, price, quantity FROM cart_items WHERE user_id = ?', 
-            [userId]
-        );
-
-        if (cartItems.length === 0) {
-            // Use 200 OK but return a message so frontend can handle cart being empty
-            return res.status(200).json({ email: user.email, amount: 0, cartItems: [], message: "Your cart is empty." });
-        }
-
-        let totalAmount = 0;
-        cartItems.forEach(item => {
-            totalAmount += (item.price * item.quantity);
-        });
-
-        // Return secure data to the frontend
-        res.json({
-            email: user.email,
-            amount: totalAmount,
-            userId: userId,
-            cartItems: cartItems // Include cart items for reference/logging
-        });
-    } catch (error) {
-        console.error('Error calculating checkout total:', error);
-        res.status(500).json({ message: "Error calculating checkout total." });
-    }
-});
-
-
-/**
- * NEW: Paystack Verification Endpoint.
- * Called by the frontend after a successful payment popup to verify with Paystack.
- */
-app.get('/api/paystack/verify', isAuthenticated, async (req, res) => {
-    const { reference } = req.query;
-    const userId = req.session.userId;
-
-    if (!reference) {
-        return res.status(400).json({ message: "Missing transaction reference." });
-    }
+async function getMpesaAccessToken() {
+    const consumerKey = process.env.MPESA_CONSUMER_KEY;
+    const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
     
+    const authString = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+
     try {
-        const paystackRes = await axios.get(
-            `https://api.paystack.co/transaction/verify/${reference}`,
+        const response = await fetch(
+            'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
             {
+                method: 'GET',
                 headers: {
-                    Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY}`
+                    'Authorization': `Basic ${authString}`
                 }
             }
         );
 
-        const data = paystackRes.data.data;
-
-        if (data.status === 'success' && data.customer.email === data.metadata.custom_fields[0].value) {
-            // 1. Transaction is valid. 
-            
-            // 2. Move cart items to orders and clear cart (A simple, non-transactional example for this environment)
-            const [cartItems] = await pool.query('SELECT * FROM cart_items WHERE user_id = ?', [userId]);
-
-            if (cartItems.length > 0) {
-                // Insert into orders table
-                await pool.query('INSERT INTO orders (user_id, total_amount, reference, status, payment_method) VALUES (?, ?, ?, ?, ?)',
-                    [userId, data.amount / 100, reference, 'COMPLETED', 'Paystack']);
-                
-                // Get the ID of the new order (assuming auto-increment)
-                const [orderResult] = await pool.query('SELECT LAST_INSERT_ID() as orderId');
-                const orderId = orderResult[0].orderId;
-
-                // Insert items into order_items table
-                const itemQueries = cartItems.map(item => 
-                    pool.query('INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)',
-                        [orderId, item.item_id, item.quantity, item.price])
-                );
-                await Promise.all(itemQueries);
-
-                // Clear the cart
-                await pool.query('DELETE FROM cart_items WHERE user_id = ?', [userId]);
-
-                res.status(200).json({ message: "Payment verified, order placed, and cart cleared.", data });
-            } else {
-                 // Even if payment succeeds, if the cart is empty, we flag an issue.
-                 res.status(400).json({ message: "Payment verified, but cart was empty. Order not placed." });
-            }
-        } else {
-            // Payment failed, amount mismatch, or other failure
-            res.status(400).json({ message: "Payment verification failed or status is not 'success'." });
+        if (!response.ok) {
+            throw new Error(`M-Pesa Token API responded with status: ${response.status}`);
         }
+
+        const data = await response.json();
+        return data.access_token;
+
     } catch (error) {
-        console.error('Paystack Verification Error:', error.response?.data || error.message);
-        res.status(500).json({ message: "Internal Server Error during Paystack verification." });
+        console.error('Error fetching M-Pesa Access Token:', error);
+        throw new Error('Failed to connect to M-Pesa API for authentication.');
     }
-});
+}
 
+app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId; 
+    const { phone, amount, accountNo } = req.body;
+    const numericAmount = parseFloat(amount);
 
-/**
- * NEW: M-Pesa STK Push Initiation Endpoint.
- * NOTE: This uses the Safaricom SANDBOX for testing.
- */
-app.post('/api/mpesa/stkpush', isAuthenticated, async (req, res) => {
-    const { phone, amount } = req.body;
-    const userId = req.session.userId;
+    if (!phone || isNaN(numericAmount) || numericAmount < 10) {
+        return res.status(400).json({ message: 'Invalid phone or amount. Minimum deposit is 10 KES.' });
+    }
     
-    // Simple phone number validation
-    if (!phone || !phone.match(/^2547\d{8}$/)) {
-        return res.status(400).json({ message: "Invalid M-Pesa phone number format (must be 2547XXXXXXXX)." });
-    }
-
+    const transactionRef = `STK-${Date.now()}`; 
+    const callbackUrl = process.env.MPESA_CALLBACK_URL; // e.g., 'https://mydomain.com/api/mpesa/callback'
+    const shortCode = process.env.MPESA_SHORTCODE;
+    const phoneNumber = `254${phone.slice(-9)}`; // Convert to 254... format
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    
     try {
-        // A. Get M-Pesa Access Token
-        const auth = Buffer.from(`${process.env.MPESA_CONSUMER_KEY}:${process.env.MPESA_CONSUMER_SECRET}`).toString('base64');
-        const tokenRes = await axios.get('https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials', {
-            headers: { Authorization: `Basic ${auth}` }
-        });
-        const accessToken = tokenRes.data.access_token;
+        // 1. Get Access Token and Password
+        const accessToken = await getMpesaAccessToken();
+        const password = generateMpesaPassword(timestamp);
 
-        // B. Initiate STK Push
-        const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
-        const password = Buffer.from(`${process.env.MPESA_SHORTCODE}${process.env.MPESA_PASSKEY}${timestamp}`).toString('base64');
+        // 2. STK Push Request
+        const mpesaResponse = await fetch(
+            'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    "BusinessShortCode": shortCode,
+                    "Password": password,
+                    "Timestamp": timestamp,
+                    "TransactionType": "CustomerPayBillOnline",
+                    "Amount": numericAmount,
+                    "PartyA": phoneNumber,
+                    "PartyB": shortCode,
+                    "PhoneNumber": phoneNumber,
+                    "CallBackURL": callbackUrl,
+                    // 🚨 CRITICAL: Use the user's ID (National ID) as the AccountReference
+                    "AccountReference": userId, 
+                    "TransactionDesc": `Wallet Deposit for User ${userId}`
+                })
+            }
+        );
+
+        const data = await mpesaResponse.json();
         
-        // Ensure amount is a positive integer
-        const totalAmount = Math.ceil(parseFloat(amount));
-        if (totalAmount <= 0) {
-            return res.status(400).json({ message: "Amount must be greater than zero." });
+        // 3. Handle M-Pesa STK Push Response
+        if (data.ResponseCode === "0") {
+            // Log the PENDING transaction in your DB before responding
+            await db.performWalletTransaction(
+                userId, 
+                numericAmount, 
+                'M-Pesa STK', 
+                'Deposit', 
+                data.CheckoutRequestID, // CRITICAL: Use CheckoutRequestID as the externalRef (the map key)
+                null, 
+                'Pending', // Set status to PENDING
+                `STK Push initiated for KES ${numericAmount.toFixed(2)}`
+            );
+            
+            res.json({ 
+                message: 'Deposit initiated. Please approve the M-Pesa prompt on your phone.',
+                transactionRef: data.CheckoutRequestID // Send this ID back to the client
+            });
+        } else {
+            // Log a FAILED transaction
+            await db.performWalletTransaction(
+                userId, 
+                numericAmount, 
+                'M-Pesa STK', 
+                'Deposit', 
+                data.CheckoutRequestID || transactionRef, 
+                null, 
+                'Failed', 
+                `STK Push failed: ${data.ResponseDescription}`
+            );
+            
+            return res.status(500).json({ 
+                message: `M-Pesa Error: ${data.ResponseDescription}` 
+            });
         }
 
-        const stkRes = await axios.post('https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest', {
-            "BusinessShortCode": process.env.MPESA_SHORTCODE, // Test Shortcode from .env
-            "Password": password,
-            "Timestamp": timestamp,
-            "TransactionType": "CustomerPayBillOnline",
-            "Amount": totalAmount,
-            "PartyA": phone,
-            "PartyB": process.env.MPESA_SHORTCODE,
-            "PhoneNumber": phone,
-            "CallBackURL": `${process.env.MPESA_CALLBACK_URL}/api/mpesa/callback`, // Needs a public URL
-            "AccountReference": `ORDER-${userId}-${Date.now()}`,
-            "TransactionDesc": "LollysCollection Payment"
-        }, {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
-
-        res.json({ message: "STK Push initiated successfully. Check your phone.", details: stkRes.data });
     } catch (error) {
-        console.error('M-Pesa STK Push Error:', error.response?.data || error.message);
-        res.status(500).json({ message: "M-Pesa STK Push failed. Ensure MPESA keys are correct." });
+        console.error('M-Pesa Deposit API error:', error);
+        res.status(500).json({ message: 'Failed to process deposit request. Server connection error.' });
     }
 });
 
 /**
- * NEW: M-Pesa Callback Endpoint.
+ * POST /api/mpesa/callback
+ * M-Pesa's Confirmation and Validation URL endpoint.
  */
 app.post('/api/mpesa/callback', async (req, res) => {
-    // 1. Log the full body for debugging (Check your Render logs to see this)
-    console.log('--- Incoming M-Pesa Callback ---');
-    console.log(JSON.stringify(req.body, null, 2));
+    
+    // 🚨 START LOG MONITORING HERE
+    console.log("--- M-Pesa Callback Received ---");
+    // Use JSON.stringify for clean, readable output in your console
+    console.log(JSON.stringify(req.body, null, 2)); 
+    console.log("---------------------------------");
+    // 🚨 END LOG MONITORING HERE
 
-    // 2. Safely access stkCallback using optional chaining
-    const callbackData = req.body?.Body?.stkCallback;
+    // 1. Process the M-Pesa result
+    const body = req.body.Body.stkCallback;
+    const checkoutRequestID = body.CheckoutRequestID;
+    const resultCode = body.ResultCode;
+    const resultDesc = body.ResultDesc;
 
-    // 3. Guard clause: If the expected structure is missing, stop here
-    if (!callbackData) {
-        console.error('M-Pesa Error: Invalid callback structure received.');
-        // Still return 0 to Safaricom to stop them from retrying a broken payload
-        return res.json({ "ResultCode": 0, "ResultDesc": "Invalid payload received" });
+    // A. Transaction was cancelled or failed by user (ResultCode != 0)
+    if (resultCode !== 0) {
+        console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}. ResultDesc: ${resultDesc}`);
+        
+        try {
+            await db.completeMpesaDeposit(
+                checkoutRequestID, 
+                0, 
+                `FAILURE-${resultCode}`, 
+                'Failed', 
+                resultDesc || 'Transaction cancelled by user or expired.'
+            );
+        } catch (error) {
+            console.error('Error logging M-Pesa failure status:', error.message);
+        }
+        
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and recorded as failure." });
+    }
+    
+    // B. Transaction was successful (ResultCode == 0)
+    try {
+        const metaData = body.CallbackMetadata.Item;
+        const amountItem = metaData.find(item => item.Name === 'Amount');
+        const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
+
+        const amount = parseFloat(amountItem?.Value);
+        const mpesaReceipt = mpesaReceiptItem?.Value;
+        
+        const finalStatus = 'Completed';
+        const finalDescription = `MPESA successful deposit: ${mpesaReceipt}`;
+        
+        // 🚨 CRITICAL: This DB function handles the instant crediting (Requirement #4)
+        await db.completeMpesaDeposit(
+            checkoutRequestID, 
+            amount, 
+            mpesaReceipt, // New reference code (Requirement #1)
+            finalStatus, 
+            finalDescription
+        );
+
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
+
+    } catch (error) {
+        console.error('M-Pesa Callback processing error:', error);
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
+    }
+});
+
+/**
+ * 🚨 NEW API: POST /api/wallet/deposit/mpesa-manual
+ * Handles deposits where the user manually paid via SIM Toolkit.
+ */
+app.post('/api/wallet/deposit/mpesa-manual', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { transactionCode, amount } = req.body; 
+    const numericAmount = parseFloat(amount);
+
+    if (!transactionCode || !amount) {
+        return res.status(400).json({ message: 'Transaction code and amount are required.' });
+    }
+    // Simple M-Pesa receipt format validation (e.g., 10 alphanumeric characters)
+    if (!/^[A-Z0-9]{10}$/.test(transactionCode)) {
+        return res.status(400).json({ message: 'Invalid M-Pesa transaction code format. Must be 10 uppercase alphanumeric characters (e.g., TKULKBKLZD).' });
+    }
+    if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ message: 'Invalid deposit amount.' });
     }
 
-    const result_code = callbackData.ResultCode;
-    const meta_data = callbackData.CallbackMetadata;
+    try {
+        // 🚨 CRITICAL: Use the new function to process the manual deposit.
+        // This function handles duplicate check and instant crediting.
+        await db.processManualMpesaDeposit(userId, transactionCode, numericAmount);
 
-    if (result_code === 0 && meta_data) {
-        // Success Logic...
-        const items = meta_data.Item;
-        const amountItem = items.find(item => item.Name === 'Amount');
-        const mpesaReceiptItem = items.find(item => item.Name === 'MpesaReceiptNumber');
-        const accountRefItem = items.find(item => item.Name === 'AccountReference');
+        // Success: Transaction credited to user wallet
+        res.json({
+            message: 'M-Pesa deposit confirmed and wallet credited successfully!',
+            mpesaRef: transactionCode
+        });
 
-        const amount = amountItem?.Value;
-        const reference = mpesaReceiptItem?.Value;
-        const accountReference = accountRefItem?.Value;
+    } catch (error) {
+        console.error('Manual M-Pesa deposit error:', error);
 
-        // Use optional chaining here too for the match
-        const userIdMatch = accountReference?.match(/ORDER-(\d+)-/);
-        const userId = userIdMatch ? userIdMatch[1] : null;
-
-        if (userId) {
-            try {
-                const [existingOrder] = await pool.query('SELECT id FROM orders WHERE reference = ?', [reference]);
-                if (existingOrder.length > 0) {
-                    return res.json({ "ResultCode": 0, "ResultDesc": "Order already processed." });
-                }
-
-                const [cartItems] = await pool.query('SELECT * FROM cart_items WHERE user_id = ?', [userId]);
-
-                if (cartItems.length > 0) {
-                    await pool.query('INSERT INTO orders (user_id, total_amount, reference, status, payment_method) VALUES (?, ?, ?, ?, ?)',
-                        [userId, amount, reference, 'COMPLETED', 'M-Pesa']);
-                    
-                    const [orderResult] = await pool.query('SELECT LAST_INSERT_ID() as orderId');
-                    const orderId = orderResult[0].orderId;
-
-                    for (const item of cartItems) {
-                        await pool.query('INSERT INTO order_items (order_id, item_id, quantity, price) VALUES (?, ?, ?, ?)',
-                            [orderId, item.item_id, item.quantity, item.price]);
-                    }
-
-                    await pool.query('DELETE FROM cart_items WHERE user_id = ?', [userId]);
-                    console.log(`M-Pesa Success: Order ${orderId} placed for User ${userId}`);
-                }
-                
-                res.json({ "ResultCode": 0, "ResultDesc": "C2B Payment accepted successfully." });
-
-            } catch (error) {
-                console.error('M-Pesa DB Error:', error);
-                res.json({ "ResultCode": 0, "ResultDesc": "Payment accepted, but internal order update failed." }); 
-            }
-        } else {
-            console.error('M-Pesa Error: Could not parse userId from AccountReference.');
-            res.json({ "ResultCode": 0, "ResultDesc": "Invalid Account Reference." });
+        if (error.message === 'DUPLICATE_RECEIPT') {
+            return res.status(409).json({ message: `Transaction code ${transactionCode} has already been used.` });
         }
+        if (error.message === 'WALLET_NOT_FOUND') {
+             return res.status(500).json({ message: 'Critical error: User wallet structure not found.' });
+        }
+        
+        res.status(500).json({ message: 'Failed to process manual deposit due to a server error.' });
+    }
+});
 
-    } else {
-        // Failure (User cancelled, insufficient funds, etc.)
-        console.log('M-Pesa Payment Failed/Cancelled:', callbackData.ResultDesc);
-        res.json({ "ResultCode": 0, "ResultDesc": "Payment request received." });
+
+/**
+ * NEW: POST /api/wallet/deposit/status
+ * Client-side polling API to check the final status of a pending M-Pesa transaction.
+ */
+app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { checkoutRequestID } = req.body;
+
+    if (!checkoutRequestID) {
+        return res.status(400).json({ message: 'Checkout Request ID is required.' });
+    }
+
+    try {
+        // 1. Check the database first (fastest way to get completed status)
+        const transaction = await db.findTransactionByRef(checkoutRequestID, userId); 
+
+        if (transaction) {
+            // Check if the transaction is finalized
+            if (transaction.status === 'Completed') {
+                return res.json({
+                    status: 'Completed',
+                    mpesaRef: transaction.external_ref, // The external_ref is now the MpesaReceiptNumber
+                    amount: transaction.amount,
+                    message: 'Payment confirmed successfully.'
+                });
+            }
+            if (transaction.status === 'Failed' || transaction.status === 'Cancelled') {
+                return res.json({
+                    status: transaction.status,
+                    message: transaction.description || 'Payment failed or was cancelled.',
+                    mpesaRef: transaction.external_ref,
+                });
+            }
+        }
+        
+        // If the transaction is not found or status is still 'Pending', return Pending
+        return res.json({ status: 'Pending', message: 'Waiting for M-Pesa confirmation...' });
+
+    } catch (error) {
+        console.error('M-Pesa status query error:', error);
+        res.status(500).json({ message: 'Internal server error while checking status.' });
+    }
+});
+
+/**
+ * POST /api/wallet/deposit/card
+ * Handles the generic Debit/Credit Card deposit request (Simulated).
+ */
+app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
+    const userId = req.session.userId;
+    const { cardNumber, amount } = req.body; // Card details are truncated on the client
+    const numericAmount = parseFloat(amount);
+
+    if (isNaN(numericAmount) || numericAmount < 10) {
+        return res.status(400).json({ message: 'Invalid amount. Minimum deposit is 10 KES.' });
+    }
+
+    // Simulate Card transaction reference
+    const externalRef = `CARD-${Date.now()}-${cardNumber}`; 
+
+    try {
+       await db.performWalletTransaction(userId, numericAmount, 'Debit/Credit Card', 'Deposit', externalRef, null, 'Completed');
+
+       await db.performWalletTransaction(
+      BUSINESS_WALLET_USER_ID,
+       numericAmount, 
+       'Card Revenue', 
+       'Deposit', 
+       externalRef, 
+       null, 
+       'Completed',
+       `Capital Deposit: KES ${numericAmount.toFixed(2)} from Card Payment from Customer #${userId}` 
+);
+        
+        res.json({ 
+            message: 'Card payment processed successfully.',
+            transactionRef: externalRef 
+        });
+
+    } catch (error) {
+        console.error('Card Deposit API error:', error);
+        res.status(500).json({ message: 'Failed to process card payment.' });
     }
 });
 
