@@ -1,4 +1,4 @@
-// server.js (Updated for M-Pesa and Paystack Integration)
+// server.js (Updated for Production-Ready SMS OTP via External Service SDK Pattern and Real TOTP Logic)
 
 // 1. Load environment variables first
 require('dotenv').config(); 
@@ -247,10 +247,6 @@ const ADMIN_CHAT_ID = 'admin_env';
 // 🚨 NEW: ADMIN WALLET ID (Fixed User ID 0 for central business account)
 // This wallet represents the business's capital and revenue.
 const BUSINESS_WALLET_USER_ID = '0';
-
-// 🚨 NEW: Paystack Secret Key (for server-side verification)
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
-
 
 const { GoogleGenAI } = require("@google/genai");
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -1098,7 +1094,6 @@ app.get('/api/user/delivery-status/:orderId', isAuthenticated, async (req, res) 
 /**
  * GET /api/wallet/balance
  * Fetches the user's current wallet balance and account number.
- * 🚨 NOTE: This is kept for the profile page but is removed from the cart flow.
  */
 app.get('/api/wallet/balance', isAuthenticated, async (req, res) => {
     // Use BUSINESS_WALLET_USER_ID if the user is an admin requesting the central balance
@@ -1172,8 +1167,8 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
     const { phone, amount, accountNo } = req.body;
     const numericAmount = parseFloat(amount);
 
-    if (!phone || isNaN(numericAmount) || numericAmount < 1) {
-        return res.status(400).json({ message: 'Invalid phone or amount. Minimum deposit is 1 KES.' });
+    if (!phone || isNaN(numericAmount) || numericAmount < 10) {
+        return res.status(400).json({ message: 'Invalid phone or amount. Minimum deposit is 10 KES.' });
     }
     
     const transactionRef = `STK-${Date.now()}`; 
@@ -1208,7 +1203,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
                     "CallBackURL": callbackUrl,
                     // 🚨 CRITICAL: Use the user's ID (National ID) as the AccountReference
                     "AccountReference": userId, 
-                    "TransactionDesc": `Order Payment for User ${userId}`
+                    "TransactionDesc": `Wallet Deposit for User ${userId}`
                 })
             }
         );
@@ -1218,7 +1213,6 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
         // 3. Handle M-Pesa STK Push Response
         if (data.ResponseCode === "0") {
             // Log the PENDING transaction in your DB before responding
-            // We use 'M-Pesa Order' type to distinguish from a wallet top-up.
             await db.performWalletTransaction(
                 userId, 
                 numericAmount, 
@@ -1231,7 +1225,7 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
             );
             
             res.json({ 
-                message: 'Payment initiated. Please approve the M-Pesa prompt on your phone.',
+                message: 'Deposit initiated. Please approve the M-Pesa prompt on your phone.',
                 transactionRef: data.CheckoutRequestID // Send this ID back to the client
             });
         } else {
@@ -1259,88 +1253,69 @@ app.post('/api/wallet/deposit/mpesa', isAuthenticated, async (req, res) => {
 });
 
 /**
- * 🚨 UPDATED: M-Pesa Callback Handler
- * Finalizes orders directly instead of crediting wallets.
+ * POST /api/mpesa/callback
+ * M-Pesa's Confirmation and Validation URL endpoint.
  */
 app.post('/api/mpesa/callback', async (req, res) => {
-    const { Body } = req.body;
-    const resultCode = Body.stkCallback.ResultCode;
-    const checkoutRequestID = Body.stkCallback.CheckoutRequestID;
+    
+    // 🚨 START LOG MONITORING HERE
+    console.log("--- M-Pesa Callback Received ---");
+    // Use JSON.stringify for clean, readable output in your console
+    console.log(JSON.stringify(req.body, null, 2)); 
+    console.log("---------------------------------");
+    // 🚨 END LOG MONITORING HERE
 
-    if (resultCode === 0) { // Payment successful
+    // 1. Process the M-Pesa result
+    const body = req.body.Body.stkCallback;
+    const checkoutRequestID = body.CheckoutRequestID;
+    const resultCode = body.ResultCode;
+    const resultDesc = body.ResultDesc;
+
+    // A. Transaction was cancelled or failed by user (ResultCode != 0)
+    if (resultCode !== 0) {
+        console.log(`M-Pesa Transaction Failed/Cancelled for CheckoutRequestID: ${checkoutRequestID}. ResultDesc: ${resultDesc}`);
+        
         try {
-            // Find the transaction record by the M-Pesa CheckoutRequestID
-            const transaction = await db.findTransactionByRef(checkoutRequestID);
-            
-            if (transaction && transaction.order_id) {
-                // 🚨 DIRECT ACTION: Finalize the order immediately
-                await db.finalizeOrderAfterPayment(
-                    transaction.order_id, 
-                    'M-Pesa', 
-                    checkoutRequestID
-                );
-                
-                console.log(`Direct Payment Success: Order ${transaction.order_id} is now PAID.`);
-            }
+            await db.completeMpesaDeposit(
+                checkoutRequestID, 
+                0, 
+                `FAILURE-${resultCode}`, 
+                'Failed', 
+                resultDesc || 'Transaction cancelled by user or expired.'
+            );
         } catch (error) {
-            console.error("Critical error in M-Pesa direct callback:", error);
+            console.error('Error logging M-Pesa failure status:', error.message);
         }
-    }
-    res.json({ ResultCode: 0, ResultDesc: "Accepted" });
-});
-
-/**
- * 🚨 UPDATED: POST /api/payment/paystack/verify
- * Verifies Paystack payment and DIRECTLY finalizes the order. (No Wallet Deposit)
- */
-app.post('/api/payment/paystack/verify', isAuthenticated, async (req, res) => {
-    // Added orderId to the destructured body
-    const { reference, total, orderId } = req.body;
-    const userId = req.session.userId;
-    const numericTotal = parseFloat(total);
-
-    if (!reference || isNaN(numericTotal) || !orderId) {
-        return res.status(400).json({ message: 'Invalid payment data or Order ID.' });
+        
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and recorded as failure." });
     }
     
-    if (!process.env.PAYSTACK_SECRET_KEY) {
-        return res.status(500).json({ message: 'Server payment configuration error.' });
-    }
-
+    // B. Transaction was successful (ResultCode == 0)
     try {
-        const verificationResponse = await fetch(
-            `https://api.paystack.co/transaction/verify/${reference}`,
-            {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${process.env.PAYSTACK_SECRET_KEY}` }
-            }
+        const metaData = body.CallbackMetadata.Item;
+        const amountItem = metaData.find(item => item.Name === 'Amount');
+        const mpesaReceiptItem = metaData.find(item => item.Name === 'MpesaReceiptNumber');
+
+        const amount = parseFloat(amountItem?.Value);
+        const mpesaReceipt = mpesaReceiptItem?.Value;
+        
+        const finalStatus = 'Completed';
+        const finalDescription = `MPESA successful deposit: ${mpesaReceipt}`;
+        
+        // 🚨 CRITICAL: This DB function handles the instant crediting (Requirement #4)
+        await db.completeMpesaDeposit(
+            checkoutRequestID, 
+            amount, 
+            mpesaReceipt, // New reference code (Requirement #1)
+            finalStatus, 
+            finalDescription
         );
 
-        const data = await verificationResponse.json();
-
-        if (data.status && data.data && data.data.status === 'success') {
-            const paidAmount = data.data.amount / 100;
-
-            if (paidAmount < numericTotal) {
-                return res.status(400).json({ verified: false, message: 'Insufficient amount paid.' });
-            }
-
-            // 🚨 DIRECT FINALIZATION:
-            // Use the new function to mark the order as paid without wallet logic.
-            await db.finalizeOrderAfterPayment(orderId, 'Paystack', reference);
-            
-            return res.json({ 
-                verified: true, 
-                message: 'Payment verified and order finalized.' 
-            });
-
-        } else {
-            return res.status(401).json({ verified: false, message: 'Payment verification failed.' });
-        }
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received and processed successfully." });
 
     } catch (error) {
-        console.error('Paystack API Error:', error);
-        res.status(500).json({ message: 'Server error during payment verification.' });
+        console.error('M-Pesa Callback processing error:', error);
+        return res.json({ "ResultCode": 0, "ResultDesc": "Callback received but internal server error occurred." });
     }
 });
 
@@ -1437,7 +1412,6 @@ app.post('/api/wallet/deposit/status', isAuthenticated, async (req, res) => {
 /**
  * POST /api/wallet/deposit/card
  * Handles the generic Debit/Credit Card deposit request (Simulated).
- * 🚨 NOTE: This is likely redundant now due to Paystack, but kept for legacy/simplicity.
  */
 app.post('/api/wallet/deposit/card', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -1785,6 +1759,40 @@ app.get('/api/orders', isAdmin, async (req, res) => {
 });
 
 
+// server.js (Updated to validate the new delivery statuses)
+
+app.put('/api/orders/:orderId', isAdmin, async (req, res) => {
+    const orderId = req.params.orderId;
+    // 🚨 CRITICAL: Extract 'status' from the parsed body
+    const { status } = req.body; 
+
+    // 🚨 NEW: Define and Validate Allowed Statuses
+    const ALLOWED_STATUSES = ['Pending', 'Processing', 'In Progress', 'Delivered', 'Completed', 'Cancelled'];
+
+    if (!status || !ALLOWED_STATUSES.includes(status)) {
+        return res.status(400).json({ message: `Invalid or missing status field. Allowed statuses: ${ALLOWED_STATUSES.join(', ')}` });
+    }
+    
+    // --- Execution ---
+    try {
+        const [result] = await pool.query(
+            'UPDATE orders SET status = ? WHERE id = ?',
+            [status, orderId]
+        );
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: `Order ID ${orderId} not found.` });
+        }
+
+        res.json({ message: `Order ID ${orderId} status updated to ${status}.` });
+
+    } catch (error) {
+        console.error(`API Error updating order ID ${orderId}:`, error);
+        res.status(500).json({ message: 'Failed to update order status, please try again later.' });
+    }
+});
+
+
 // 🚨 CHANGE: Cart APIs require authentication to retrieve/modify items for a specific user
 app.get('/api/cart', isAuthenticated, async (req, res) => {
     const userId = req.session.userId;
@@ -1917,7 +1925,6 @@ app.delete('/api/cart/:productId', isAuthenticated, async (req, res) => {
     }
 });
 
-// 🚨 MODIFIED: Order submission is now triggered AFTER payment confirmation
 app.post('/api/order', isAuthenticated, async (req, res) => {
     
     // -------------------------------
@@ -1925,8 +1932,10 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
     // -------------------------------
     const rawUserId = req.session.userId;
     if (!rawUserId) {
+        // If the ID is missing, exit immediately before transaction.
         return res.status(401).json({ message: 'Authentication required: User ID missing from session.' });
     }
+    // The user ID is now the National ID (VARCHAR)
     const userId = String(rawUserId);
 
     // Extract fields safely
@@ -1937,28 +1946,25 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         location = "",
         items = [],
         notificationMethod = "email",
-        total,
-        paymentMethod, // 🚨 NEW
-        paymentReference // 🚨 NEW
+        total
     } = req.body;
 
     // -------------------------------
     // 2. VALIDATION
     // -------------------------------
 
+    // Mandatory: cart items
     if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ message: 'Cart is empty or invalid.' });
     }
 
+    // Mandatory: total
     const orderTotal = parseFloat(total);
     if (isNaN(orderTotal) || orderTotal <= 0) {
         return res.status(400).json({ message: 'Invalid or missing total.' });
     }
-    
-    if (!paymentMethod || !paymentReference) {
-        return res.status(400).json({ message: 'Payment method and reference are required to finalize the order.' });
-    }
 
+    // Mandatory delivery fields
     if (!name.trim())      return res.status(400).json({ message: 'Missing Customer Name.' });
     if (!phone.trim())     return res.status(400).json({ message: 'Missing Phone Number.' });
     if (!email.trim())     return res.status(400).json({ message: 'Missing Email Address.' });
@@ -1972,38 +1978,73 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        // 🚨 REMOVED: Wallet balance check and customer deduction is now handled 
-        // by the pre-order payment verification step (M-Pesa polling or Paystack verify API) 
-        // which logs a DEPOSIT to the user's wallet.
+        // -------------------------------
+        // 4. FETCH USER WALLET
+        // -------------------------------
+        const walletDataResult = await db.getWalletByUserId(userId);
+        
+        const walletData = Array.isArray(walletDataResult) ? walletDataResult[0] : walletDataResult;
+        
+
+        let wallet_id;
+        let currentBalance = 0;
+
+        if (walletData && walletData.wallet_id) { 
+            wallet_id = walletData.wallet_id;
+            currentBalance = walletData.balance;
+        } else {
+            // Create wallet if it doesn't exist (using National ID as account number)
+            const accountNumber = userId; 
+            const [createResult] = await connection.execute(
+                `INSERT INTO wallets (user_id, account_number, balance)
+                 VALUES (?, ?, 0.00)`,
+                [userId, accountNumber]
+            );
+
+            // 🚨 IMPROVEMENT: Robust check for insertId
+            if (!createResult.insertId) {
+                throw new Error("CRITICAL: Failed to create user wallet and retrieve ID.");
+            }
+            
+            wallet_id = createResult.insertId;
+        }
+
+        // Wallet balance check
+        if (currentBalance < orderTotal) {
+            await connection.rollback();
+            connection.release();
+            return res.status(400).json({
+                message: `Insufficient funds (KES ${currentBalance.toFixed(2)}). Required: KES ${orderTotal.toFixed(2)}.`
+            });
+        }
 
         // -------------------------------
-        // 4. INSERT ORDER HEADER
+        // 5. INSERT ORDER HEADER
         // -------------------------------
-        // Status is set directly to 'Processing' since payment is confirmed.
         const [orderResult] = await connection.execute(
             `INSERT INTO orders
-             (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status, created_at, payment_method, payment_reference)
-             VALUES (?, ?, ?, ?, ?, ?, 'Processing', NOW(), ?, ?)`,
+             (user_id, customer_name, customer_phone, customer_email, delivery_location, total, status, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'Pending', NOW())`,
             [
                 userId,
                 name,
                 phone,
                 email,
                 location,
-                orderTotal,
-                paymentMethod, // 🚨 NEW
-                paymentReference // 🚨 NEW
+                orderTotal
             ]
         );
 
+        // 🚨 IMPROVEMENT: Robust check for orderId
         if (!orderResult.insertId) {
             throw new Error("CRITICAL: Failed to insert order header and retrieve ID.");
         }
         const orderId = orderResult.insertId;
 
         // -------------------------------
-        // 5. INSERT ORDER ITEMS + UPDATE STOCK
+        // 6. INSERT ORDER ITEMS + UPDATE STOCK
         // -------------------------------
+        // 🚨 MODIFIED: Added size column to insert query
         const itemSql = `
             INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, size)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -2037,52 +2078,85 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
                 item.name.replace(/\s\(Size:\s[A-Z]+\)$/i, ''), // Clean name if size was appended for display
                 product.price,  
                 item.quantity,
-                item.size || null 
+                item.size || null // Pass the size obtained from cart item
             ]);
         }
 
-        // -------------------------------
-        // 6. BUSINESS WALLET DEDUCTION/TRANSFER (for order fulfillment tracking)
-        // -------------------------------
-        // The funds were already deposited to the business wallet during the payment step.
-        // We log an internal accounting movement from business revenue to a "held for fulfillment" state 
-        // by performing a deduction from the business wallet for the order total.
 
-        const businessDeductionAmount = -orderTotal; // Log as negative
-        const businessExternalRef = `ORDER-FULFILL-${orderId}`;
-        const businessDescription = `Order Fulfillment Deduction for Order #${orderId} (${paymentMethod})`;
+        // -------------------------------
+        // 7. CUSTOMER WALLET DEDUCTION
+        // -------------------------------
+        // Ensure wallet_id is valid before insertion
+        if (!wallet_id) throw new Error("CRITICAL: Wallet ID is missing during deduction step.");
 
-        // Get Business Wallet ID
-        const [businessWalletRows] = await connection.execute(
-            'SELECT wallet_id, balance FROM wallets WHERE user_id = ? FOR UPDATE',
-            [BUSINESS_WALLET_USER_ID]
+        // Coerce IDs to Number for DB operations where required
+        const finalWalletId = Number(wallet_id);
+        const finalOrderId = Number(orderId);
+
+        // 7a. Customer Transaction Log (Deduction)
+        await connection.execute(
+            `INSERT INTO transactions
+             (user_id, wallet_id, order_id, type, method, amount, transaction_status)
+             VALUES (?, ?, ?, 'Deduction', 'Wallet Deduction', ?, 'Completed')`,
+            [userId, finalWalletId, finalOrderId, -orderTotal] 
         );
-        
+
+        // 7b. Update Customer Wallet Balance
+        await connection.execute(
+            `UPDATE wallets SET balance = balance - ? WHERE wallet_id = ?`,
+            [orderTotal, finalWalletId]
+        );
+
+        // -------------------------------
+        // 8. BUSINESS WALLET CREDIT (Revenue In)
+        // -------------------------------
+        // 🚨 CRITICAL FIX 8: Inline the Business Credit logic to prevent nested transaction lock contention.
+       const businessId = BUSINESS_WALLET_USER_ID;
+       const businessCreditAmount = orderTotal;
+       const businessExternalRef = `ORDER-REV-${orderId}`;
+       const businessDescription = `Revenue from Order #${orderId}`;
+
+        // Fetch Business Wallet ID and current balance using the main connection (no FOR UPDATE needed)
+        let [businessWalletRows] = await connection.execute(
+            'SELECT wallet_id, balance FROM wallets WHERE user_id = ?',
+            [businessId]
+        );
+
         if (businessWalletRows.length === 0) {
-             throw new Error("CRITICAL: Business Wallet not found for internal accounting.");
+            // CRITICAL: Handle missing Business Wallet creation (should be done on setup)
+            // If the wallet for user_id=0 doesn't exist, we must create it here.
+            const accountNumber = businessId; // Use '0' as account number
+            const [createResult] = await connection.execute(
+                'INSERT INTO wallets (user_id, account_number, balance) VALUES (?, ?, 0.00)',
+                [businessId, accountNumber]
+            );
+            if (!createResult.insertId) throw new Error("CRITICAL: Failed to initialize Business Wallet.");
+            
+            var businessWalletId = createResult.insertId;
+            var businessCurrentBalance = 0;
+        } else {
+            var businessWalletId = businessWalletRows[0].wallet_id;
+            var businessCurrentBalance = businessWalletRows[0].balance;
         }
         
-        const businessWalletId = businessWalletRows[0].wallet_id;
-        const businessCurrentBalance = businessWalletRows[0].balance;
-        const businessNewBalance = businessCurrentBalance + businessDeductionAmount;
+        const businessNewBalance = businessCurrentBalance + businessCreditAmount;
 
 
-        // Log Business Transaction (Deduction) - Using existing connection
+        // 8a. Business Transaction Log (Deposit) - Using existing connection
         await connection.execute(
             `INSERT INTO transactions
              (user_id, wallet_id, order_id, type, method, amount, external_ref, transaction_status, description)
-             VALUES (?, ?, ?, 'Deduction', 'Order Fulfillment', ?, ?, 'Completed', ?)`,
-            [BUSINESS_WALLET_USER_ID, businessWalletId, Number(orderId), businessDeductionAmount, businessExternalRef, 'Completed', businessDescription] 
+             VALUES (?, ?, ?, 'Deposit', 'Wallet Revenue', ?, ?, 'Completed', ?)`,
+            [businessId, businessWalletId, Number(orderId), businessCreditAmount, businessExternalRef, businessDescription] 
         );
 
-        // Update Business Wallet Balance
+        // 8b. Update Business Wallet Balance - Using existing connection
         await connection.execute(
             `UPDATE wallets SET balance = ? WHERE wallet_id = ?`,
             [businessNewBalance, businessWalletId]
         );
-
         // -------------------------------
-        // 7. CLEAR CART
+        // 9. CLEAR CART
         // -------------------------------
         await connection.execute(
             'DELETE FROM cart WHERE user_id = ?',
@@ -2090,13 +2164,14 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         );
 
         // -------------------------------
-        // 8. COMMIT TRANSACTION
+        // 10. COMMIT TRANSACTION
         // -------------------------------
         await connection.commit();
 
         // -------------------------------
-        // 9. SEND EMAILS (Non-critical)
+        // 11. SEND EMAILS (Non-critical)
         // -------------------------------
+        // ... (Email sending logic remains here)
         const orderDetailsHtml = items.map(item => {
             const sizeDisplay = item.size ? ` (Size: ${item.size})` : '';
             return `<li>${item.name}${sizeDisplay} x${item.quantity} – KES ${((item.price || 0) * item.quantity).toFixed(2)}</li>`
@@ -2108,21 +2183,19 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
             resend.emails.send({
                 from: `Lolly's Collection <${senderEmail}>`,
                 to: email,
-                subject: `Order #${orderId} Confirmed`,
+                subject: `Order #${orderId} Confirmation`,
                 html: `
                     <h2>Order #${orderId} Confirmed</h2>
-                    <p>Thank you ${name}, your order payment of KES ${orderTotal.toFixed(2)} via ${paymentMethod} was confirmed.</p>
+                    <p>Thank you ${name}, your wallet was charged KES ${orderTotal.toFixed(2)}.</p>
                     <ul>${orderDetailsHtml}</ul>
                 `
             }),
             resend.emails.send({
                 from: `Lolly's Collection Admin <${senderEmail}>`,
                 to: process.env.ADMIN_EMAIL,
-                subject: `New Paid Order #${orderId} via ${paymentMethod}`,
+                subject: `New Wallet Order #${orderId}`,
                 html: `
-                    <h2>New Paid Order #${orderId}</h2>
-                    <p><strong>Payment Method:</strong> ${paymentMethod}</p>
-                    <p><strong>Payment Ref:</strong> ${paymentReference}</p>
+                    <h2>New Order #${orderId}</h2>
                     <p><strong>Name:</strong> ${name}</p>
                     <p><strong>Phone:</strong> ${phone}</p>
                     <p><strong>Total:</strong> KES ${orderTotal.toFixed(2)}</p>
@@ -2141,6 +2214,7 @@ app.post('/api/order', isAuthenticated, async (req, res) => {
         console.error("ORDER ERROR:", error);
         await connection.rollback();
 
+        // 🚨 IMPROVEMENT: Use generic error message if the specific error is a stock or critical error
         const userMessage = error.message.includes('stock') || error.message.includes('CRITICAL') || error.message.includes('INSUFFICIENT')
             ? error.message 
             : error.sqlMessage || 'Order failed due to a server error. Please try again.';
