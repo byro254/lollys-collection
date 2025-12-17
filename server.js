@@ -1326,6 +1326,23 @@ app.post('/api/mpesa/callback', async (req, res) => {
     }
 });
 
+app.get('/api/payment-status/:ref', async (req, res) => {
+    try {
+        // Search by CheckoutRequestID (external_ref)
+        const [rows] = await pool.execute(
+            "SELECT transaction_status FROM transactions WHERE external_ref = ?",
+            [req.params.ref]
+        );
+        
+        if (rows.length > 0) {
+            res.json({ status: rows[0].transaction_status });
+        } else {
+            res.json({ status: 'Pending' });
+        }
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
 /**
  * 🚨 NEW API: POST /api/payment/paystack/verify
  * Server-side verification of Paystack payment reference.

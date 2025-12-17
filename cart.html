@@ -1173,36 +1173,97 @@
             if (modal) modal.style.display = 'none';
         }
         
-        async function handleMpesaPayment(orderData) {
-            const phone = orderData.phone;
-            if (phone.length < 9) {
-                 throw new Error("Invalid phone number. Please update your profile with a valid M-Pesa number.");
-            }
-            
-            const response = await fetch(MPESA_DEPOSIT_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    phone: phone,
-                    amount: orderData.total,
-                })
-            });
+       async function handleMpesaPayment(orderData) {
+    const phone = orderData.phone;
+    if (phone.length < 9) {
+        throw new Error("Invalid phone number. Please update your profile with a valid M-Pesa number.");
+    }
+    
+    // 1. Initiate the STK Push
+    const response = await fetch(MPESA_DEPOSIT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            phone: phone,
+            amount: orderData.total,
+        })
+    });
 
-            const result = await response.json();
+    const result = await response.json();
 
-            if (response.ok) {
-                showMessage('order-message', 'STK Push sent to your phone! Please enter your M-Pesa PIN.', 'info');
-                
-                // Open processing modal and start polling
-                document.getElementById('processing-checkout-id').textContent = result.transactionRef;
-                document.getElementById('deposit-processing-modal').style.display = 'flex';
-                
-                startPolling(result.transactionRef, orderData);
-            } else {
-                throw new Error(result.message);
-            }
-        }
+    if (response.ok) {
+        // Use the ID returned by your backend (CheckoutRequestID)
+        const checkoutID = result.transactionRef || result.CheckoutRequestID;
+
+        showMessage('order-message', 'STK Push sent! Enter your PIN on your phone.', 'info');
         
+        // 2. Open processing modal
+        document.getElementById('processing-checkout-id').textContent = checkoutID;
+        document.getElementById('deposit-processing-modal').style.display = 'flex';
+        
+        // 3. Start checking the DB for the "Completed" status
+        startPolling(checkoutID, orderData);
+    } else {
+        throw new Error(result.message || "Failed to initiate M-Pesa");
+    }
+}
+
+/**
+ * Checks the database every 3 seconds to see if the callback has arrived
+ */
+function startPolling(checkoutID, orderData) {
+    const pollInterval = setInterval(async () => {
+        try {
+            // This endpoint must exist in your server.js (see below)
+            const response = await fetch(`/api/payment-status/${checkoutID}`);
+            const data = await response.json();
+
+            if (data.status === 'Completed') {
+                clearInterval(pollInterval);
+                document.getElementById('deposit-processing-modal').style.display = 'none';
+                
+                // 4. CRITICAL: Payment confirmed, now finalize the order!
+                await finalizeOrderAfterPayment(orderData, checkoutID);
+            } else if (data.status === 'Failed' || data.status === 'Cancelled') {
+                clearInterval(pollInterval);
+                document.getElementById('deposit-processing-modal').style.display = 'none';
+                showMessage('order-message', 'Payment failed or was cancelled.', 'error');
+            }
+        } catch (error) {
+            console.error("Polling error:", error);
+        }
+    }, 3000);
+
+    // Timeout after 2 minutes
+    setTimeout(() => clearInterval(pollInterval), 120000);
+}
+
+/**
+ * Sends the order details to the server once payment is verified
+ */
+async function finalizeOrderAfterPayment(orderData, mpesaRef) {
+    try {
+        const response = await fetch('/api/orders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ...orderData,
+                paymentRef: mpesaRef
+            })
+        });
+
+        if (response.ok) {
+            localStorage.removeItem('cart');
+            window.location.hash = '#order-success';
+            showSection('order-success');
+        } else {
+            const err = await response.json();
+            throw new Error(err.message);
+        }
+    } catch (error) {
+        showMessage('order-message', 'Payment OK, but order failed: ' + error.message, 'error');
+    }
+}
         function handlePaystackPayment(orderData) {
             const amountInCents = Math.round(parseFloat(orderData.total) * 100);
             
