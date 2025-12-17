@@ -741,7 +741,7 @@
                                     <th>Type</th>
                                     <th>Amount</th>
                                     <th>Status</th>
-                                    <th>Receipt/Ref</th> <!-- 🚨 UPDATED COLUMN -->
+                                    <th>Payment-refrence</th> <!-- 🚨 UPDATED COLUMN -->
                                 </tr>
                             </thead>
                             <tbody id="payment-history-tbody">
@@ -1420,8 +1420,8 @@ async function finalizeOrderAfterPayment(orderData, mpesaRef) {
                     
                     document.getElementById('delivery-location').value = ''; 
                     
-                    // 3. Navigate to Payment History
-                    showSection('payment-history');
+                  
+                  
 
                 } else {
                     showMessage('order-message', 'Payment received but order logging failed. Contact support.', 'error');
@@ -1467,7 +1467,7 @@ async function finalizeOrderAfterPayment(orderData, mpesaRef) {
                                 <td>${transaction.type || 'Transaction'}</td>
                                 <td style="${amountStyle}">${amountText}</td>
                                 <td><span class="status-badge ${statusClass}">${transaction.status || 'Pending'}</span></td>
-                                <td>${transaction.external_ref || 'N/A'}</td> <!-- 🚨 NEW: Payment Receipt/Ref -->
+                               <td>${transaction.payment_reference || 'N/A'}</td>
                             </tr>
                         `;
                         tbody.insertAdjacentHTML('beforeend', row);

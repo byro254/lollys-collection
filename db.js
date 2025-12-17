@@ -460,23 +460,25 @@ async function getWalletByUserId(userId) {
     }
 }
 
-
 /**
- * Fetches a user's payment history from the transactions table.
+ * Fetches a user's payment history from the transactions table, 
+ * including the actual payment reference from the orders table.
  * @param {string} userId - The ID of the user.
- * @returns {Promise<Array<object>>} List of transaction objects.
+ * @returns {Promise<Array<object>>} List of transaction objects with order payment references.
  */
 async function findPaymentHistory(userId) {
     try {
         const [rows] = await pool.execute(
             `SELECT 
-                transaction_date as date, 
-                type, 
-                amount, 
-                transaction_status as status
-            FROM transactions 
-            WHERE user_id = ?
-            ORDER BY transaction_date DESC`,
+                t.transaction_date as date, 
+                t.type, 
+                t.amount, 
+                t.transaction_status as status,
+                o.payment_reference
+            FROM transactions t
+            LEFT JOIN orders o ON t.order_id = o.id
+            WHERE t.user_id = ?
+            ORDER BY t.transaction_date DESC`,
             [userId]
         );
         return rows;
@@ -485,7 +487,6 @@ async function findPaymentHistory(userId) {
         throw error;
     }
 }
-
 /**
  * Logs an expenditure from the Business's central operating account.
  * This function performs an internal wallet transaction (deduction).
